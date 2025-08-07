@@ -77,4 +77,5 @@ def upload_file():
         return jsonify({"filepaths": saved_paths}), 200
 
     except Exception as e:
+        print(f"Error al subir archivos: {str(e)}")
         return jsonify({"error": f"Error al subir archivos: {str(e)}"}), 500

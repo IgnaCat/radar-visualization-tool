@@ -76,16 +76,11 @@ def process_file():
             processed.append(result)
 
         if helpers.should_animate(processed):
-            gif_url = helpers.create_animation([r["image_url"] for r in processed])
+            # Por ahora desactivo la animación, se hace desde el frontend 
+            #gif_url = helpers.create_animation([r["image_url"] for r in processed])
             return jsonify({
                 "animation": True,
-                "outputs": [{
-                    "image_url": gif_url,
-                    "bounds": processed[0].get("bounds"),
-                    "field_used": processed[0].get("field_used"),
-                    "timestamp": f"{processed[0].get('timestamp')} to {processed[-1].get('timestamp')}",
-                    "metadata": "GIF generado a partir de archivos con mismo radar y tiempo cercano"
-                }]
+                "outputs": processed,
             }), 200
 
         return jsonify({
@@ -94,4 +89,5 @@ def process_file():
         }), 200
 
     except Exception as e:
+        print(f"Error procesando archivos: {str(e)}")
         return jsonify({"error": f"Error procesando archivos: {str(e)}"}), 500
