@@ -18,3 +18,9 @@ venv/
 .vscode/
 static/tmp/
 uploads/
+
+.vite/
+
+# Proyectos específicos del autor
+biribiri/
+curso-radar-meteo/
