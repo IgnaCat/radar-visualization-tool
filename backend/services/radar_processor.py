@@ -9,6 +9,10 @@ import cartopy.crs as ccrs
 import numpy as np
 import uuid
 from utils import colores
+from pathlib import Path
+import rasterio
+from rasterio.shutil import copy
+from rasterio.enums import Resampling
 
 def get_reflectivity_field(radar):
     """
@@ -25,9 +29,7 @@ def get_reflectivity_field(radar):
 
 def process_radar(filepath, output_dir="static/tmp"):
     """
-    Procesa un archivo NetCDF de radar y genera una imagen PPI.
-    Si el archivo es menor a 500MB, se procesa directamente con Py-ART.
-    Si es mayor, se convierte a xarray + dask.
+    Procesa un archivo NetCDF de radar y genera una imagen PPI, usando Py-ART.
     Devuelve un resumen de los datos procesados.
     """
     file_size_mb = os.path.getsize(filepath) / (1024 * 1024)
@@ -36,80 +38,142 @@ def process_radar(filepath, output_dir="static/tmp"):
     try:
         reflectivity, field_used = get_reflectivity_field(radar)
     except KeyError as e:
-        return {"error": str(e)}
+        return {"Error": str(e)}
     
     # Crear path único para la imagen
     os.makedirs(output_dir, exist_ok=True)
     unique_name = f"ppi_{uuid.uuid4().hex}.png"
     output_path = os.path.join(output_dir, unique_name)
 
+    fig = plt.figure(figsize=[15, 10])
+    ax = plt.axes(projection=ccrs.Mercator()) #PlateCarree
+    display = pyart.graph.RadarMapDisplay(radar)
 
-    # Si el archivo es pequeño (menos de 500MB), procesar con Py-ART
-    if file_size_mb < 500:
+    # Filtro. Extraido de las notebooks de Ignacio Montamat (Grupo Radar Córdoba).
+    gf = None
+    if 'RHOHV' in radar.fields:
+        gf = pyart.correct.GateFilter(radar)
+        gf.exclude_below('RHOHV', 0.92)
 
-        # Crear figura, ejes con proyección Cartopy y el radar display
-        fig = plt.figure(figsize=[15, 10])
-        ax = plt.axes(projection=ccrs.PlateCarree())
-        display = pyart.graph.RadarMapDisplay(radar)
+    display.plot_ppi_map(field_used,
+                    sweep=0,
+                    vmin=-30,
+                    vmax=70,
+                    projection=ccrs.Mercator(),
+                    ax=ax,
+                    colorbar_flag=False,
+                    cmap=colores.get_cmap_grc_th(),
+                    gatefilter=gf)
+    
 
-        # Filtro. Extraido de las notebooks de Ignacio Montamat (Grupo Radar Córdoba).
-        if 'RHOHV' in radar.fields:
-            gf = pyart.correct.GateFilter(radar)
-            gf.exclude_below('RHOHV', 0.92)
+    # Calcular bounds
+    lat = radar.gate_latitude['data']
+    lon = radar.gate_longitude['data']
+    lat_min, lat_max = float(lat.min()), float(lat.max())
+    lon_min, lon_max = float(lon.min()), float(lon.max())
+    bounds = [[lat_min, lon_min], [lat_max, lon_max]]
 
-        display.plot_ppi_map(field_used,
-                     sweep=0,
-                     vmin=-30,
-                     vmax=70,
-                     projection=ccrs.PlateCarree(),
-                     ax=ax,
-                     colorbar_flag=False,
-                     cmap='grc_th',
-                     gatefilter=gf)
-        
-
-        # Calcular bounds
-        lat = radar.gate_latitude['data']
-        lon = radar.gate_longitude['data']
-        lat_min, lat_max = float(lat.min()), float(lat.max())
-        lon_min, lon_max = float(lon.min()), float(lon.max())
-        bounds = [[lat_min, lon_min], [lat_max, lon_max]]
-
-        # Eliminar límites del mapa
-        ax.set_title("")
-        ax.set_xlabel("")
-        ax.set_ylabel("")
-        ax.set_xticks([])
-        ax.set_yticks([])
-        ax.set_xticklabels([])
-        ax.set_yticklabels([])
-        for spine in ax.spines.values():
-            spine.set_visible(False)
+    # Eliminar límites del mapa
+    ax.set_title("")
+    ax.set_xlabel("")
+    ax.set_ylabel("")
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_xticklabels([])
+    ax.set_yticklabels([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
 
 
-        plt.savefig(output_path, dpi=150, bbox_inches='tight', pad_inches=0, transparent=True )
-        plt.close()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight', pad_inches=0, transparent=True )
+    plt.close()
 
-        summary = {
-            "method": "pyart",
-            "image_url": f"/{output_path.replace(os.sep, '/')}",
-            "bounds": bounds,
-            "field_used": field_used,
-            "source_file": filepath
-        }
-
-    # Si es grande (mas 500MB), convertir a xarray + dask
-    else:
-
-        # Falta completar el generador de imagenes
-        reflectivity_dask = da.from_array(reflectivity, chunks=(100, 100))
-        ds = xr.DataArray(reflectivity_dask,
-                          dims=["azimuth", "range"],
-                          coords={"azimuth": radar.azimuth["data"],
-                                  "range": radar.range["data"]},
-                          name=field_used)
-        summary = {
-            "method": "pyart + xarray/dask",
-        }
+    summary = {
+        "method": "pyart",
+        "image_url": f"/{output_path.replace(os.sep, '/')}",
+        "bounds": bounds,
+        "field_used": field_used,
+        "source_file": filepath
+    }
 
     return summary
+
+
+def process_radar_to_cog(filepath, output_dir):
+    """
+    Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
+    Devuelve un resumen de los datos procesados.
+    """
+    radar = pyart.io.read(filepath)
+
+    try:
+        _, field_used = get_reflectivity_field(radar)
+    except KeyError as e:
+        return {"Error": str(e)}
+
+     # Filtro. Extraido de las notebooks de Ignacio Montamat (Grupo Radar Córdoba).
+    gf = None
+    if 'RHOHV' in radar.fields:
+        gf = pyart.correct.GateFilter(radar)
+        gf.exclude_below('RHOHV', 0.92)
+
+    # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
+    z_grid_limits = (1000, 10_000)
+    y_grid_limits = (-240e3, 240e3)
+    x_grid_limits = (-240e3, 240e3)
+
+    # Definimos una resolución. A mayor resolución más lento va a ser el procesamiento de la grilla.
+    grid_resolution = 1000
+
+    # Calculamos la cantidad de puntos en cada dimensión
+    z_points = int((z_grid_limits[1] - z_grid_limits[0]) / grid_resolution)
+    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
+    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
+
+    grid = pyart.map.grid_from_radars(
+        radar,
+        grid_shape=(z_points, y_points, x_points),
+        grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
+        projection=ccrs.Mercator(),
+        gatefilters=gf
+    )
+    grid.to_xarray()
+
+    # Crear path único
+    os.makedirs(output_dir, exist_ok=True)
+    unique_name = f"radar_{uuid.uuid4().hex}.tif"
+    tiff_path = os.path.join(output_dir, unique_name)
+
+    # Exportar a GeoTIFF
+    pyart.io.write_grid_geotiff(
+        grid=grid,
+        filename=str(tiff_path),
+        field=field_used,
+        level=0,
+        rgb=True,
+        cmap=colores.get_cmap_grc_th(),
+        vmin=-30,
+        vmax=70
+    )
+
+    # Convertir a COG
+    cog_path = Path(output_dir) / f"radar_cog_{uuid.uuid4().hex}.tif"
+
+    with rasterio.open(tiff_path) as src:
+        profile = src.profile
+        profile.update(
+            driver="COG",
+            compress="DEFLATE",
+            predictor=2
+        )
+        copy(src, cog_path, **profile)
+
+    summary = {
+        "method": "pyart",
+        "image_url": str(cog_path),
+        "field_used": field_used,
+        "source_file": filepath
+    }
+
+    return summary
+
