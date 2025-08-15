@@ -1,3 +1,4 @@
+affine==2.4.0
 aiobotocore==2.23.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.12.14
@@ -25,6 +26,8 @@ cftime==1.6.4.post1
 chardet==5.2.0
 charset-normalizer==3.4.1
 click==8.2.1
+click-plugins==1.1.1.2
+cligj==0.7.2
 cloudpickle==3.1.1
 cmweather==0.3.2
 colorama==0.4.6
@@ -136,6 +139,7 @@ pywin32==306
 pywinpty==2.0.15
 PyYAML==6.0.2
 pyzmq==26.0.3
+rasterio==1.4.3
 referencing==0.36.2
 requests==2.32.3
 rfc3339-validator==0.1.4
