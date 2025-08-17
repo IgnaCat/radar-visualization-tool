@@ -1,18 +1,14 @@
 import os
 import pyart
-import xarray as xr
-import dask.array as da
 import matplotlib
 matplotlib.use("Agg") # Use non-interactive backend for matplotlib
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
-import numpy as np
 import uuid
-from utils import colores
+from ..utils import colores
 from pathlib import Path
 import rasterio
 from rasterio.shutil import copy
-from rasterio.enums import Resampling
 
 def get_reflectivity_field(radar):
     """
@@ -27,7 +23,7 @@ def get_reflectivity_field(radar):
 
     raise KeyError("No se encontró ningún campo de reflectividad en el radar.")
 
-def process_radar(filepath, output_dir="static/tmp"):
+def process_radar(filepath, output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una imagen PPI, usando Py-ART.
     Devuelve un resumen de los datos procesados.
@@ -90,16 +86,16 @@ def process_radar(filepath, output_dir="static/tmp"):
 
     summary = {
         "method": "pyart",
-        "image_url": f"/{output_path.replace(os.sep, '/')}",
+        "image_url": unique_name,
         "bounds": bounds,
         "field_used": field_used,
-        "source_file": filepath
+        "source_file": filepath,
     }
 
     return summary
 
 
-def process_radar_to_cog(filepath, output_dir):
+def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.

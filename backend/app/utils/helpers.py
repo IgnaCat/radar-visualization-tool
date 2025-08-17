@@ -6,7 +6,7 @@ import imageio.v2 as imageio
 import uuid
 
 
-def cleanup_tmp(directory="static/tmp", max_age_seconds=10800):
+def cleanup_tmp(directory="app/storage/tmp", max_age_seconds=10800):
     """
     Elimina archivos antiguos en el directorio especificado.
     Archivos más viejos que max_age_seconds serán eliminados.
