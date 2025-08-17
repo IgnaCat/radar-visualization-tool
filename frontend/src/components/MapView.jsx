@@ -11,7 +11,7 @@ export default function MapView({ overlayData }) {
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {overlayData != null && (
         <ImageOverlay
-          url={"http://localhost:5000" + overlayData.image_url}
+          url={"http://localhost:8000/static/tmp/" + overlayData.image_url}
           bounds={overlayData.bounds}
           opacity={0.9}
         />
