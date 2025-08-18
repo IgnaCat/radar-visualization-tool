@@ -52,10 +52,13 @@ async def process_file(payload: ProcessRequest):
                 helpers.extract_metadata_from_filename, filepath
             )
 
-            # Ejecutar el procesamiento bloqueante
-            result_dict = await run_in_threadpool(radar_processor.process_radar, filepath)
+            # Ejecutar el procesamiento bloqueante para generar PNG
+            #result_dict = await run_in_threadpool(radar_processor.process_radar, filepath)
 
-            # Completar con timestamp y tipar al schema
+
+            # Generar COG 
+            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath)
+
             result_dict["timestamp"] = timestamp
             processed.append(ProcessOutput(**result_dict))
 

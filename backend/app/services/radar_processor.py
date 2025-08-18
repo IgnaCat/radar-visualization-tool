@@ -9,6 +9,8 @@ from ..utils import colores
 from pathlib import Path
 import rasterio
 from rasterio.shutil import copy
+from urllib.parse import quote
+from ..core.config import settings
 
 def get_reflectivity_field(radar):
     """
@@ -86,7 +88,7 @@ def process_radar(filepath, output_dir="app/storage/tmp"):
 
     summary = {
         "method": "pyart",
-        "image_url": unique_name,
+        "image_url": f"static/tmp/{unique_name}",
         "bounds": bounds,
         "field_used": field_used,
         "source_file": filepath,
@@ -137,8 +139,8 @@ def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
 
     # Crear path único
     os.makedirs(output_dir, exist_ok=True)
-    unique_name = f"radar_{uuid.uuid4().hex}.tif"
-    tiff_path = os.path.join(output_dir, unique_name)
+    unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
+    tiff_path = os.path.join(output_dir, unique_tif_name)
 
     # Exportar a GeoTIFF
     pyart.io.write_grid_geotiff(
@@ -153,7 +155,10 @@ def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
     )
 
     # Convertir a COG
-    cog_path = Path(output_dir) / f"radar_cog_{uuid.uuid4().hex}.tif"
+    unique_cog_name = f"radar_cog_{uuid.uuid4().hex}.tif"
+    cog_path = Path(output_dir) / unique_cog_name
+    file_uri = Path(cog_path).resolve().as_posix()
+    style = "&resampling=nearest&warp_resampling=nearest"
 
     with rasterio.open(tiff_path) as src:
         profile = src.profile
@@ -166,9 +171,10 @@ def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
 
     summary = {
         "method": "pyart",
-        "image_url": str(cog_path),
         "field_used": field_used,
-        "source_file": filepath
+        "source_file": filepath,
+        "cog_url": f"static/cogs/{unique_cog_name}",
+        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
     }
 
     return summary

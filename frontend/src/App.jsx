@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import MapView from "./components/MapView";
 import UploadButton from "./components/UploadButton";
 import FloatingMenu from "./components/FloatingMenu";
@@ -29,7 +29,11 @@ export default function App() {
       const filepaths = uploadResp.data.filepaths;
 
       const processResp = await processFile(filepaths);
-      if (!processResp.data || !processResp.data.image_url) {
+      if (
+        !processResp.data ||
+        !processResp.data.outputs ||
+        processResp.data.outputs.length === 0
+      ) {
         setAlert({
           open: true,
           message: "No se encontraron imágenes procesadas",
