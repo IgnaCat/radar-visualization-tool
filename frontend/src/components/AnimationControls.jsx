@@ -19,7 +19,7 @@ export default function AnimationControls({
         setCurrentIndex((prev) =>
           prev < overlayData.outputs.length - 1 ? prev + 1 : 0
         );
-      }, 900);
+      }, 1300);
     } else if (!isPlaying && interval !== null) {
       clearInterval(interval);
     }
