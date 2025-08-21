@@ -1,123 +1,133 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-function TileJsonLayer({ tilejsonUrl, opacity = 0.85 }) {
-  const [template, setTemplate] = useState(null);
-  const [bounds, setBounds] = useState(null);
+function COGTile({ tilejsonUrl, opacity = 0.9 }) {
   const map = useMap();
+  const [template, setTemplate] = useState(null);
+  const [llb, setLLB] = useState(null);
+  const [nativeZooms, setNativeZooms] = useState({ min: 0, max: 22 });
+  const abortRef = useRef(null);
 
   useEffect(() => {
-    let abort = false;
+    if (!tilejsonUrl) return;
+
+    // cancelar fetch previo si cambia rápido
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+
     (async () => {
-      if (!tilejsonUrl) return;
+      try {
+        const r = await fetch(tilejsonUrl, { signal: ctrl.signal });
+        if (!r.ok) {
+          const txt = await r.text();
+          console.error("TileJSON error", r.status, txt.slice(0, 200));
+          return;
+        }
+        const tj = await r.json();
 
-      const resp = await fetch(tilejsonUrl, { mode: "cors" });
+        let url = tj.tiles?.[0];
+        if (!url) {
+          console.error("TileJSON sin 'tiles':", tj);
+          return;
+        }
+        // prefijo /cog si falta
+        if (url.includes("/tiles/") && !url.includes("/cog/tiles/")) {
+          url = url.replace("/tiles/", "/cog/tiles/");
+        }
+        // cache-buster para que no mezcle tiles entre productos
+        url +=
+          (url.includes("?") ? "&" : "?") +
+          "v=" +
+          Date.now().toString().slice(-6);
 
-      // Clonar para poder inspeccionar texto sin “gastar” el body
-      const clone = resp.clone();
-      const ct = resp.headers.get("content-type") || "";
+        // zooms nativos
+        const minN = Number.isFinite(tj.minzoom) ? tj.minzoom : 0;
+        const maxN = Number.isFinite(tj.maxzoom) ? tj.maxzoom : 22;
+        setNativeZooms({ min: minN, max: maxN });
 
-      if (!resp.ok) {
-        const txt = await clone.text();
-        console.error("TileJSON HTTP error", resp.status, txt.slice(0, 200));
-        return;
-      }
+        // bounds / center
+        if (Array.isArray(tj.bounds) && tj.bounds.length === 4) {
+          if (Array.isArray(tj.center) && tj.center.length === 3) {
+            const [lon, lat, z] = tj.center;
+            map.setView([lat, lon], z);
+          }
+          const [w, s, e, n] = tj.bounds;
+          const bounds = [
+            [s, w],
+            [n, e],
+          ];
+          setLLB(bounds);
 
-      // Si no es JSON, logueo los primeros bytes para ver qué vino
-      if (!ct.includes("application/json")) {
-        const txt = await clone.text();
-        console.error(
-          "TileJSON no es JSON. CT:",
-          ct,
-          "Body:",
-          txt.slice(0, 200)
-        );
-        return;
-      }
+          // map.fitBounds(bounds, { padding: [20, 20] });
 
-      // Ahora sí parseo el original
-      const tj = await resp.json();
-      if (abort) return;
+          map.setMaxBounds(bounds);
+        }
 
-      if (!tj.tiles?.length) {
-        console.error("TileJSON sin 'tiles':", tj);
-        return;
-      }
-
-      let url = tj.tiles?.[0];
-      if (url) {
-        // fallback por si viene sin el prefijo
-        url = url.replace("/tiles/", "/cog/tiles/");
         setTemplate(url);
-      }
-
-      // Ajustar zooms del mapa al rango del TileJSON
-      if (tj.minzoom != null) map.setMinZoom(tj.minzoom);
-      if (tj.maxzoom != null) map.setMaxZoom(tj.maxzoom);
-
-      // Fit al bbox
-      if (tj.bounds?.length === 4) {
-        const [w, s, e, n] = tj.bounds;
-        const llb = [
-          [s, w],
-          [n, e],
-        ];
-        setBounds(llb);
-        map.fitBounds(llb, { padding: [20, 20] });
-        // limita pan para que Leaflet no pida tiles fuera
-        map.setMaxBounds(llb);
-      }
-
-      // Si trae center, úsalo (formato [lon, lat, zoom])
-      if (Array.isArray(tj.center) && tj.center.length === 3) {
-        const [lon, lat, z] = tj.center;
-        map.setView([lat, lon], z);
+      } catch (e) {
+        if (e.name !== "AbortError") console.error("TileJSON fetch fail:", e);
       }
     })();
 
     return () => {
-      abort = true;
+      ctrl.abort();
+      // liberar maxBounds al cambiar de producto
+      try {
+        map.setMaxBounds(null);
+      } catch {}
     };
-  }, [tilejsonUrl]);
+  }, [tilejsonUrl, map]);
 
-  // ajustar vista cuando tengamos bounds
-  useEffect(() => {
-    if (bounds) {
-      map.fitBounds(bounds, { padding: [20, 20] });
-    }
-  }, [bounds, map]);
+  // clave estable para forzar desmontaje limpio de la capa previa
+  const layerKey = template
+    ? `${template}|${nativeZooms.min}|${nativeZooms.max}`
+    : "none";
 
   return template ? (
     <TileLayer
+      key={layerKey}
       url={template}
       opacity={opacity}
       noWrap={true}
-      bounds={bounds ?? undefined}
-      minZoom={map.getMinZoom()}
-      maxZoom={map.getMaxZoom()}
+      bounds={llb}
+      minNativeZoom={nativeZooms.min}
+      maxNativeZoom={nativeZooms.max}
+      // límites UI: permitir acercar sin pedir z fuera
+      minZoom={Math.min(0, nativeZooms.min)}
+      maxZoom={nativeZooms.max + 6}
+      // suaviza animaciones y evita “fantasmas”
       updateWhenZooming={true}
+      reuseTiles={false}
+      keepBuffer={1}
+      zIndex={500}
+      // tile transparente en caso de error puntual
+      errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+      eventHandlers={{
+        tileerror: (e) => console.warn("tileerror", e.coords, e.error),
+      }}
+      crossOrigin={"anonymous"}
     />
   ) : null;
 }
 
 export default function MapView({ overlayData }) {
-  const center = useMemo(() => [-34.6, -58.4], []);
-
+  const center = useMemo(() => [-31.4, -64.2], []);
   return (
     <MapContainer
       center={center}
-      zoom={5}
-      style={{ height: "100vh", width: "105%" }}
+      zoom={6}
+      style={{ height: "100vh", width: "100%" }}
+      worldCopyJump={false}
+      preferCanvas={false}
+      fadeAnimation={false}
+      zoomAnimation={true}
+      markerZoomAnimation={true}
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {/* Si hay dato, pintamos el layer de TiTiler */}
       {overlayData?.tilejson_url && (
-        <TileJsonLayer
-          tilejsonUrl={overlayData.tilejson_url}
-          opacity={0.9}
-          noWrap={true}
-        />
+        <COGTile tilejsonUrl={overlayData.tilejson_url} opacity={0.95} />
       )}
     </MapContainer>
   );
