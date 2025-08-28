@@ -9,8 +9,11 @@ from ..utils import colores
 from pathlib import Path
 import rasterio
 from rasterio.shutil import copy
+from rasterio.enums import ColorInterp
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 from urllib.parse import quote
 from ..core.config import settings
+import pyproj
 
 def get_reflectivity_field(radar):
     """
@@ -25,7 +28,7 @@ def get_reflectivity_field(radar):
 
     raise KeyError("No se encontró ningún campo de reflectividad en el radar.")
 
-def process_radar(filepath, output_dir="app/storage/tmp"):
+def process_radar_to_png(filepath, output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una imagen PPI, usando Py-ART.
     Devuelve un resumen de los datos procesados.
@@ -97,12 +100,66 @@ def process_radar(filepath, output_dir="app/storage/tmp"):
     return summary
 
 
-def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
+def reproject_to_cog(src_path, output_dir, dst_crs="EPSG:4326"):
+    """
+    Reproyecta un archivo Geotiff a un nuevo CRS y lo guarda como COG.
+    """
+    unique_cog_name = f"radar_cog_{uuid.uuid4().hex}.tif"
+    cog_path = Path(output_dir) / unique_cog_name
+
+    with rasterio.open(src_path) as src:
+        # Calcular transform, width y height para el nuevo CRS
+        transform, width, height = calculate_default_transform(
+            src.crs, dst_crs, src.width, src.height, *src.bounds
+        )
+
+        # Definir el perfil base
+        profile = src.profile.copy()
+        profile.update(
+            driver="COG",
+            compress="DEFLATE",
+            predictor=2,
+            BIGTIFF="IF_NEEDED",
+            crs=dst_crs,
+            transform=transform,
+            width=width,
+            height=height,
+            photometric="RGB"
+        )
+        profile["band_descriptions"] = ["Red", "Green", "Blue", "Alpha"]
+
+        # Crear el archivo COG directamente
+        with rasterio.open(cog_path, "w+", **profile) as dst:
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest
+                )
+            dst.colorinterp = (
+                ColorInterp.red,
+                ColorInterp.green,
+                ColorInterp.blue,
+                ColorInterp.alpha
+            )
+
+    return cog_path, unique_cog_name
+
+
+def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
     """
     radar = pyart.io.read(filepath)
+
+    # print(radar.range['data'])    # distancias en metros de cada gate
+    # print(radar.azimuth['data'])  # ángulos de cada rayo
+    # print(radar.elevation['data'])
 
     try:
         _, field_used = get_reflectivity_field(radar)
@@ -128,11 +185,13 @@ def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 
+    merc = pyproj.CRS.from_epsg(4326)
+
     grid = pyart.map.grid_from_radars(
         radar,
         grid_shape=(z_points, y_points, x_points),
         grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
-        projection=ccrs.Mercator(),
+        projection=merc,
         gatefilters=gf
     )
     grid.to_xarray()
@@ -140,7 +199,7 @@ def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
     # Crear path único
     os.makedirs(output_dir, exist_ok=True)
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
-    tiff_path = os.path.join(output_dir, unique_tif_name)
+    tiff_path = Path(output_dir) / unique_tif_name
 
     # Exportar a GeoTIFF
     pyart.io.write_grid_geotiff(
@@ -154,27 +213,26 @@ def process_radar_to_cog(filepath, output_dir="app/storage/cogs"):
         vmax=70
     )
 
-    # Convertir a COG
-    unique_cog_name = f"radar_cog_{uuid.uuid4().hex}.tif"
-    cog_path = Path(output_dir) / unique_cog_name
-    file_uri = Path(cog_path).resolve().as_posix()
-    style = "&resampling=nearest&warp_resampling=nearest"
+    # Convertir a COG y reproyectar a EPSG:4326 (lat-lon)
+    cog_path, unique_cog_name = reproject_to_cog(tiff_path, output_dir, dst_crs="EPSG:4326")
 
-    with rasterio.open(tiff_path) as src:
-        profile = src.profile
-        profile.update(
-            driver="COG",
-            compress="DEFLATE",
-            predictor=2
-        )
-        copy(src, cog_path, **profile)
+    # Generar overviews dentro del COG
+    # with rasterio.open(cog_path, "r+", open_options={"IGNORE_COG_LAYOUT_BREAK": "YES"}) as dst:
+    #     dst.build_overviews([2, 4, 8, 16], Resampling.nearest)
+    #     dst.update_tags(ns="rio_overview", resampling="nearest")
+        
+
+     # Limpiar el GeoTIFF temporal (queda SOLO el COG)
+    try:
+        tiff_path.unlink()
+    except OSError:
+        pass
 
     summary = {
         "method": "pyart",
+        "image_url": f"static/tmp/{unique_cog_name}",
         "field_used": field_used,
         "source_file": filepath,
-        "cog_url": f"static/cogs/{unique_cog_name}",
-        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
     }
 
     return summary

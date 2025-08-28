@@ -12,8 +12,6 @@ class ProcessRequest(BaseModel):
 
 class ProcessOutput(BaseModel):
     image_url: Optional[str] = None     # si radar_processor devuelve PNG/URL
-    cog_url: Optional[str] = None
-    tilejson_url: Optional[str] = None
     metadata: Optional[dict] = None
     bounds: Optional[List[List[float]]] = Field(
         default=None, min_length=2, max_length=2,
