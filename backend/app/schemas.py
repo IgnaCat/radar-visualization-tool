@@ -8,10 +8,11 @@ class COGResponse(BaseModel):
     tilejson_url: AnyHttpUrl
 
 class ProcessRequest(BaseModel):
-    filepaths: List[str] = Field(..., min_items=1, description="Rutas absolutas o relativas a los .nc ya subidos")
+    filepaths: List[str] = Field(..., min_items=1)
+    warnings: List[str] = Field(default_factory=list)
 
 class ProcessOutput(BaseModel):
-    image_url: Optional[str] = None     # si radar_processor devuelve PNG/URL
+    image_url: Optional[str] = None     # si radar_processor devuelve PNG/Geotiff/URL
     metadata: Optional[dict] = None
     bounds: Optional[List[List[float]]] = Field(
         default=None, min_length=2, max_length=2,
