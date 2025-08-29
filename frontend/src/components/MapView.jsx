@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from "react";
+import { useMemo, useEffect, useRef } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
@@ -7,27 +7,41 @@ import GeoRasterLayer from "georaster-layer-for-leaflet";
 
 function GeoTIFFLayerComponent({ url }) {
   const map = useMap();
+  const layerRef = useRef(null);
 
   useEffect(() => {
     if (!url) return;
 
-    let layer;
+    // limpiamos la capa anterior
+    if (layerRef.current) {
+      map.removeLayer(layerRef.current);
+      layerRef.current = null;
+    }
+
+    let active = true;
 
     fetch(url)
       .then((res) => res.arrayBuffer())
       .then(parseGeoraster)
       .then((georaster) => {
-        layer = new GeoRasterLayer({
+        if (!active) return;
+
+        const newLayer = new GeoRasterLayer({
           georaster,
-          opacity: 1.0,
+          opacity: 1,
           resolution: 128,
         });
-        layer.addTo(map);
-        map.fitBounds(layer.getBounds()); // ajusta el mapa a la extensión del TIFF
+        newLayer.addTo(map);
+        map.fitBounds(newLayer.getBounds());
+        layerRef.current = newLayer;
       });
 
     return () => {
-      if (layer) map.removeLayer(layer);
+      active = false;
+      if (layerRef.current) {
+        map.removeLayer(layerRef.current);
+        layerRef.current = null;
+      }
     };
   }, [url, map]);
 
@@ -49,6 +63,7 @@ export default function MapView({ overlayData }) {
       {/* capa con geotiff */}
       {overlayData?.image_url && (
         <GeoTIFFLayerComponent
+          key={overlayData.image_url}
           url={"http://localhost:8000/" + overlayData.image_url}
         />
       )}
