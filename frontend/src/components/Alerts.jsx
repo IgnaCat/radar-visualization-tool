@@ -9,7 +9,11 @@ export default function Alerts({ message, severity, open, onClose }) {
       anchorOrigin={{ vertical: "top", horizontal: "center" }}
       sx={{ mt: 2 }}
     >
-      <Alert onClose={onClose} severity={severity} sx={{ width: "100%" }}>
+      <Alert
+        onClose={onClose}
+        severity={severity}
+        sx={{ width: "100%", whiteSpace: "pre-line" }}
+      >
         {message}
       </Alert>
     </Snackbar>
