@@ -21,6 +21,7 @@ def _max_size_ok(size_bytes: int) -> bool:
 async def upload(files: list[UploadFile] = File(...)):
     """
     Endpoint para subir múltiples archivos NetCDF.
+    Si un archivo ya existe, no se sobrescribe pero se devuelve en la respuesta con warning.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
@@ -28,27 +29,28 @@ async def upload(files: list[UploadFile] = File(...)):
     UPLOAD_DIR = settings.UPLOAD_DIR
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-    # Validaciones previas
-    for f in files:
-        if not f.filename:
-            raise HTTPException(status_code=400, detail="Archivo sin nombre.")
-        if not _ext_ok(f.filename):
-            raise HTTPException(status_code=415, detail=f"Extensión no permitida: {Path(f.filename).suffix}. Solo {settings.ALLOWED_EXTENSIONS}")
-
-        unique_name = secure_filename(f.filename)
-        filepath = os.path.join(UPLOAD_DIR, unique_name)
-        
-        if os.path.exists(filepath):
-            raise HTTPException(status_code=409, detail=f"El archivo '{f.filename}' ya existe.")
-
-    saved_paths: list[Path] = []
+    saved_paths: list[str] = []
+    warnings: list[str] = []
 
     try:
         for file in files:
+            if not file.filename:
+                raise HTTPException(status_code=400, detail="Archivo sin nombre.")
+            if not _ext_ok(file.filename):
+                raise HTTPException(
+                    status_code=415,
+                    detail=f"Extensión no permitida: {Path(file.filename).suffix}. Solo {settings.ALLOWED_EXTENSIONS}"
+                )
+
             unique_name = secure_filename(file.filename)
             target = Path(UPLOAD_DIR) / unique_name
-            size = 0
 
+            if target.exists():
+                warnings.append(f"El archivo '{file.filename}' ya existe")
+                #saved_paths.append(str(target))
+                continue
+
+            size = 0
             with open(target, "wb") as out:
                 while True:
                     chunk = await file.read(CHUNK_SIZE)
@@ -61,7 +63,6 @@ async def upload(files: list[UploadFile] = File(...)):
                             os.remove(target)
                         except Exception:
                             pass
-                        # consumir el resto del stream por higiene
                         while await file.read(CHUNK_SIZE):
                             pass
                         raise HTTPException(
@@ -77,22 +78,21 @@ async def upload(files: list[UploadFile] = File(...)):
                     pass
                 raise HTTPException(status_code=400, detail=f"'{file.filename}' está vacío.")
 
-            saved_paths.append(file.filename)
+            saved_paths.append(str(target))
 
-        # Todo ok
-        return {"filepaths": [str(p) for p in saved_paths]}
+        return {"filepaths": saved_paths, "warnings": warnings}
 
     except HTTPException as exc:
-        # rollback: borrar lo que se haya guardado antes del fallo
+        # rollback de los que se alcanzaron a guardar
         for p in saved_paths:
             try:
-                os.remove(p)
+                if Path(p).exists():
+                    os.remove(p)
             except Exception:
                 pass
         raise exc
 
     finally:
-        # cerrar streams
         for f in files:
             try:
                 await f.close()
