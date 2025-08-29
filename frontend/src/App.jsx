@@ -9,7 +9,10 @@ import { uploadFile, processFile } from "./api/backend";
 import AnimationControls from "./components/AnimationControls";
 
 export default function App() {
-  const [overlayData, setOverlayData] = useState([]);
+  const [overlayData, setOverlayData] = useState({
+    outputs: [],
+    animation: false,
+  });
   const [currentIndex, setCurrentIndex] = useState(0);
   const [alert, setAlert] = useState({
     open: false,
@@ -26,7 +29,24 @@ export default function App() {
     try {
       setLoading(true);
       const uploadResp = await uploadFile(files);
-      const filepaths = uploadResp.data.filepaths;
+      const filepaths = uploadResp.data.filepaths || [];
+      const warnings = uploadResp.data.warnings || [];
+
+      if (filepaths.length === 0) {
+        setAlert({
+          open: true,
+          message: "No se encontraron archivos válidos\n" + warnings.join("\n"),
+          severity: "warning",
+        });
+        return;
+      }
+      if (warnings.length > 0) {
+        setAlert({
+          open: true,
+          message: warnings.join("\n"),
+          severity: "warning",
+        });
+      }
 
       const processResp = await processFile(filepaths);
       if (
@@ -40,8 +60,16 @@ export default function App() {
           severity: "warning",
         });
       }
-      setOverlayData(processResp.data);
+
+      // Mantenemos datos previos
+      setOverlayData((prev) => ({
+        ...prev,
+        animation: processResp.data.animation ?? prev.animation,
+        outputs: [...(prev.outputs || []), ...(processResp.data.outputs || [])],
+      }));
+
       setCurrentIndex(0);
+
       setAlert({
         open: true,
         message: "Archivos procesados correctamente",
@@ -58,7 +86,7 @@ export default function App() {
     }
   };
 
-  const currentOverlay = overlayData.outputs?.[currentIndex] || null;
+  var currentOverlay = overlayData.outputs?.[currentIndex] || null;
 
   return (
     <>
