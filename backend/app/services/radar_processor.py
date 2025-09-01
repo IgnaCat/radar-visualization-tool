@@ -100,12 +100,13 @@ def process_radar_to_png(filepath, output_dir="app/storage/tmp"):
     return summary
 
 
-def reproject_to_cog(src_path, output_dir, dst_crs="EPSG:4326"):
+def reproject_to_cog(src_path, output_dir, dst_crs="EPSG:3857"):
     """
     Reproyecta un archivo Geotiff a un nuevo CRS y lo guarda como COG.
     """
     unique_cog_name = f"radar_cog_{uuid.uuid4().hex}.tif"
     cog_path = Path(output_dir) / unique_cog_name
+    file_uri = Path(cog_path).resolve().as_posix()
 
     with rasterio.open(src_path) as src:
         # Calcular transform, width y height para el nuevo CRS
@@ -147,7 +148,12 @@ def reproject_to_cog(src_path, output_dir, dst_crs="EPSG:4326"):
                 ColorInterp.alpha
             )
 
-    return cog_path, unique_cog_name
+            # Generar overviews dentro del COG
+            factors = [2, 4, 8, 16]
+            dst.build_overviews(factors, Resampling.nearest)
+            dst.update_tags(ns="rio_overview", resampling="nearest")
+
+    return cog_path, unique_cog_name, file_uri
 
 
 def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
@@ -213,13 +219,8 @@ def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
         vmax=70
     )
 
-    # Convertir a COG y reproyectar a EPSG:4326 (lat-lon)
-    cog_path, unique_cog_name = reproject_to_cog(tiff_path, output_dir, dst_crs="EPSG:4326")
-
-    # Generar overviews dentro del COG
-    # with rasterio.open(cog_path, "r+", open_options={"IGNORE_COG_LAYOUT_BREAK": "YES"}) as dst:
-    #     dst.build_overviews([2, 4, 8, 16], Resampling.nearest)
-    #     dst.update_tags(ns="rio_overview", resampling="nearest")
+    # Convertir a COG y reproyectar a EPSG:3857
+    cog_path, unique_cog_name, file_uri = reproject_to_cog(tiff_path, output_dir, dst_crs="EPSG:3857")
         
 
      # Limpiar el GeoTIFF temporal (queda SOLO el COG)
@@ -228,11 +229,14 @@ def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
     except OSError:
         pass
 
+    style = "&resampling=nearest&warp_resampling=nearest"
+
     summary = {
         "method": "pyart",
         "image_url": f"static/tmp/{unique_cog_name}",
         "field_used": field_used,
         "source_file": filepath,
+        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
     }
 
     return summary
