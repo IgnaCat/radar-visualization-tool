@@ -58,3 +58,9 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.leaflet-tile {
+  image-rendering: pixelated !important;
+  image-rendering: crisp-edges; /* fallback */
+  -ms-interpolation-mode: nearest-neighbor; /* IE */
+}

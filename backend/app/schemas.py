@@ -3,16 +3,13 @@ from typing import List, Optional, Any
 from datetime import datetime
 from pathlib import Path
 
-class COGResponse(BaseModel):
-    cog_url: AnyHttpUrl
-    tilejson_url: AnyHttpUrl
-
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
     warnings: List[str] = Field(default_factory=list)
 
 class ProcessOutput(BaseModel):
     image_url: Optional[str] = None     # si radar_processor devuelve PNG/Geotiff/URL
+    tilejson_url: Optional[str] = None
     metadata: Optional[dict] = None
     bounds: Optional[List[List[float]]] = Field(
         default=None, min_length=2, max_length=2,

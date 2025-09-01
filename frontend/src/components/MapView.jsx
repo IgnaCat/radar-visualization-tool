@@ -1,71 +1,135 @@
-import { useMemo, useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import L from "leaflet";
-import parseGeoraster from "georaster";
-import GeoRasterLayer from "georaster-layer-for-leaflet";
 
-function GeoTIFFLayerComponent({ url }) {
+function COGTile({ tilejsonUrl, opacity = 0.9 }) {
   const map = useMap();
-  const layerRef = useRef(null);
+  const [template, setTemplate] = useState(null);
+  const [llb, setLLB] = useState(null);
+  const [nativeZooms, setNativeZooms] = useState({ min: 0, max: 22 });
+  const abortRef = useRef(null);
+  const didCenter = useRef(false);
 
   useEffect(() => {
-    if (!url) return;
+    if (!tilejsonUrl) return;
 
-    // limpiamos la capa anterior
-    if (layerRef.current) {
-      map.removeLayer(layerRef.current);
-      layerRef.current = null;
-    }
+    // cancelar fetch previo si cambia rápido
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
 
-    let active = true;
+    (async () => {
+      try {
+        const r = await fetch(tilejsonUrl, { signal: ctrl.signal });
+        if (!r.ok) {
+          const txt = await r.text();
+          console.error("TileJSON error", r.status, txt.slice(0, 200));
+          return;
+        }
+        const tj = await r.json();
 
-    fetch(url)
-      .then((res) => res.arrayBuffer())
-      .then(parseGeoraster)
-      .then((georaster) => {
-        if (!active) return;
+        let url = tj.tiles?.[0];
+        if (!url) {
+          console.error("TileJSON sin 'tiles':", tj);
+          return;
+        }
+        // prefijo /cog si falta
+        if (url.includes("/tiles/") && !url.includes("/cog/tiles/")) {
+          url = url.replace("/tiles/", "/cog/tiles/");
+        }
+        // cache-buster para que no mezcle tiles entre productos
+        url +=
+          (url.includes("?") ? "&" : "?") +
+          "v=" +
+          Date.now().toString().slice(-6);
 
-        const newLayer = new GeoRasterLayer({
-          georaster,
-          opacity: 1,
-          resolution: 128,
-        });
-        newLayer.addTo(map);
-        map.fitBounds(newLayer.getBounds());
-        layerRef.current = newLayer;
-      });
+        // zooms nativos
+        const minN = Number.isFinite(tj.minzoom) ? tj.minzoom : 0;
+        const maxN = Number.isFinite(tj.maxzoom) ? tj.maxzoom : 22;
+        setNativeZooms({ min: minN, max: maxN });
+
+        // bounds / center
+        if (Array.isArray(tj.bounds) && tj.bounds.length === 4) {
+          if (
+            Array.isArray(tj.center) &&
+            tj.center.length === 3 &&
+            !didCenter.current
+          ) {
+            const [lon, lat, z] = tj.center;
+            map.setView([lat, lon], z);
+            didCenter.current = true;
+          }
+          const [w, s, e, n] = tj.bounds;
+          const bounds = [
+            [s, w],
+            [n, e],
+          ];
+          setLLB(bounds);
+
+          // map.fitBounds(bounds, { padding: [20, 20] })
+          // map.setMaxBounds(bounds);
+        }
+
+        setTemplate(url);
+      } catch (e) {
+        if (e.name !== "AbortError") console.error("TileJSON fetch fail:", e);
+      }
+    })();
 
     return () => {
-      active = false;
-      if (layerRef.current) {
-        map.removeLayer(layerRef.current);
-        layerRef.current = null;
-      }
+      ctrl.abort();
+      // liberar maxBounds al cambiar de producto
+      try {
+        map.setMaxBounds(null);
+      } catch {}
     };
-  }, [url, map]);
+  }, [tilejsonUrl, map]);
 
-  return null;
+  // clave estable para forzar desmontaje limpio de la capa previa
+  const layerKey = template
+    ? `${template}|${nativeZooms.min}|${nativeZooms.max}`
+    : "none";
+
+  return template ? (
+    <TileLayer
+      key={layerKey}
+      url={template}
+      opacity={opacity}
+      noWrap={true}
+      bounds={llb}
+      minNativeZoom={nativeZooms.min}
+      maxNativeZoom={nativeZooms.max}
+      // suaviza animaciones y evita “fantasmas”
+      updateWhenZooming={true}
+      reuseTiles={false}
+      keepBuffer={1}
+      zIndex={500}
+      // tile transparente en caso de error puntual
+      errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
+      eventHandlers={{
+        tileerror: (e) => console.warn("tileerror", e.coords, e.error),
+      }}
+      crossOrigin={"anonymous"}
+    />
+  ) : null;
 }
 
 export default function MapView({ overlayData }) {
   const center = useMemo(() => [-31.4, -64.2], []);
-
   return (
     <MapContainer
       center={center}
       zoom={6}
       style={{ height: "100vh", width: "100%" }}
+      worldCopyJump={false}
+      preferCanvas={false}
+      fadeAnimation={false}
+      zoomAnimation={true}
+      markerZoomAnimation={true}
     >
-      {/* base map */}
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-
-      {/* capa con geotiff */}
-      {overlayData?.image_url && (
-        <GeoTIFFLayerComponent
-          key={overlayData.image_url}
-          url={"http://localhost:8000/" + overlayData.image_url}
-        />
+      {overlayData?.tilejson_url && (
+        <COGTile tilejsonUrl={overlayData.tilejson_url} />
       )}
     </MapContainer>
   );
