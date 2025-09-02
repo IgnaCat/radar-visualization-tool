@@ -19,6 +19,7 @@ async def process_file(payload: ProcessRequest):
     Endpoint para procesar archivos de radar previamente subidos.
     """
     filepaths: List[str] = payload.filepaths
+    product: str = payload.product
 
     if not filepaths:
         raise HTTPException(
@@ -56,8 +57,8 @@ async def process_file(payload: ProcessRequest):
             #result_dict = await run_in_threadpool(radar_processor.process_radar, filepath)
 
 
-            # Generar COG 
-            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath)
+            # Generar COG
+            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product)
 
             result_dict["timestamp"] = timestamp
             processed.append(ProcessOutput(**result_dict))
@@ -65,7 +66,10 @@ async def process_file(payload: ProcessRequest):
         # Decidir si animación
         animate = await run_in_threadpool(helpers.should_animate, [r.dict() for r in processed])
 
-        return ProcessResponse(animation=bool(animate), outputs=processed)
+        # Ordenar los resultados por timestamp
+        processed.sort(key=lambda x: x.timestamp)
+
+        return ProcessResponse(animation=bool(animate), outputs=processed, product=product)
 
     except HTTPException:
         # Re-emitir las HTTPException tal cual
