@@ -1,25 +1,30 @@
 import { useState } from "react";
+import { uploadFile, processFile } from "./api/backend";
 import MapView from "./components/MapView";
 import UploadButton from "./components/UploadButton";
 import FloatingMenu from "./components/FloatingMenu";
 import Alerts from "./components/Alerts";
 import ColorLegend from "./components/ColorLegend";
 import Loader from "./components/Loader";
-import { uploadFile, processFile } from "./api/backend";
 import AnimationControls from "./components/AnimationControls";
+import ProductSelectorDialog from "./components/ProductSelectorDialog";
 
 export default function App() {
   const [overlayData, setOverlayData] = useState({
     outputs: [],
     animation: false,
   });
+  const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [currentProduct, setCurrentProduct] = useState("PPI");
+
   const [alert, setAlert] = useState({
     open: false,
     message: "",
     severity: "info",
   });
-  const [loading, setLoading] = useState(false);
 
   const handleFileUpload = () => {
     document.getElementById("upload-file").click();
@@ -29,8 +34,8 @@ export default function App() {
     try {
       setLoading(true);
       const uploadResp = await uploadFile(files);
-      const filepaths = uploadResp.data.filepaths || [];
       const warnings = uploadResp.data.warnings || [];
+      const filepaths = uploadResp.data.filepaths || [];
 
       if (filepaths.length === 0) {
         setAlert({
@@ -47,8 +52,35 @@ export default function App() {
           severity: "warning",
         });
       }
+      setUploadedFiles((prev) => [...prev, ...filepaths]);
+      setSelectorOpen(true);
+    } catch (err) {
+      setAlert({
+        open: true,
+        message: err.response?.data?.error || "Error",
+        severity: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      const processResp = await processFile(filepaths);
+  const handleProductChosen = async (product) => {
+    if (!uploadedFiles || uploadedFiles.length === 0) {
+      setAlert({
+        open: true,
+        message: "No hay archivos para procesar",
+        severity: "error",
+      });
+      return;
+    }
+    try {
+      setLoading(true);
+
+      const processResp = await processFile({
+        filepaths: uploadedFiles,
+        product,
+      });
       if (
         !processResp.data ||
         !processResp.data.outputs ||
@@ -61,24 +93,19 @@ export default function App() {
         });
       }
 
-      // Mantenemos datos previos
-      setOverlayData((prev) => ({
-        ...prev,
-        animation: processResp.data.animation ?? prev.animation,
-        outputs: [...(prev.outputs || []), ...(processResp.data.outputs || [])],
-      }));
+      setOverlayData(processResp.data);
 
       setCurrentIndex(0);
 
       setAlert({
         open: true,
-        message: "Archivos procesados correctamente",
+        message: `Mostrando ${product.toUpperCase()}`,
         severity: "success",
       });
     } catch (err) {
       setAlert({
         open: true,
-        message: err.response?.data?.error || "Error",
+        message: "Error al procesar producto",
         severity: "error",
       });
     } finally {
@@ -92,7 +119,10 @@ export default function App() {
     <>
       <MapView overlayData={currentOverlay} />
       <ColorLegend />
-      <FloatingMenu onUploadClick={handleFileUpload} />
+      <FloatingMenu
+        onUploadClick={handleFileUpload}
+        onChangeProductClick={() => setSelectorOpen(true)}
+      />
       <UploadButton onFilesSelected={handleFilesSelected} />
 
       {/* Slider para múltiples imágenes */}
@@ -103,6 +133,12 @@ export default function App() {
           setCurrentIndex={setCurrentIndex}
         />
       )}
+
+      <ProductSelectorDialog
+        open={selectorOpen}
+        onClose={() => setSelectorOpen(false)}
+        onConfirm={handleProductChosen}
+      />
 
       <Alerts
         open={alert.open}

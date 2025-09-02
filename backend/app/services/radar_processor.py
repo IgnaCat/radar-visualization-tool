@@ -1,10 +1,9 @@
 import os
 import pyart
-import matplotlib
-matplotlib.use("Agg") # Use non-interactive backend for matplotlib
-import matplotlib.pyplot as plt
-import cartopy.crs as ccrs
 import uuid
+import hashlib
+import cartopy.crs as ccrs
+import pyproj
 from ..utils import colores
 from pathlib import Path
 import rasterio
@@ -13,7 +12,7 @@ from rasterio.enums import ColorInterp
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from urllib.parse import quote
 from ..core.config import settings
-import pyproj
+
 
 def get_reflectivity_field(radar):
     """
@@ -28,85 +27,11 @@ def get_reflectivity_field(radar):
 
     raise KeyError("No se encontró ningún campo de reflectividad en el radar.")
 
-def process_radar_to_png(filepath, output_dir="app/storage/tmp"):
-    """
-    Procesa un archivo NetCDF de radar y genera una imagen PPI, usando Py-ART.
-    Devuelve un resumen de los datos procesados.
-    """
-    file_size_mb = os.path.getsize(filepath) / (1024 * 1024)
-    radar = pyart.io.read(filepath)
 
-    try:
-        reflectivity, field_used = get_reflectivity_field(radar)
-    except KeyError as e:
-        return {"Error": str(e)}
-    
-    # Crear path único para la imagen
-    os.makedirs(output_dir, exist_ok=True)
-    unique_name = f"ppi_{uuid.uuid4().hex}.png"
-    output_path = os.path.join(output_dir, unique_name)
-
-    fig = plt.figure(figsize=[15, 10])
-    ax = plt.axes(projection=ccrs.Mercator()) #PlateCarree
-    display = pyart.graph.RadarMapDisplay(radar)
-
-    # Filtro. Extraido de las notebooks de Ignacio Montamat (Grupo Radar Córdoba).
-    gf = None
-    if 'RHOHV' in radar.fields:
-        gf = pyart.correct.GateFilter(radar)
-        gf.exclude_below('RHOHV', 0.92)
-
-    display.plot_ppi_map(field_used,
-                    sweep=0,
-                    vmin=-30,
-                    vmax=70,
-                    projection=ccrs.Mercator(),
-                    ax=ax,
-                    colorbar_flag=False,
-                    cmap=colores.get_cmap_grc_th(),
-                    gatefilter=gf)
-    
-
-    # Calcular bounds
-    lat = radar.gate_latitude['data']
-    lon = radar.gate_longitude['data']
-    lat_min, lat_max = float(lat.min()), float(lat.max())
-    lon_min, lon_max = float(lon.min()), float(lon.max())
-    bounds = [[lat_min, lon_min], [lat_max, lon_max]]
-
-    # Eliminar límites del mapa
-    ax.set_title("")
-    ax.set_xlabel("")
-    ax.set_ylabel("")
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.set_xticklabels([])
-    ax.set_yticklabels([])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-
-
-    plt.savefig(output_path, dpi=150, bbox_inches='tight', pad_inches=0, transparent=True )
-    plt.close()
-
-    summary = {
-        "method": "pyart",
-        "image_url": f"static/tmp/{unique_name}",
-        "bounds": bounds,
-        "field_used": field_used,
-        "source_file": filepath,
-    }
-
-    return summary
-
-
-def reproject_to_cog(src_path, output_dir, dst_crs="EPSG:3857"):
+def reproject_to_cog(src_path, cog_path, dst_crs="EPSG:3857"):
     """
     Reproyecta un archivo Geotiff a un nuevo CRS y lo guarda como COG.
     """
-    unique_cog_name = f"radar_cog_{uuid.uuid4().hex}.tif"
-    cog_path = Path(output_dir) / unique_cog_name
-    file_uri = Path(cog_path).resolve().as_posix()
 
     with rasterio.open(src_path) as src:
         # Calcular transform, width y height para el nuevo CRS
@@ -153,14 +78,50 @@ def reproject_to_cog(src_path, output_dir, dst_crs="EPSG:3857"):
             dst.build_overviews(factors, Resampling.nearest)
             dst.update_tags(ns="rio_overview", resampling="nearest")
 
-    return cog_path, unique_cog_name, file_uri
+    return cog_path
 
 
-def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
+def create_colmax(radar, gatefilter):
+    """
+    Crea un campo de reflectividad compuesto (COLMAX) a partir de todas las
+    elevaciones disponibles en el radar.
+    """
+
+    compz = pyart.retrieve.composite_reflectivity(
+        radar, field="filled_DBZH", gatefilter=gatefilter
+    )
+    # Cambiamos el long_name para que en el titulo de la figura salga COLMAX
+    compz.fields['composite_reflectivity']['long_name'] = 'COLMAX'
+
+    return compz
+
+
+def process_radar_to_cog(filepath, product="PPI", output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
+    Si ya existe un COG generado para este archivo, devuelve directamente la info.
     """
+
+    # Crear nombre único pero estable a partir del NetCDF
+    file_hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()[:12]
+    unique_cog_name = f"radar_{product}_{file_hash}.tif"
+    cog_path = Path(output_dir) / unique_cog_name
+    file_uri = Path(cog_path).resolve().as_posix()
+
+    style = "&resampling=nearest&warp_resampling=nearest"
+    summary = {
+        "method": "pyart",
+        "image_url": f"static/tmp/{unique_cog_name}",
+        "source_file": filepath,
+        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
+    }
+
+    # Si ya existe el COG, devolvemos directo
+    if cog_path.exists():
+        return summary
+
+    # Si no existe, lo procesamos...
     radar = pyart.io.read(filepath)
 
     # print(radar.range['data'])    # distancias en metros de cada gate
@@ -168,15 +129,26 @@ def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
     # print(radar.elevation['data'])
 
     try:
-        _, field_used = get_reflectivity_field(radar)
+        _, reflectivity_field = get_reflectivity_field(radar)
     except KeyError as e:
         return {"Error": str(e)}
+    
 
-     # Filtro. Extraido de las notebooks de Ignacio Montamat (Grupo Radar Córdoba).
     gf = None
-    if 'RHOHV' in radar.fields:
-        gf = pyart.correct.GateFilter(radar)
-        gf.exclude_below('RHOHV', 0.92)
+    if "RHOHV" in radar.fields:
+        gf = pyart.filters.GateFilter(radar)
+        if product.upper() == "COLMAX":
+            gf.exclude_transition()
+            gf.exclude_below("RHOHV", 0.80)
+        else:
+            gf.exclude_below("RHOHV", 0.92)
+    
+    compz = None
+    if product.upper() == "COLMAX":
+        # Relleno el campo DBZH sino los -- no dejan interpolar para crear el COLMAX
+        filled_DBZH = radar.fields[reflectivity_field]['data'].filled(fill_value=-30)
+        radar.add_field_like(reflectivity_field, 'filled_DBZH', filled_DBZH, replace_existing=True)
+        compz = create_colmax(radar, gf)
 
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
     z_grid_limits = (1000, 10_000)
@@ -191,27 +163,33 @@ def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 
-    merc = pyproj.CRS.from_epsg(4326)
+    radar_to_use = radar if product.upper() == "PPI" else compz
+
+    # Esta proyeccion en el grid no funciona, lo deja en Azimutal Equidistance
+    # projection = ccrs.Mercator()
+    # merc = pyproj.CRS.from_epsg(3857)
 
     grid = pyart.map.grid_from_radars(
-        radar,
+        radar_to_use,
         grid_shape=(z_points, y_points, x_points),
         grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
-        projection=merc,
+        # projection=merc,
         gatefilters=gf
     )
     grid.to_xarray()
 
-    # Crear path único
+    # Crear path único para el GeoTIFF temporal
     os.makedirs(output_dir, exist_ok=True)
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
     tiff_path = Path(output_dir) / unique_tif_name
+
+    field_to_use = reflectivity_field if product.upper() == "PPI" else "composite_reflectivity"
 
     # Exportar a GeoTIFF
     pyart.io.write_grid_geotiff(
         grid=grid,
         filename=str(tiff_path),
-        field=field_used,
+        field=field_to_use,
         level=0,
         rgb=True,
         cmap=colores.get_cmap_grc_th(),
@@ -220,8 +198,7 @@ def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
     )
 
     # Convertir a COG y reproyectar a EPSG:3857
-    cog_path, unique_cog_name, file_uri = reproject_to_cog(tiff_path, output_dir, dst_crs="EPSG:3857")
-        
+    _ = reproject_to_cog(tiff_path, cog_path, dst_crs="EPSG:3857")
 
      # Limpiar el GeoTIFF temporal (queda SOLO el COG)
     try:
@@ -229,15 +206,4 @@ def process_radar_to_cog(filepath, output_dir="app/storage/tmp"):
     except OSError:
         pass
 
-    style = "&resampling=nearest&warp_resampling=nearest"
-
-    summary = {
-        "method": "pyart",
-        "image_url": f"static/tmp/{unique_cog_name}",
-        "field_used": field_used,
-        "source_file": filepath,
-        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
-    }
-
     return summary
-

@@ -10,8 +10,9 @@ export const uploadFile = async (files) => {
   return api.post("/upload", formData);
 };
 
-export const processFile = async (filepaths) => {
+export const processFile = async ({ filepaths, product }) => {
   return api.post("/process", {
     filepaths: filepaths,
+    product: product,
   });
 };
