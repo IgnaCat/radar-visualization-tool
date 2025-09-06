@@ -5,6 +5,7 @@ import hashlib
 import cartopy.crs as ccrs
 import pyproj
 from ..utils import colores
+from ..utils import cappi as cappi_utils
 from pathlib import Path
 import rasterio
 from rasterio.shutil import copy
@@ -140,14 +141,20 @@ def process_radar_to_cog(filepath, product="PPI", output_dir="app/storage/tmp"):
         if product.upper() == "COLMAX":
             gf.exclude_transition()
             gf.exclude_below("RHOHV", 0.80)
+        elif product.upper() == "CAPPI":
+            gf.exclude_below("RHOHV", 0.5)
         else:
             gf.exclude_below("RHOHV", 0.92)
     
     compz = None
-    if product.upper() == "COLMAX":
-        # Relleno el campo DBZH sino los -- no dejan interpolar para crear el COLMAX
-        filled_DBZH = radar.fields[reflectivity_field]['data'].filled(fill_value=-30)
-        radar.add_field_like(reflectivity_field, 'filled_DBZH', filled_DBZH, replace_existing=True)
+    cappi = None
+    # Relleno el campo DBZH sino los -- no dejan interpolar
+    filled_DBZH = radar.fields[reflectivity_field]['data'].filled(fill_value=-30)
+    radar.add_field_like(reflectivity_field, 'filled_DBZH', filled_DBZH, replace_existing=True)
+
+    if product.upper() == "CAPPI":
+        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=4000, gatefilter=gf)
+    else:
         compz = create_colmax(radar, gf)
 
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
@@ -163,7 +170,8 @@ def process_radar_to_cog(filepath, product="PPI", output_dir="app/storage/tmp"):
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 
-    radar_to_use = radar if product.upper() == "PPI" else compz
+
+    radar_to_use = radar if product.upper() == "PPI" else (cappi if product.upper() == "CAPPI" else compz)
 
     # Esta proyeccion en el grid no funciona, lo deja en Azimutal Equidistance
     # projection = ccrs.Mercator()
@@ -183,19 +191,30 @@ def process_radar_to_cog(filepath, product="PPI", output_dir="app/storage/tmp"):
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
     tiff_path = Path(output_dir) / unique_tif_name
 
-    field_to_use = reflectivity_field if product.upper() == "PPI" else "composite_reflectivity"
+    field_to_use = reflectivity_field if product.upper() == "PPI" else 'composite_reflectivity' 
 
     # Exportar a GeoTIFF
-    pyart.io.write_grid_geotiff(
-        grid=grid,
-        filename=str(tiff_path),
-        field=field_to_use,
-        level=0,
-        rgb=True,
-        cmap=colores.get_cmap_grc_th(),
-        vmin=-30,
-        vmax=70
-    )
+    if product.upper() == "CAPPI":
+        pyart.io.write_grid_geotiff(
+            grid=grid,
+            filename=str(tiff_path),
+            field="filled_DBZH",
+            rgb=True,
+            cmap=colores.get_cmap_grc_th(),
+            vmin=-30,
+            vmax=70
+        )
+    else:
+        pyart.io.write_grid_geotiff(
+            grid=grid,
+            filename=str(tiff_path),
+            field=field_to_use,
+            level=0,
+            rgb=True,
+            cmap=colores.get_cmap_grc_th(),
+            vmin=-30,
+            vmax=70
+        )
 
     # Convertir a COG y reproyectar a EPSG:3857
     _ = reproject_to_cog(tiff_path, cog_path, dst_crs="EPSG:3857")
