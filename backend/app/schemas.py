@@ -6,6 +6,14 @@ from pathlib import Path
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
     product: str = Field(..., description="Producto a procesar")
+    height: Optional[int] = Field(
+        default=4000, ge=0, le=12000,
+        description="Altura en metros (0-12000). Default 4000m"
+    )
+    elevation: Optional[int] = Field(
+        default=0, ge=0, le=12,
+        description="Ángulo de elevación en grados (0-12). Default 0"
+    )
 
 class ProcessOutput(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL

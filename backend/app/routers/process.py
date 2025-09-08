@@ -20,7 +20,27 @@ async def process_file(payload: ProcessRequest):
     """
     filepaths: List[str] = payload.filepaths
     product: str = payload.product
+    height: int = payload.height
+    elevation: int = payload.elevation
 
+    # Validar inputs
+    if product.upper() not in settings.ALLOWED_PRODUCTS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Producto '{product}' no permitido. Debe ser uno de {settings.ALLOWED_PRODUCTS}"
+        )
+    if height < 0 or height > 12000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La altura debe estar entre 0 y 12000 metros."
+        )
+    if elevation < 0 or elevation > 12:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El ángulo de elevación debe estar entre 0 y 12."
+        )
+
+    # Verificar que se proporcionen filepaths
     if not filepaths:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -58,7 +78,7 @@ async def process_file(payload: ProcessRequest):
 
 
             # Generar COG
-            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product)
+            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product, height, elevation)
 
             result_dict["timestamp"] = timestamp
             processed.append(ProcessOutput(**result_dict))

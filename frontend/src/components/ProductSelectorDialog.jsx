@@ -9,40 +9,124 @@ import {
   RadioGroup,
   FormControlLabel,
   Radio,
+  Typography,
+  Box,
+  Slider,
+  TextField,
+  InputAdornment,
 } from "@mui/material";
 
-export default function ProductSelectorDialog({ open, onClose, onConfirm }) {
-  const [selected, setSelected] = useState("ppi");
+export default function ProductSelectorDialog({
+  open,
+  onClose,
+  onConfirm,
+  initialProduct = "ppi",
+  initialCappiHeight = 2000,
+  initialElevation = 0,
+}) {
+  const [product, setProduct] = useState(initialProduct);
+  const [height, setHeight] = useState(initialCappiHeight);
+  const [elevation, setElevation] = useState(initialElevation);
 
-  const handleConfirm = () => {
-    onConfirm(selected);
+  const isCAPPI = product === "cappi";
+  const isPPI = product === "ppi";
+
+  const resetState = () => {
+    setProduct(initialProduct);
+    setHeight(initialCappiHeight);
+    setElevation(initialElevation);
+  };
+
+  const handleClose = () => {
+    resetState();
     onClose();
   };
 
+  const handleAccept = () => {
+    onConfirm({
+      product,
+      height: isCAPPI ? height : undefined,
+      elevation: isPPI ? elevation : undefined,
+    });
+    handleClose();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose}>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
       <DialogTitle>Seleccionar producto</DialogTitle>
-      <DialogContent>
-        <FormControl component="fieldset">
+
+      <DialogContent dividers>
+        <FormControl component="fieldset" fullWidth>
           <RadioGroup
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
+            value={product}
+            onChange={(e) => setProduct(e.target.value)}
           >
-            <FormControlLabel value="PPI" control={<Radio />} label="PPI" />
+            <FormControlLabel value="ppi" control={<Radio />} label="PPI" />
             <FormControlLabel
-              value="COLMAX"
+              value="colmax"
               control={<Radio />}
               label="COLMAX"
             />
-            <FormControlLabel value="CAPPI" control={<Radio />} label="CAPPI" />
+            <FormControlLabel value="cappi" control={<Radio />} label="CAPPI" />
           </RadioGroup>
         </FormControl>
+
+        {isPPI && (
+          <Box mt={2}>
+            <Typography variant="subtitle1" gutterBottom>
+              Seleccionar elevación
+            </Typography>
+
+            <Box px={1}>
+              <Slider
+                value={elevation}
+                onChange={(_, v) => setElevation(v)}
+                step={1}
+                min={0}
+                max={12}
+                marks={[
+                  { value: 0, label: "0" },
+                  { value: 2, label: "2" },
+                  { value: 4, label: "4" },
+                  { value: 6, label: "6" },
+                  { value: 8, label: "8" },
+                  { value: 10, label: "10" },
+                  { value: 12, label: "12" },
+                ]}
+                valueLabelDisplay="auto"
+              />
+            </Box>
+          </Box>
+        )}
+
+        {isCAPPI && (
+          <Box mt={2}>
+            <Typography variant="subtitle1" gutterBottom>
+              Seleccionar altura (m)
+            </Typography>
+            <Box px={1}>
+              <TextField
+                fullWidth
+                type="number"
+                variant="outlined"
+                value={height}
+                onChange={(e) => setHeight(Number(e.target.value))}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">m</InputAdornment>
+                  ),
+                }}
+              />
+            </Box>
+          </Box>
+        )}
       </DialogContent>
+
       <DialogActions>
-        <Button onClick={onClose} color="secondary">
+        <Button onClick={handleClose} color="secondary">
           Cancelar
         </Button>
-        <Button onClick={handleConfirm} color="primary" variant="contained">
+        <Button onClick={handleAccept} variant="contained">
           Aceptar
         </Button>
       </DialogActions>
