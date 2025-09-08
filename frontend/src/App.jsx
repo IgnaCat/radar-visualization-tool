@@ -65,7 +65,7 @@ export default function App() {
     }
   };
 
-  const handleProductChosen = async (product) => {
+  const handleProductChosen = async (data) => {
     if (!uploadedFiles || uploadedFiles.length === 0) {
       setAlert({
         open: true,
@@ -77,10 +77,14 @@ export default function App() {
     try {
       setLoading(true);
 
-      const processResp = await processFile({
+      const payload = {
         filepaths: uploadedFiles,
-        product,
-      });
+        product: data.product,
+        ...(data.height !== undefined && { height: data.height }),
+        ...(data.elevation !== undefined && { elevation: data.elevation }),
+      };
+
+      const processResp = await processFile(payload);
       if (
         !processResp.data ||
         !processResp.data.outputs ||
@@ -99,10 +103,11 @@ export default function App() {
 
       setAlert({
         open: true,
-        message: `Mostrando ${product.toUpperCase()}`,
+        message: `Mostrando ${data.product.toUpperCase()}`,
         severity: "success",
       });
     } catch (err) {
+      console.error(err);
       setAlert({
         open: true,
         message: "Error al procesar producto",

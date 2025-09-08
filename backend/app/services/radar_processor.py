@@ -97,7 +97,7 @@ def create_colmax(radar, gatefilter):
     return compz
 
 
-def process_radar_to_cog(filepath, product="PPI", output_dir="app/storage/tmp"):
+def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0, output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
@@ -106,7 +106,7 @@ def process_radar_to_cog(filepath, product="PPI", output_dir="app/storage/tmp"):
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()[:12]
-    unique_cog_name = f"radar_{product}_{file_hash}.tif"
+    unique_cog_name = f"radar_{product}_{elevation}_{cappi_height}_{file_hash}.tif"
     cog_path = Path(output_dir) / unique_cog_name
     file_uri = Path(cog_path).resolve().as_posix()
 

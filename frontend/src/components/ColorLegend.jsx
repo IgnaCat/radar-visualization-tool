@@ -1,6 +1,7 @@
 export default function ColorLegend() {
   const legend = [
     {
+      value: "?",
       color: "grey",
       label: "COLMAX(Z)",
       letter_color: "black",
@@ -73,7 +74,6 @@ export default function ColorLegend() {
             borderRadius: "50%",
             backgroundColor: item.color,
             cursor: "pointer",
-
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
