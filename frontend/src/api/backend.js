@@ -16,3 +16,10 @@ export const processFile = async ({ filepaths, product }) => {
     product: product,
   });
 };
+
+export function cleanupClose(payload) {
+  // payload: { uploads: string[], cogs: string[], delete_cache: boolean }
+  return api.post("/cleanup/close", payload, {
+    headers: { "Content-Type": "application/json" },
+  });
+}

@@ -40,4 +40,9 @@ class ProcessResponse(BaseModel):
     outputs: List[ProcessOutput]
     product: str
 
+class CleanupRequest(BaseModel):
+    uploads: list[str] = []
+    cogs: list[str] = []
+    delete_cache: bool = False
+
 

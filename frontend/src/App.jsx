@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { uploadFile, processFile } from "./api/backend";
+import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
 import MapView from "./components/MapView";
 import UploadButton from "./components/UploadButton";
 import FloatingMenu from "./components/FloatingMenu";
@@ -19,12 +20,23 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [currentProduct, setCurrentProduct] = useState("PPI");
+  const allCogsRef = useRef(new Set());
 
   const [alert, setAlert] = useState({
     open: false,
     message: "",
     severity: "info",
   });
+
+  // Registrar cleanup en cierre de pestaña/ventana
+  useEffect(() => {
+    const unregister = registerCleanupAxios(() => ({
+      uploads: uploadedFiles,
+      cogs: Array.from(allCogsRef.current),
+      delete_cache: false,
+    }));
+    return unregister;
+  }, [uploadedFiles, overlayData]);
 
   const handleFileUpload = () => {
     document.getElementById("upload-file").click();
@@ -98,8 +110,11 @@ export default function App() {
       }
 
       setOverlayData(processResp.data);
-
       setCurrentIndex(0);
+
+      // Guardar todos los cogs para el cleanup
+      const fromOutputs = cogFsPaths(processResp.data?.outputs || []);
+      fromOutputs.forEach((p) => allCogsRef.current.add(p));
 
       setAlert({
         open: true,
