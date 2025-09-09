@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from titiler.core.factory import TilerFactory
 
 from .core.config import settings
-from .routers import process, upload
+from .routers import process, upload, cleanup
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -27,6 +27,7 @@ cog = TilerFactory()
 app.include_router(cog.router, prefix="/cog", tags=["cog"])
 app.include_router(upload.router)
 app.include_router(process.router)
+app.include_router(cleanup.router)
 
 @app.get("/health")
 def health():
