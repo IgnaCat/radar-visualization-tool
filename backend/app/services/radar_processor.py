@@ -106,7 +106,8 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()[:12]
-    unique_cog_name = f"radar_{product}_{elevation}_{cappi_height}_{file_hash}.tif"
+    aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "colmax")
+    unique_cog_name = f"radar_{product}_{aux}_{file_hash}.tif"
     cog_path = Path(output_dir) / unique_cog_name
     file_uri = Path(cog_path).resolve().as_posix()
 
@@ -138,13 +139,15 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     gf = None
     if "RHOHV" in radar.fields:
         gf = pyart.filters.GateFilter(radar)
-        if product.upper() == "COLMAX":
-            gf.exclude_transition()
-            gf.exclude_below("RHOHV", 0.80)
-        elif product.upper() == "CAPPI":
-            gf.exclude_below("RHOHV", 0.5)
-        else:
-            gf.exclude_below("RHOHV", 0.92)
+        # if product.upper() == "COLMAX":
+        #     gf.exclude_transition()
+        #     gf.exclude_below("RHOHV", 0.80)
+        # elif product.upper() == "CAPPI":
+        #     gf.exclude_below("RHOHV", 0.5)
+        # else:
+        #     gf.exclude_below("RHOHV", 0.92)
+
+    
     
     compz = None
     cappi = None
@@ -152,13 +155,15 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     filled_DBZH = radar.fields[reflectivity_field]['data'].filled(fill_value=-30)
     radar.add_field_like(reflectivity_field, 'filled_DBZH', filled_DBZH, replace_existing=True)
 
-    if product.upper() == "CAPPI":
-        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=4000, gatefilter=gf)
+    if product.upper() == "PPI":
+        ppi = radar.extract_sweeps([elevation])
+    elif product.upper() == "CAPPI":
+        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height, gatefilter=gf)
     else:
         compz = create_colmax(radar, gf)
 
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
-    z_grid_limits = (1000, 10_000)
+    z_grid_limits = (0.0, 0.0)
     y_grid_limits = (-240e3, 240e3)
     x_grid_limits = (-240e3, 240e3)
 
@@ -166,12 +171,12 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     grid_resolution = 1000
 
     # Calculamos la cantidad de puntos en cada dimensión
-    z_points = int((z_grid_limits[1] - z_grid_limits[0]) / grid_resolution)
+    z_points = 1
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 
 
-    radar_to_use = radar if product.upper() == "PPI" else (cappi if product.upper() == "CAPPI" else compz)
+    radar_to_use = ppi if product.upper() == "PPI" else (cappi if product.upper() == "CAPPI" else compz)
 
     # Esta proyeccion en el grid no funciona, lo deja en Azimutal Equidistance
     # projection = ccrs.Mercator()
@@ -182,6 +187,7 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
         grid_shape=(z_points, y_points, x_points),
         grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
         # projection=merc,
+        weighting_function='nearest',
         gatefilters=gf
     )
     grid.to_xarray()
@@ -191,30 +197,19 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
     tiff_path = Path(output_dir) / unique_tif_name
 
-    field_to_use = reflectivity_field if product.upper() == "PPI" else 'composite_reflectivity' 
+    field_to_use = reflectivity_field if product.upper() == "PPI" else ("filled_DBZH" if product.upper() == "CAPPI" else 'composite_reflectivity')
 
     # Exportar a GeoTIFF
-    if product.upper() == "CAPPI":
-        pyart.io.write_grid_geotiff(
-            grid=grid,
-            filename=str(tiff_path),
-            field="filled_DBZH",
-            rgb=True,
-            cmap=colores.get_cmap_grc_th(),
-            vmin=-30,
-            vmax=70
-        )
-    else:
-        pyart.io.write_grid_geotiff(
-            grid=grid,
-            filename=str(tiff_path),
-            field=field_to_use,
-            level=0,
-            rgb=True,
-            cmap=colores.get_cmap_grc_th(),
-            vmin=-30,
-            vmax=70
-        )
+    pyart.io.write_grid_geotiff(
+        grid=grid,
+        filename=str(tiff_path),
+        field=field_to_use,
+        level=0,
+        rgb=True,
+        cmap=colores.get_cmap_grc_th(),
+        vmin=-30,
+        vmax=70
+    )
 
     # Convertir a COG y reproyectar a EPSG:3857
     _ = reproject_to_cog(tiff_path, cog_path, dst_crs="EPSG:3857")
