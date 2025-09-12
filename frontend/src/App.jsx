@@ -19,7 +19,6 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
-  const [currentProduct, setCurrentProduct] = useState("PPI");
   const allCogsRef = useRef(new Set());
 
   const [alert, setAlert] = useState({
@@ -89,14 +88,12 @@ export default function App() {
     try {
       setLoading(true);
 
-      const payload = {
-        filepaths: uploadedFiles,
-        product: data.product,
-        ...(data.height !== undefined && { height: data.height }),
-        ...(data.elevation !== undefined && { elevation: data.elevation }),
-      };
+      const files = uploadedFiles
+      const product = data.product
+      const height = data.height
+      const elevation = data.elevation
 
-      const processResp = await processFile(payload);
+      const processResp = await processFile({ files, product, height, elevation });
       if (
         !processResp.data ||
         !processResp.data.outputs ||

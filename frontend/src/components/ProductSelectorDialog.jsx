@@ -48,7 +48,7 @@ export default function ProductSelectorDialog({
       height: isCAPPI ? height : undefined,
       elevation: isPPI ? elevation : undefined,
     });
-    handleClose();
+    onClose();
   };
 
   return (
