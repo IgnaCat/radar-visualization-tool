@@ -2,6 +2,7 @@ import os
 import pyart
 import uuid
 import hashlib
+import numpy as np
 import cartopy.crs as ccrs
 import pyproj
 from ..utils import colores
@@ -94,6 +95,12 @@ def create_colmax(radar, gatefilter):
     # Cambiamos el long_name para que en el titulo de la figura salga COLMAX
     compz.fields['composite_reflectivity']['long_name'] = 'COLMAX'
 
+    # volver a máscara antes de exportar
+    data = compz.fields['composite_reflectivity']['data']
+    mask = np.isnan(data) | np.isclose(data, -30) | (data < -40)
+    compz.fields['composite_reflectivity']['data'] = np.ma.array(data, mask=mask)
+    compz.fields['composite_reflectivity']['_FillValue'] = -9999.0
+
     return compz
 
 
@@ -106,7 +113,7 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()[:12]
-    aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "colmax")
+    aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
     unique_cog_name = f"radar_{product}_{aux}_{file_hash}.tif"
     cog_path = Path(output_dir) / unique_cog_name
     file_uri = Path(cog_path).resolve().as_posix()
