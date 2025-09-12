@@ -10,11 +10,16 @@ export const uploadFile = async (files) => {
   return api.post("/upload", formData);
 };
 
-export const processFile = async ({ filepaths, product }) => {
-  return api.post("/process", {
-    filepaths: filepaths,
+export const processFile = async ({ files, product, height, elevation }) => {
+
+  const payload = {
+    filepaths: files,
     product: product,
-  });
+    ...(height !== undefined && { height: parseInt(height) }),
+    ...(elevation !== undefined && { elevation: parseInt(elevation) }),
+  };
+
+  return api.post("/process", payload);
 };
 
 export function cleanupClose(payload) {
