@@ -88,12 +88,19 @@ export default function App() {
     try {
       setLoading(true);
 
-      const files = uploadedFiles
-      const product = data.product
-      const height = data.height
-      const elevation = data.elevation
+      const files = uploadedFiles;
+      const product = data.product;
+      const height = data.height;
+      const elevation = data.elevation;
+      const filters = data.filters;
 
-      const processResp = await processFile({ files, product, height, elevation });
+      const processResp = await processFile({
+        files,
+        product,
+        height,
+        elevation,
+        filters,
+      });
       if (
         !processResp.data ||
         !processResp.data.outputs ||
