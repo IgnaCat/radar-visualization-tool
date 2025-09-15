@@ -14,7 +14,7 @@ class ProcessRequest(BaseModel):
         default=0, ge=0, le=12,
         description="Ángulo de elevación en grados (0-12). Default 0"
     )
-    filters: Optional[List[tuple[str, float]]] = Field(..., min_items=1)
+    filters: Optional[List[tuple[str, float]]] = Field(..., min_items=0)
 
 class ProcessOutput(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL
