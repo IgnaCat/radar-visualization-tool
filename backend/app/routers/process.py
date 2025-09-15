@@ -22,6 +22,7 @@ async def process_file(payload: ProcessRequest):
     product: str = payload.product
     height: int = payload.height
     elevation: int = payload.elevation
+    filters: List[tuple[str, float]] = payload.filters
 
     # Validar inputs
     if product.upper() not in settings.ALLOWED_PRODUCTS:
@@ -78,7 +79,7 @@ async def process_file(payload: ProcessRequest):
 
 
             # Generar COG
-            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product, height, elevation)
+            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product, height, elevation, filters)
 
             result_dict["timestamp"] = timestamp
             processed.append(ProcessOutput(**result_dict))
