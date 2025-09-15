@@ -104,7 +104,7 @@ def create_colmax(radar, gatefilter):
     return compz
 
 
-def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0, output_dir="app/storage/tmp"):
+def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0, filters=[], output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
@@ -133,29 +133,18 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     # Si no existe, lo procesamos...
     radar = pyart.io.read(filepath)
 
-    # print(radar.range['data'])    # distancias en metros de cada gate
-    # print(radar.azimuth['data'])  # ángulos de cada rayo
-    # print(radar.elevation['data'])
-
     try:
         _, reflectivity_field = get_reflectivity_field(radar)
     except KeyError as e:
         return {"Error": str(e)}
-    
 
-    gf = None
-    if "RHOHV" in radar.fields:
-        gf = pyart.filters.GateFilter(radar)
-        # if product.upper() == "COLMAX":
-        #     gf.exclude_transition()
-        #     gf.exclude_below("RHOHV", 0.80)
-        # elif product.upper() == "CAPPI":
-        #     gf.exclude_below("RHOHV", 0.5)
-        # else:
-        #     gf.exclude_below("RHOHV", 0.92)
+    # Aplicar filtros si se proporcionan
+    gf = pyart.filters.GateFilter(radar)
+    gf.exclude_transition()
+    for filter in filters:
+        if filter[0] in radar.fields:
+            gf.exclude_below(filter[0], filter[1])           
 
-    
-    
     compz = None
     cappi = None
     # Relleno el campo DBZH sino los -- no dejan interpolar
