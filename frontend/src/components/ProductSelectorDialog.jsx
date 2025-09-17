@@ -83,7 +83,7 @@ export default function ProductSelectorDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Configuración</DialogTitle>
+      <DialogTitle>Opciones de Visualización</DialogTitle>
 
       <DialogContent dividers>
         <Typography variant="subtitle1" gutterBottom>

@@ -1,13 +1,13 @@
 import { SpeedDial, SpeedDialAction } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
-import SettingsIcon from "@mui/icons-material/Settings";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 export default function FloatingMenu({ onUploadClick, onChangeProductClick }) {
   const actions = [
     { icon: <CloudUploadIcon />, name: "Subir archivo", action: onUploadClick },
     {
-      icon: <SettingsIcon />,
-      name: "Configuración",
+      icon: <VisibilityIcon />,
+      name: "Opciones de visualización",
       action: onChangeProductClick,
     },
   ];
