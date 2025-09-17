@@ -1,3 +1,4 @@
+import math
 import os
 import pyart
 import uuid
@@ -7,6 +8,7 @@ import cartopy.crs as ccrs
 import pyproj
 from ..utils import colores
 from ..utils import cappi as cappi_utils
+from ..utils import png
 from pathlib import Path
 import rasterio
 from rasterio.shutil import copy
@@ -14,7 +16,6 @@ from rasterio.enums import ColorInterp
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from urllib.parse import quote
 from ..core.config import settings
-
 
 def get_reflectivity_field(radar):
     """
@@ -95,13 +96,78 @@ def create_colmax(radar, gatefilter):
     # Cambiamos el long_name para que en el titulo de la figura salga COLMAX
     compz.fields['composite_reflectivity']['long_name'] = 'COLMAX'
 
-    # volver a máscara antes de exportar
+    # Volver a la máscara antes de exportar
     data = compz.fields['composite_reflectivity']['data']
     mask = np.isnan(data) | np.isclose(data, -30) | (data < -40)
     compz.fields['composite_reflectivity']['data'] = np.ma.array(data, mask=mask)
     compz.fields['composite_reflectivity']['_FillValue'] = -9999.0
 
     return compz
+
+
+def beam_height_max_km(range_max_m, elev_deg, antenna_alt_m=0.0):
+    """
+    Calcula la altura máxima del haz en km para un rango y elevación dados.
+    """
+    Re = 8.49e6  # m
+    r = float(range_max_m)
+    th = math.radians(float(elev_deg))
+    h = r*math.sin(th) + (r*r)/(2.0*Re) + antenna_alt_m
+    return h/1000.0  # km
+
+
+def collapse_grid_to_2d(grid, field, product, *,
+                        elevation_deg=None,       # para PPI
+                        target_height_m=None,     # para CAPPI
+                        vmin=-30.0):
+    """
+    Convierte la grilla 3D a 2D según el producto:
+      - "ppi": sigue el haz del sweep con elevación `elevation_deg`
+      - "cappi": toma el nivel z más cercano a `target_height_m`
+    """
+    data3d = grid.fields[field]['data']
+    z = grid.z['data']
+    x = grid.x['data']
+    y = grid.y['data']
+    ny, nx = len(y), len(x)
+
+    if data3d.ndim == 2:  # ya llegó 2D (raro)
+        arr2d = data3d
+    else:
+        if product == "ppi":  # Buscamos recortar la superficie que sigue el haz del sweep seleccionado
+            assert elevation_deg is not None
+            # Calculamos distancia horizontal r de cada píxel al radar
+            X, Y = np.meshgrid(x, y, indexing='xy')
+            r = np.sqrt(X**2 + Y**2)
+            Re = 8.49e6  # m, 4/3 R_tierra
+
+            # Altura donde debería estar el haz en cada píxel
+            z_target = r * np.sin(np.deg2rad(elevation_deg)) + (r**2) / (2.0 * Re)
+
+            # Para cada pixel (y,x), buscamos el índice z cuyo nivel esté más cerca de z_target
+            iz = np.abs(z_target[..., None] - z[None, None, :]).argmin(axis=2)
+
+            # Tomamos el valor en ese z
+            yy = np.arange(ny)[:, None]
+            xx = np.arange(nx)[None, :]
+            arr2d = data3d[iz, yy, xx]
+
+        elif product == "cappi":
+            assert target_height_m is not None
+            iz = np.abs(z - float(target_height_m)).argmin()
+            arr2d = data3d[iz, :, :]
+        elif product == "colmax":
+            arr2d = data3d.max(axis=0)
+        else:
+            raise ValueError("Producto inválido")
+
+    # Re-máscarar
+    arr2d = np.ma.masked_invalid(arr2d)
+    arr2d = np.ma.masked_less(arr2d, vmin)
+
+    # Lo escribimos como un único nivel
+    grid.fields[field]['data'] = arr2d[np.newaxis, ...]   # (1,ny,nx)
+    grid.z['data'] = np.array([0.0], dtype=float)
 
 
 def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0, filters=[], output_dir="app/storage/tmp"):
@@ -138,7 +204,7 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
         _, reflectivity_field = get_reflectivity_field(radar)
     except KeyError as e:
         return {"Error": str(e)}
-
+    
     # Aplicar filtros si se proporcionan
     gf = pyart.filters.GateFilter(radar)
     gf.exclude_transition()
@@ -146,21 +212,36 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
         if filter[0] in radar.fields:
             gf.exclude_below(filter[0], filter[1])
 
-    compz = None
-    cappi = None
     # Relleno el campo DBZH sino los -- no dejan interpolar
     filled_DBZH = radar.fields[reflectivity_field]['data'].filled(fill_value=-30)
     radar.add_field_like(reflectivity_field, 'filled_DBZH', filled_DBZH, replace_existing=True)
 
+    # Definimos qué radar y campo usar según el producto
     if product.upper() == "PPI":
-        ppi = radar.extract_sweeps([elevation])
+        radar_to_use = radar.extract_sweeps([elevation])
+        field_to_use = reflectivity_field
     elif product.upper() == "CAPPI":
-        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height, gatefilter=gf)
+        radar_to_use = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height, gatefilter=gf)
+        field_to_use = "filled_DBZH"
     else:
-        compz = create_colmax(radar, gf)
+        radar_to_use = create_colmax(radar, gf)
+        field_to_use = 'composite_reflectivity'
 
+    # Generamos la imagen PNG para previsualización y referencia
+    #png.create_png(radar_to_use, product, output_dir, field_to_use, filters=filters, elevation=0)
+
+    # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
-    z_grid_limits = (0.0, 0.0)
+    if product.upper() == "CAPPI":
+        z_top_m = cappi_height + 2000  # +2 km de margen
+        elev_deg = None
+    else:
+        range_max_m = 240e3
+        elev_deg = float(radar.fixed_angle['data'][elevation])
+        hmax_km = beam_height_max_km(range_max_m, elev_deg)
+        z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen
+    
+    z_grid_limits = (0.0, z_top_m)
     y_grid_limits = (-240e3, 240e3)
     x_grid_limits = (-240e3, 240e3)
 
@@ -168,12 +249,12 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     grid_resolution = 1000
 
     # Calculamos la cantidad de puntos en cada dimensión
-    z_points = 1
+    dz = 500.0
+    z_points = int(np.ceil((z_grid_limits[1] - z_grid_limits[0]) / dz)) + 1
+    z_points = max(z_points, 2)
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 
-
-    radar_to_use = ppi if product.upper() == "PPI" else (cappi if product.upper() == "CAPPI" else compz)
 
     # Esta proyeccion en el grid no funciona, lo deja en Azimutal Equidistance
     # projection = ccrs.Mercator()
@@ -189,12 +270,20 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     )
     grid.to_xarray()
 
-    # Crear path único para el GeoTIFF temporal
+    # Pasamos de grilla 3D a 2D
+    collapse_grid_to_2d(
+        grid,
+        field=field_to_use,
+        product=product.lower(),
+        elevation_deg=elev_deg,
+        target_height_m=cappi_height,
+        vmin=-30.0
+    )
+
+    # Crear path único para el GeoTIFF temporal (antes de convertir a Cloud Optimized GeoTIFF)
     os.makedirs(output_dir, exist_ok=True)
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
     tiff_path = Path(output_dir) / unique_tif_name
-
-    field_to_use = reflectivity_field if product.upper() == "PPI" else ("filled_DBZH" if product.upper() == "CAPPI" else 'composite_reflectivity')
 
     # Exportar a GeoTIFF
     pyart.io.write_grid_geotiff(
