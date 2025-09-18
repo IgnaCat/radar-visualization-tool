@@ -172,6 +172,7 @@ def get_cmap_grc_zdr():
                     '#FF8345','#FF212C','#FF078B']
 
     return matplotlib.colors.ListedColormap(grc_zdr_data[0:12],'grc_zdr')
+    # return LinearSegmentedColormap.from_list('grc_zdr', grc_zdr_data)
 
 def get_cmap_grc_vrad():
     #CUSTOM MAP PARA VRAD

@@ -20,6 +20,7 @@ async def process_file(payload: ProcessRequest):
     """
     filepaths: List[str] = payload.filepaths
     product: str = payload.product
+    field: str = payload.field
     height: int = payload.height
     elevation: int = payload.elevation
     filters: List[tuple[str, float]] = payload.filters
@@ -74,12 +75,8 @@ async def process_file(payload: ProcessRequest):
                 helpers.extract_metadata_from_filename, filepath
             )
 
-            # Ejecutar el procesamiento bloqueante para generar PNG
-            #result_dict = await run_in_threadpool(radar_processor.process_radar, filepath)
-
-
-            # Generar COG
-            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product, height, elevation, filters)
+            # Ejecutar el procesamiento bloqueante para generar COG
+            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product, field, height, elevation, filters)
 
             result_dict["timestamp"] = timestamp
             processed.append(ProcessOutput(**result_dict))
