@@ -6,10 +6,11 @@ matplotlib.use("Agg") # Use non-interactive backend for matplotlib
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import uuid
-from .colores import get_cmap_grc_th
+import numpy as np
+from . import colores
 
 
-def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, height=None):
+def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, height=None, vmin=-30, vmax=70, cmap_key="grc_th"):
     """
     Genera una imagen PNG a partir de un objeto Py-ART Radar.
     Retorna el path del archivo generado.
@@ -19,7 +20,7 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
     os.makedirs(output_dir, exist_ok=True)
     aux = "_".join([f"{a[0]}{a[1]}" for a in filters]) if filters else "nofilter"
     aux2 = height if product.upper() == "CAPPI" else elevation
-    unique_name = f"png_{product}_{aux2}_{aux}_{uuid.uuid4().hex}.png"
+    unique_name = f"png_{field_used}_{product}_{aux2}_{aux}_{uuid.uuid4().hex}.png"
     output_path = os.path.join(output_dir, unique_name)
 
     fig = plt.figure(figsize=[15, 10])
@@ -33,24 +34,30 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
         if filter[0] in radar.fields:
             gf.exclude_below(filter[0], filter[1])
 
+    cmap = getattr(colores, f"get_cmap_{cmap_key}")()
+
+    # Enmascarar datos inválidos
+    # radar.fields[field_used]['data'] = np.ma.masked_invalid(radar.fields[field_used]['data'])
+    # radar.fields[field_used]['data'] = np.ma.masked_less(radar.fields[field_used]['data'], vmin)
+
     if field_used == 'ppi':
         display.plot_ppi_map(field_used,
                         sweep=elevation,
-                        vmin=-30,
-                        vmax=70,
+                        vmin=vmin,
+                        vmax=vmax,
                         projection=ccrs.Mercator(),
                         ax=ax,
                         colorbar_flag=False,
-                        cmap=get_cmap_grc_th(),
+                        cmap=cmap,
                         gatefilter=gf)
     else:
         display.plot_ppi_map(field_used,
-                        vmin=-30,
-                        vmax=70,
+                        vmin=vmin,
+                        vmax=vmax,
                         projection=ccrs.Mercator(),
                         ax=ax,
                         colorbar_flag=False,
-                        cmap=get_cmap_grc_th(),
+                        cmap=cmap,
                         gatefilter=gf)
     
 

@@ -6,6 +6,7 @@ from pathlib import Path
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
     product: str = Field(..., description="Producto a procesar")
+    field: str = Field(..., description="Campo a procesar")
     height: Optional[int] = Field(
         default=4000, ge=0, le=12000,
         description="Altura en metros (0-12000). Default 4000m"

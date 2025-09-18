@@ -17,18 +17,29 @@ from rasterio.warp import calculate_default_transform, reproject, Resampling
 from urllib.parse import quote
 from ..core.config import settings
 
-def get_reflectivity_field(radar):
-    """
-    Devuelve el campo de reflectividad disponible en el radar.
-    Lanza KeyError si ninguno existe.
-    """
-    fields = {'DBZH', 'reflectivity', 'corrected_reflectivity_horizontal'}
+FIELD_ALIASES = { 
+    "DBZH": ["DBZH", "reflectivity", "corrected_reflectivity_horizontal"], 
+    "ZDR": ["ZDR", "zdr"], 
+    "RHOHV": ["RHOHV", "rhohv"], 
+    "KDP": ["KDP", "kdp"] 
+}
 
-    for field in fields:
-        if field in radar.fields:
-            return radar.fields[field]['data'], field
+FIELD_RENDER = { 
+    "DBZH": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"}, 
+    "ZDR": {"vmin": -5.0, "vmax": 10.5, "cmap": "grc_zdr"}, 
+    "RHOHV": {"vmin": 0.5, "vmax": 1.0, "cmap": "grc_rho"}, 
+    "KDP": {"vmin": 0.0, "vmax": 8.0, "cmap": "grc_rain"} 
+}
 
-    raise KeyError("No se encontró ningún campo de reflectividad en el radar.")
+def resolve_field(radar, field_requested: str):
+    """Devuelve el nombre real del campo en el radar a partir del 'field_requested'."""
+    key = field_requested.upper()
+    if key not in FIELD_ALIASES:
+        raise KeyError(f"Campo no soportado: {field_requested}")
+    for candidate in FIELD_ALIASES[key]:
+        if candidate in radar.fields:
+            return candidate, key
+    raise KeyError(f"No se encontró ningún alias disponible para {field_requested} en el radar.")
 
 
 def reproject_to_cog(src_path, cog_path, dst_crs="EPSG:3857"):
@@ -84,15 +95,14 @@ def reproject_to_cog(src_path, cog_path, dst_crs="EPSG:3857"):
     return cog_path
 
 
-def create_colmax(radar, gatefilter):
+def create_colmax(radar):
     """
     Crea un campo de reflectividad compuesto (COLMAX) a partir de todas las
     elevaciones disponibles en el radar.
     """
 
-    compz = pyart.retrieve.composite_reflectivity(
-        radar, field="filled_DBZH", gatefilter=gatefilter
-    )
+    compz = pyart.retrieve.composite_reflectivity(radar, field="filled_DBZH")
+
     # Cambiamos el long_name para que en el titulo de la figura salga COLMAX
     compz.fields['composite_reflectivity']['long_name'] = 'COLMAX'
 
@@ -163,14 +173,15 @@ def collapse_grid_to_2d(grid, field, product, *,
 
     # Re-máscarar
     arr2d = np.ma.masked_invalid(arr2d)
-    arr2d = np.ma.masked_less(arr2d, vmin)
+    if field in ["filled_DBZH", "DBZH", "cappi", "composite_reflectivity", "KDP", "ZDR"]:
+        arr2d = np.ma.masked_less(arr2d, vmin + 1e-6)
 
     # Lo escribimos como un único nivel
     grid.fields[field]['data'] = arr2d[np.newaxis, ...]   # (1,ny,nx)
     grid.z['data'] = np.array([0.0], dtype=float)
 
 
-def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0, filters=[], output_dir="app/storage/tmp"):
+def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_height=4000, elevation=0, filters=[], output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
@@ -179,9 +190,9 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()[:12]
-    aux = "_".join([f"{a[0]}{a[1]}" for a in filters]) if filters else "nofilter"
-    aux2 = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
-    unique_cog_name = f"radar_{product}_{aux}_{aux2}_{file_hash}.tif"
+    filters_str = "_".join([f"{a[0]}{a[1]}" for a in filters]) if filters else "nofilter"
+    aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
+    unique_cog_name = f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}.tif"
     cog_path = Path(output_dir) / unique_cog_name
     file_uri = Path(cog_path).resolve().as_posix()
 
@@ -201,27 +212,28 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     radar = pyart.io.read(filepath)
 
     try:
-        _, reflectivity_field = get_reflectivity_field(radar)
+        field_name, field_key = resolve_field(radar, field_requested)
     except KeyError as e:
         return {"Error": str(e)}
     
-    # Aplicar filtros si se proporcionan
-    gf = pyart.filters.GateFilter(radar)
-    gf.exclude_transition()
-    for filter in filters:
-        if filter[0] in radar.fields:
-            gf.exclude_below(filter[0], filter[1])
+    # defaults de render por variable
+    render = FIELD_RENDER.get(field_key, {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
+    vmin = render["vmin"]; vmax = render["vmax"]; cmap_key = render["cmap"] 
+    cmap = getattr(colores, f"get_cmap_{cmap_key}")()
 
-    # Relleno el campo DBZH sino los -- no dejan interpolar
-    filled_DBZH = radar.fields[reflectivity_field]['data'].filled(fill_value=-30)
-    radar.add_field_like(reflectivity_field, 'filled_DBZH', filled_DBZH, replace_existing=True)
+    if field_name == "DBZH" and product.upper() in ["CAPPI", "COLMAX"]:
+        # Relleno el campo DBZH sino los -- no dejan interpolar
+        filled_DBZH = radar.fields[field_name]['data'].filled(fill_value=-30)
+        radar.add_field_like(field_name, 'filled_DBZH', filled_DBZH, replace_existing=True)
+        field_name = 'filled_DBZH'
 
     # Definimos qué radar y campo usar según el producto
-    if product.upper() == "PPI":
+    product_upper = product.upper()
+    if product_upper == "PPI":
         radar_to_use = radar.extract_sweeps([elevation])
-        field_to_use = reflectivity_field
-    elif product.upper() == "CAPPI":
-        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height, gatefilter=gf)
+        field_to_use = field_name
+    elif product_upper == "CAPPI":
+        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height)
         # Creamos un campo de 5400x523 y lo rellenamos con el cappi
         # Hacemos esto por problemas con el interpolador de pyart
         template = cappi.fields['filled_DBZH']['data']   # (360, 523)
@@ -230,16 +242,36 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
 
         radar_to_use = radar
         field_to_use = "cappi"
-    else:
-        radar_to_use = create_colmax(radar, gf)
+    elif product_upper == "COLMAX" and field_key.upper() == "DBZH":
+        radar_to_use = create_colmax(radar)
         field_to_use = 'composite_reflectivity'
+    else:
+        raise ValueError(f"Producto inválido: {product_upper}")
+
+    # Aplicar filtros si se proporcionan
+    gf = pyart.filters.GateFilter(radar)
+    gf.exclude_transition()
+    for filter in filters:
+        if filter[0] in radar.fields:
+            gf.exclude_below(filter[0], filter[1])
 
     # Generamos la imagen PNG para previsualización y referencia
-    #png.create_png(radar_to_use, product, output_dir, field_to_use, filters=filters, elevation=0, height=cappi_height)
+    png.create_png(
+        radar_to_use, 
+        product, 
+        output_dir, 
+        field_to_use, 
+        filters=filters, 
+        elevation=0, 
+        height=cappi_height, 
+        vmin=vmin, 
+        vmax=vmax, 
+        cmap_key=cmap_key
+    )
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
-    if product.upper() == "CAPPI":
+    if product_upper == "CAPPI":
         z_top_m = cappi_height + 2000  # +2 km de margen
         elev_deg = None
     else:
@@ -252,12 +284,9 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
     y_grid_limits = (-240e3, 240e3)
     x_grid_limits = (-240e3, 240e3)
 
-    # Definimos una resolución. A mayor resolución más lento va a ser el procesamiento de la grilla.
-    grid_resolution = 1000
-
     # Calculamos la cantidad de puntos en cada dimensión
-    dz = 500.0
-    z_points = int(np.ceil((z_grid_limits[1] - z_grid_limits[0]) / dz)) + 1
+    grid_resolution = 1000
+    z_points = int(np.ceil((z_grid_limits[1] - z_grid_limits[0]) / grid_resolution)) + 1
     z_points = max(z_points, 2)
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
@@ -284,7 +313,7 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
         product=product.lower(),
         elevation_deg=elev_deg,
         target_height_m=cappi_height,
-        vmin=-30.0
+        vmin=vmin
     )
 
     # Crear path único para el GeoTIFF temporal (antes de convertir a Cloud Optimized GeoTIFF)
@@ -299,9 +328,9 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
         field=field_to_use,
         level=0,
         rgb=True,
-        cmap=colores.get_cmap_grc_th(),
-        vmin=-30,
-        vmax=70
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax
     )
 
     # Convertir a COG y reproyectar a EPSG:3857
