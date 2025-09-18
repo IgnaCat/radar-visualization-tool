@@ -221,14 +221,21 @@ def process_radar_to_cog(filepath, product="PPI", cappi_height=4000, elevation=0
         radar_to_use = radar.extract_sweeps([elevation])
         field_to_use = reflectivity_field
     elif product.upper() == "CAPPI":
-        radar_to_use = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height, gatefilter=gf)
-        field_to_use = "filled_DBZH"
+        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height, gatefilter=gf)
+        # Creamos un campo de 5400x523 y lo rellenamos con el cappi
+        # Hacemos esto por problemas con el interpolador de pyart
+        template = cappi.fields['filled_DBZH']['data']   # (360, 523)
+        zeros_array = np.tile(template, (15, 1))   # (5400, 523)
+        radar.add_field_like('DBZH', 'cappi', zeros_array, replace_existing=True)
+
+        radar_to_use = radar
+        field_to_use = "cappi"
     else:
         radar_to_use = create_colmax(radar, gf)
         field_to_use = 'composite_reflectivity'
 
     # Generamos la imagen PNG para previsualización y referencia
-    #png.create_png(radar_to_use, product, output_dir, field_to_use, filters=filters, elevation=0)
+    #png.create_png(radar_to_use, product, output_dir, field_to_use, filters=filters, elevation=0, height=cappi_height)
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)

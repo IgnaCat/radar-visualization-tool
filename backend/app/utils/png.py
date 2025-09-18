@@ -9,7 +9,7 @@ import uuid
 from .colores import get_cmap_grc_th
 
 
-def create_png(radar, product, output_dir, field_used, filters=[], elevation=0):
+def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, height=None):
     """
     Genera una imagen PNG a partir de un objeto Py-ART Radar.
     Retorna el path del archivo generado.
@@ -18,7 +18,8 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0):
     # Crear path único para la imagen
     os.makedirs(output_dir, exist_ok=True)
     aux = "_".join([f"{a[0]}{a[1]}" for a in filters]) if filters else "nofilter"
-    unique_name = f"png_{product}_{elevation}_{aux}_{uuid.uuid4().hex}.png"
+    aux2 = height if product.upper() == "CAPPI" else elevation
+    unique_name = f"png_{product}_{aux2}_{aux}_{uuid.uuid4().hex}.png"
     output_path = os.path.join(output_dir, unique_name)
 
     fig = plt.figure(figsize=[15, 10])
