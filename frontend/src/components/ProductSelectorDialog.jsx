@@ -46,8 +46,8 @@ export default function ProductSelectorDialog({
   initialCappiHeight = 2000,
   initialElevation = 0,
   initialFilters = {
-    rhohv: { enabled: true, min: 0.92 },
-    other: { enabled: false, min: 0.8 },
+    rhohv: { enabled: true, min: 0, max: 0.92 },
+    other: { enabled: false, min: 0, max: 1.0 },
   },
 }) {
   const [layers, setLayers] = useState(initialLayers);
@@ -68,15 +68,27 @@ export default function ProductSelectorDialog({
     setFilters(structuredClone(initialFilters));
   };
 
-  const handleClose = () => {
-    resetState();
-    onClose();
-  };
+  const setRhohv = (patch) =>
+    setFilters((f) => ({ ...f, rhohv: { ...f.rhohv, ...patch } }));
+  const setOther = (patch) =>
+    setFilters((f) => ({ ...f, other: { ...f.other, ...patch } }));
+
+  const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
   const handleAccept = () => {
-    const pairs = [];
+    // normalizar y construir payload de filtros
+    const out = [];
+
     if (filters.rhohv?.enabled) {
-      pairs.push([FILTER_KEYS.RHOHV, Number(filters.rhohv.min)]);
+      let min = clamp01(filters.rhohv.min ?? 0);
+      let max = clamp01(filters.rhohv.max ?? 1);
+      if (min > max) [min, max] = [max, min]; // swap si vienen invertidos
+      out.push({
+        field: "RHOHV",
+        type: "range",
+        min: min,
+        max: max,
+      });
     }
 
     onConfirm({
@@ -84,15 +96,15 @@ export default function ProductSelectorDialog({
       product,
       height: isCAPPI ? height : undefined,
       elevation: isPPI ? elevation : undefined,
-      filters: pairs,
+      filters: out,
     });
     onClose();
   };
 
-  const setRhohv = (patch) =>
-    setFilters((f) => ({ ...f, rhohv: { ...f.rhohv, ...patch } }));
-  const setOther = (patch) =>
-    setFilters((f) => ({ ...f, other: { ...f.other, ...patch } }));
+  const handleClose = () => {
+    resetState();
+    onClose();
+  };
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -190,27 +202,45 @@ export default function ProductSelectorDialog({
             }
             label="RHOHV"
           />
-          <Box display="flex" alignItems="center" gap={2} pl={5}>
+          <Box
+            display="flex"
+            alignItems="center"
+            gap={2}
+            pl={5}
+            sx={{ flexWrap: "wrap" }}
+          >
             <Slider
-              value={Number(filters.rhohv?.min ?? 0.92)}
-              onChange={(_, v) => setRhohv({ min: v })}
+              value={[
+                Number(filters.rhohv?.min ?? 0),
+                Number(filters.rhohv?.max ?? 1),
+              ]}
+              onChange={(_, v) => {
+                const [min, max] = v;
+                setRhohv({ min, max });
+              }}
               step={0.01}
               min={0}
               max={1}
               marks={MARKS_01}
               valueLabelDisplay="auto"
               disabled={!filters.rhohv?.enabled}
-              sx={{ flex: 1 }}
+              sx={{ flex: 1, minWidth: 220 }}
             />
             <TextField
               type="number"
               size="small"
-              value={Number(filters.rhohv?.min ?? 0.92)}
-              onChange={(e) =>
-                setRhohv({
-                  min: Math.max(0, Math.min(1, Number(e.target.value))),
-                })
-              }
+              label="Min"
+              value={Number(filters.rhohv?.min ?? 0)}
+              onChange={(e) => setRhohv({ min: clamp01(e.target.value) })}
+              inputProps={{ step: 0.01, min: 0, max: 1 }}
+              disabled={!filters.rhohv?.enabled}
+            />
+            <TextField
+              type="number"
+              size="small"
+              label="Max"
+              value={Number(filters.rhohv?.max ?? 1)}
+              onChange={(e) => setRhohv({ max: clamp01(e.target.value) })}
               inputProps={{ step: 0.01, min: 0, max: 1 }}
               disabled={!filters.rhohv?.enabled}
             />
