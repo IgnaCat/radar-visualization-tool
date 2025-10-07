@@ -144,7 +144,8 @@ def collapse_grid_to_2d(grid, field, product, *,
     if data3d.ndim == 2:  # ya llegó 2D (raro)
         arr2d = data3d
     else:
-        if product == "ppi":  # Buscamos recortar la superficie que sigue el haz del sweep seleccionado
+        if product == "ppi":
+            # Buscamos recortar la superficie que sigue el haz del sweep seleccionado
             assert elevation_deg is not None
             # Calculamos distancia horizontal r de cada píxel al radar
             X, Y = np.meshgrid(x, y, indexing='xy')
@@ -173,13 +174,22 @@ def collapse_grid_to_2d(grid, field, product, *,
 
     # Re-máscarar
     arr2d = np.ma.masked_invalid(arr2d)
-    if field in ["filled_DBZH", "DBZH", "cappi", "composite_reflectivity", "KDP", "ZDR"]:
-        arr2d = np.ma.masked_less(arr2d, vmin + 1e-6)
+    if field in ["filled_DBZH", "DBZH", "composite_reflectivity", "cappi"]:
+        arr2d = np.ma.masked_less_equal(arr2d, vmin)
+    elif field in ["KDP", "ZDR", "RHOHV"]:
+        arr2d = np.ma.masked_less(arr2d, vmin)
 
     # Lo escribimos como un único nivel
     grid.fields[field]['data'] = arr2d[np.newaxis, ...]   # (1,ny,nx)
     grid.z['data'] = np.array([0.0], dtype=float)
 
+
+def md5_file(path, chunk=1024*1024):
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        for b in iter(lambda: f.read(chunk), b""):
+            h.update(b)
+    return h.hexdigest()
 
 def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_height=4000, elevation=0, filters=[], output_dir="app/storage/tmp"):
     """
@@ -189,7 +199,7 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     """
 
     # Crear nombre único pero estable a partir del NetCDF
-    file_hash = hashlib.md5(open(filepath, "rb").read()).hexdigest()[:12]
+    file_hash = md5_file(filepath)[:12]
     filters_str = "_".join([f"{a[0]}{a[1]}" for a in filters]) if filters else "nofilter"
     aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
     unique_cog_name = f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}.tif"
@@ -249,11 +259,15 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
         raise ValueError(f"Producto inválido: {product_upper}")
 
     # Aplicar filtros si se proporcionan
-    gf = pyart.filters.GateFilter(radar)
+    gf = pyart.filters.GateFilter(radar_to_use)
+    if field_to_use in radar_to_use.fields:
+        gf.exclude_invalid(field_to_use)
+        gf.exclude_masked(field_to_use)
     gf.exclude_transition()
-    for filter in filters:
-        if filter[0] in radar.fields:
-            gf.exclude_below(filter[0], filter[1])
+
+    for f in filters:
+        if f[0] in radar_to_use.fields:
+            gf.exclude_below(f[0], f[1])
 
     # Generamos la imagen PNG para previsualización y referencia
     png.create_png(
@@ -262,7 +276,7 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
         output_dir, 
         field_to_use, 
         filters=filters, 
-        elevation=0, 
+        elevation=elevation, 
         height=cappi_height, 
         vmin=vmin, 
         vmax=vmax, 
