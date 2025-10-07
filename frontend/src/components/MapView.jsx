@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 
-function COGTile({ tilejsonUrl, opacity = 0.9 }) {
+function COGTile({ tilejsonUrl, opacity }) {
   const map = useMap();
   const [template, setTemplate] = useState(null);
   const [llb, setLLB] = useState(null);
@@ -114,7 +114,7 @@ function COGTile({ tilejsonUrl, opacity = 0.9 }) {
   ) : null;
 }
 
-export default function MapView({ overlayData }) {
+export default function MapView({ overlayData, opacity = 0.95 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   return (
     <MapContainer
@@ -129,7 +129,7 @@ export default function MapView({ overlayData }) {
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       {overlayData?.tilejson_url && (
-        <COGTile tilejsonUrl={overlayData.tilejson_url} />
+        <COGTile tilejsonUrl={overlayData.tilejson_url} opacity={opacity} />
       )}
     </MapContainer>
   );

@@ -12,20 +12,29 @@ export const uploadFile = async (files) => {
 
 export const processFile = async ({
   files,
+  layers,
   product,
   height,
   elevation,
   filters,
 }) => {
+  //Busca la primera layer enabled para usar su field
+  let field = "DBZH";
+  for (let layer of layers) {
+    if (layer.enabled) {
+      field = layer.label;
+      break;
+    }
+  }
+
   const payload = {
     filepaths: files,
     product: product,
+    field: field,
     ...(height !== undefined && { height: parseInt(height) }),
     ...(elevation !== undefined && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
   };
-
-  console.log("processFile payload:", payload);
 
   return api.post("/process", payload);
 };
