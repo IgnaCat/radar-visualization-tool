@@ -15,6 +15,7 @@ export default function App() {
     outputs: [],
     animation: false,
   });
+  const [opacity, setOpacity] = useState(0.95);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -89,13 +90,17 @@ export default function App() {
       setLoading(true);
 
       const files = uploadedFiles;
+      const layers = data.layers;
       const product = data.product;
       const height = data.height;
       const elevation = data.elevation;
       const filters = data.filters;
 
+      setOpacity(layers.find((l) => l.enabled)?.opacity || 0.95);
+
       const processResp = await processFile({
         files,
+        layers,
         product,
         height,
         elevation,
@@ -141,7 +146,7 @@ export default function App() {
 
   return (
     <>
-      <MapView overlayData={currentOverlay} />
+      <MapView overlayData={currentOverlay} opacity={opacity} />
       <ColorLegend />
       <FloatingMenu
         onUploadClick={handleFileUpload}

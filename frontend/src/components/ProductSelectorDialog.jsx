@@ -18,6 +18,7 @@ import {
   FormGroup,
   Divider,
 } from "@mui/material";
+import LayerControlList from "./LayerControlList";
 
 const MARKS_01 = [
   { value: 0, label: "0" },
@@ -27,19 +28,29 @@ const MARKS_01 = [
   { value: 1, label: "1" },
 ];
 
+const DEFAULT_LAYERS = [
+  { id: "dbzh", label: "DBZH", enabled: true, opacity: 1 },
+  { id: "kdp0.5", label: "KDP", enabled: false, opacity: 1 },
+  { id: "rhohv0.5", label: "RHOHV", enabled: false, opacity: 1 },
+  { id: "zdr0.5", label: "ZDR", enabled: false, opacity: 1 },
+  { id: "z0.5", label: "Z", enabled: false, opacity: 1 },
+  { id: "vrad", label: "VRAD", enabled: false, opacity: 1 },
+];
+
 export default function ProductSelectorDialog({
   open,
   onClose,
   onConfirm,
+  initialLayers = DEFAULT_LAYERS,
   initialProduct = "ppi",
   initialCappiHeight = 2000,
   initialElevation = 0,
   initialFilters = {
-    excludeTransition: true,
     rhohv: { enabled: true, min: 0.92 },
     other: { enabled: false, min: 0.8 },
   },
 }) {
+  const [layers, setLayers] = useState(initialLayers);
   const [product, setProduct] = useState(initialProduct);
   const [height, setHeight] = useState(initialCappiHeight);
   const [elevation, setElevation] = useState(initialElevation);
@@ -50,6 +61,7 @@ export default function ProductSelectorDialog({
   const FILTER_KEYS = { RHOHV: "RHOHV", OTHER: "Other" };
 
   const resetState = () => {
+    setLayers(structuredClone(initialLayers));
     setProduct(initialProduct);
     setHeight(initialCappiHeight);
     setElevation(initialElevation);
@@ -68,6 +80,7 @@ export default function ProductSelectorDialog({
     }
 
     onConfirm({
+      layers,
       product,
       height: isCAPPI ? height : undefined,
       elevation: isPPI ? elevation : undefined,
@@ -105,6 +118,10 @@ export default function ProductSelectorDialog({
         </FormControl>
 
         <Divider sx={{ my: 2 }} />
+
+        <Box mt={2}>
+          <LayerControlList items={layers} onChange={setLayers} />
+        </Box>
 
         {isPPI && (
           <Box mt={2}>
@@ -158,27 +175,9 @@ export default function ProductSelectorDialog({
         {(isPPI || isCAPPI) && <Divider sx={{ my: 2 }} />}
 
         {/* ---- Filtros ---- */}
-        <Typography variant="subtitle1" gutterBottom>
+        <Typography variant="subtitle1" gutterBottom mt={2}>
           Filtros
         </Typography>
-
-        <FormGroup>
-          {/* Excluir transición */}
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={!!filters.excludeTransition}
-                onChange={(e) =>
-                  setFilters((f) => ({
-                    ...f,
-                    excludeTransition: e.target.checked,
-                  }))
-                }
-              />
-            }
-            label="Excluir rayos de transición"
-          />
-        </FormGroup>
 
         {/* RHOHV */}
         <Box mt={1} px={1}>
@@ -219,7 +218,7 @@ export default function ProductSelectorDialog({
         </Box>
 
         {/* Otro filtro 0–1 (renombrá si lo vas a usar) */}
-        <Box mt={2} px={1}>
+        <Box mt={2} mb={4} px={1}>
           <FormControlLabel
             control={
               <Checkbox
