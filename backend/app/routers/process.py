@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 import os
 
-from ..schemas import ProcessRequest, ProcessResponse, ProcessOutput
+from ..schemas import ProcessRequest, ProcessResponse, ProcessOutput, RangeFilter
 from ..core.config import settings
 
 from ..services import radar_processor
@@ -23,7 +23,7 @@ async def process_file(payload: ProcessRequest):
     field: str = payload.field
     height: int = payload.height
     elevation: int = payload.elevation
-    filters: List[tuple[str, float]] = payload.filters
+    filters: List[RangeFilter] = payload.filters
 
     # Validar inputs
     if product.upper() not in settings.ALLOWED_PRODUCTS:

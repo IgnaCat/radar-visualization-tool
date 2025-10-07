@@ -200,7 +200,7 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]
-    filters_str = "_".join([f"{a[0]}{a[1]}" for a in filters]) if filters else "nofilter"
+    filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
     aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
     unique_cog_name = f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}.tif"
     cog_path = Path(output_dir) / unique_cog_name
@@ -266,8 +266,9 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     gf.exclude_transition()
 
     for f in filters:
-        if f[0] in radar_to_use.fields:
-            gf.exclude_below(f[0], f[1])
+        if f.field in radar_to_use.fields:
+            gf.exclude_below(f.field, f.min)
+            gf.exclude_above(f.field, f.max)
 
     # Generamos la imagen PNG para previsualización y referencia
     png.create_png(

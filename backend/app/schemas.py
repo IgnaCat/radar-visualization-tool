@@ -1,7 +1,14 @@
 from pydantic import BaseModel, AnyHttpUrl, Field, field_serializer
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Literal
 from datetime import datetime
 from pathlib import Path
+
+
+class RangeFilter(BaseModel):
+    field: str = Field(..., description="Nombre del campo")
+    type: Literal["range"] = "range"
+    min: Optional[float] = Field(default=0, description="Límite inferior (inclusivo)")
+    max: Optional[float] = Field(default=1, description="Límite superior (inclusivo)")
 
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
@@ -15,7 +22,7 @@ class ProcessRequest(BaseModel):
         default=0, ge=0, le=12,
         description="Ángulo de elevación en grados (0-12). Default 0"
     )
-    filters: Optional[List[tuple[str, float]]] = Field(..., min_items=0)
+    filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
 
 class ProcessOutput(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL

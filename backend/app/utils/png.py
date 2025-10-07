@@ -18,9 +18,9 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
 
     # Crear path único para la imagen
     os.makedirs(output_dir, exist_ok=True)
-    aux = "_".join([f"{a[0]}{a[1]}" for a in filters]) if filters else "nofilter"
-    aux2 = height if product.upper() == "CAPPI" else elevation
-    unique_name = f"png_{field_used}_{product}_{aux2}_{aux}_{uuid.uuid4().hex}.png"
+    filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
+    aux = height if product.upper() == "CAPPI" else elevation
+    unique_name = f"png_{field_used}_{product}_{aux}_{filters_str}_{uuid.uuid4().hex}.png"
     output_path = os.path.join(output_dir, unique_name)
 
     fig = plt.figure(figsize=[15, 10])
@@ -30,9 +30,10 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
     # Aplicar filtros si se proporcionan
     gf = pyart.filters.GateFilter(radar)
     gf.exclude_transition()
-    for filter in filters:
-        if filter[0] in radar.fields:
-            gf.exclude_below(filter[0], filter[1])
+    for f in filters:
+        if f.field in radar.fields:
+            gf.exclude_below(f.field, f.min)
+            gf.exclude_above(f.field, f.max)
 
     cmap = getattr(colores, f"get_cmap_{cmap_key}")()
 
