@@ -35,6 +35,9 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
             gf.exclude_below(f.field, f.min)
             gf.exclude_above(f.field, f.max)
 
+    if cmap_key == "grc_zdr2":
+        cmap_key = "grc_zdr"
+
     cmap = getattr(colores, f"get_cmap_{cmap_key}")()
 
     # Enmascarar datos inválidos
