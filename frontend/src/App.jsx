@@ -20,6 +20,7 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
+  const [field, setField] = useState("DBZH");
   const allCogsRef = useRef(new Set());
 
   const [alert, setAlert] = useState({
@@ -97,6 +98,7 @@ export default function App() {
       const filters = data.filters;
 
       setOpacity(layers.find((l) => l.enabled)?.opacity || 0.95);
+      setField(layers.find((l) => l.enabled)?.label || "DBZH");
 
       const processResp = await processFile({
         files,
@@ -147,7 +149,7 @@ export default function App() {
   return (
     <>
       <MapView overlayData={currentOverlay} opacity={opacity} />
-      <ColorLegend />
+      <ColorLegend key={field} field={field} />
       <FloatingMenu
         onUploadClick={handleFileUpload}
         onChangeProductClick={() => setSelectorOpen(true)}
