@@ -176,7 +176,7 @@ def collapse_grid_to_2d(grid, field, product, *,
     arr2d = np.ma.masked_invalid(arr2d)
     if field in ["filled_DBZH", "DBZH", "composite_reflectivity", "cappi"]:
         arr2d = np.ma.masked_less_equal(arr2d, vmin)
-    elif field in ["KDP", "ZDR", "RHOHV"]:
+    elif field in ["KDP", "ZDR"]:
         arr2d = np.ma.masked_less(arr2d, vmin)
 
     # Lo escribimos como un único nivel
