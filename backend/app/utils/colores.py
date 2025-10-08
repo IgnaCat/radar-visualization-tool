@@ -2,7 +2,7 @@
 
 #CARGAMOS MAPA DE COLORES
 import matplotlib
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib.colors import LinearSegmentedColormap, to_rgb
 
 def get_cmap_grc_rain():
     cmp_rain = {'red': [(0.0, 1, 1),
@@ -173,6 +173,29 @@ def get_cmap_grc_zdr():
 
     #return matplotlib.colors.ListedColormap(grc_zdr_data[0:12],'grc_zdr')
     return LinearSegmentedColormap.from_list('grc_zdr', grc_zdr_data)
+
+def get_cmap_grc_zdr2():
+    # Colores originales
+    hex_colors = [
+        '#2c2c2c', '#8a8a8a', '#e6e6e6', '#00FFFF',
+        '#94CDFF', '#0055FF', '#489D39', '#F9EA3C',
+        '#FF8345', '#FF212C', '#FF078B'
+    ]
+
+    # Convertimos hex → RGB (0–1)
+    rgb_colors = [to_rgb(c) for c in hex_colors]
+    n = len(rgb_colors)
+
+    # Definimos posiciones equidistantes
+    positions = [i / (n - 1) for i in range(n)]
+
+    grc_zdr_data = {
+        'red':   [(positions[i], rgb_colors[i][0], rgb_colors[i][0]) for i in range(n)],
+        'green': [(positions[i], rgb_colors[i][1], rgb_colors[i][1]) for i in range(n)],
+        'blue':  [(positions[i], rgb_colors[i][2], rgb_colors[i][2]) for i in range(n)],
+    }
+
+    return LinearSegmentedColormap('grc_zdr', grc_zdr_data)
 
 def get_cmap_grc_vrad():
     #CUSTOM MAP PARA VRAD
