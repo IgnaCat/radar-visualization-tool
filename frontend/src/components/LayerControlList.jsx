@@ -72,54 +72,61 @@ function LayerControlList({ title = "Productos de Radar", items, onChange }) {
         {title}
       </Typography>
 
+      {items.length === 0 && (
+        <Typography variant="body2" sx={{ p: 1 }}>
+          No hay productos disponibles
+        </Typography>
+      )}
+
       <List disablePadding>
-        {items.map((it, idx) => (
-          <Box
-            key={it.id}
-            draggable
-            onDragStart={(e) => onDragStart(e, idx)}
-            onDragOver={onDragOver}
-            onDrop={(e) => onDrop(e, idx)}
-            sx={{
-              p: 1,
-              mb: 1,
-              width: "90%",
-              bgcolor: "background.paper",
-            }}
-          >
-            {/* Nombre arriba */}
-            <ListItem disableGutters sx={{ py: 0 }}>
-              <ListItemText
-                primary={<Typography variant="body1">{it.label}</Typography>}
-              />
-            </ListItem>
+        {items.length > 0 &&
+          items.map((it, idx) => (
+            <Box
+              key={it.id}
+              draggable
+              onDragStart={(e) => onDragStart(e, idx)}
+              onDragOver={onDragOver}
+              onDrop={(e) => onDrop(e, idx)}
+              sx={{
+                p: 1,
+                mb: 1,
+                width: "90%",
+                bgcolor: "background.paper",
+              }}
+            >
+              {/* Nombre arriba */}
+              <ListItem disableGutters sx={{ py: 0 }}>
+                <ListItemText
+                  primary={<Typography variant="body1">{it.label}</Typography>}
+                />
+              </ListItem>
 
-            {/* Abajo: checkbox + slider + manija de arrastre */}
-            <Box display="flex" alignItems="center" gap={1}>
-              <Checkbox
-                checked={!!it.enabled}
-                onChange={() => toggleEnabled(idx)}
-                inputProps={{ "aria-label": `activar ${it.label}` }}
-              />
+              {/* Abajo: checkbox + slider + manija de arrastre */}
+              <Box display="flex" alignItems="center" gap={1}>
+                <Checkbox
+                  checked={!!it.enabled}
+                  onChange={() => toggleEnabled(idx)}
+                  inputProps={{ "aria-label": `activar ${it.label}` }}
+                />
 
-              <Slider
-                value={Number(it.opacity ?? 1)}
-                onChange={(_, v) => changeOpacity(idx, v)}
-                min={0}
-                max={1}
-                step={0.01}
-                valueLabelDisplay="auto"
-                sx={{ flex: 1 }}
-              />
+                <Slider
+                  value={Number(it.opacity ?? 1)}
+                  onChange={(_, v) => changeOpacity(idx, v)}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  valueLabelDisplay="auto"
+                  sx={{ flex: 1 }}
+                />
 
-              <Tooltip title="Arrastrar para cambiar el orden">
-                <IconButton size="small" sx={{ cursor: "grab", px: 1 }}>
-                  <DragIndicatorIcon />
-                </IconButton>
-              </Tooltip>
+                <Tooltip title="Arrastrar para cambiar el orden">
+                  <IconButton size="small" sx={{ cursor: "grab", px: 1 }}>
+                    <DragIndicatorIcon />
+                  </IconButton>
+                </Tooltip>
+              </Box>
             </Box>
-          </Box>
-        ))}
+          ))}
       </List>
 
       <Divider sx={{ mt: 1 }} />

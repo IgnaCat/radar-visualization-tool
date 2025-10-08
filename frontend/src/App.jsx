@@ -21,6 +21,7 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [field, setField] = useState("DBZH");
+  const [filesInfo, setFilesInfo] = useState([]);
   const allCogsRef = useRef(new Set());
 
   const [alert, setAlert] = useState({
@@ -48,9 +49,10 @@ export default function App() {
       setLoading(true);
       const uploadResp = await uploadFile(files);
       const warnings = uploadResp.data.warnings || [];
-      const filepaths = uploadResp.data.filepaths || [];
+      const filesInfo = uploadResp.data.files || [];
+      const filepaths = filesInfo.map((f) => f.filepath);
 
-      if (filepaths.length === 0) {
+      if (filesInfo.length === 0) {
         setAlert({
           open: true,
           message: "No se encontraron archivos válidos\n" + warnings.join("\n"),
@@ -65,7 +67,13 @@ export default function App() {
           severity: "warning",
         });
       }
-      setUploadedFiles((prev) => [...prev, ...filepaths]);
+      console.log("Uploaded files info:", filesInfo);
+      setFilesInfo(filesInfo);
+      setUploadedFiles((prev) => {
+        const merged = [...prev, ...filepaths];
+        // elimina duplicados preservando el orden
+        return Array.from(new Set(merged));
+      });
       setSelectorOpen(true);
     } catch (err) {
       setAlert({
@@ -167,6 +175,12 @@ export default function App() {
 
       <ProductSelectorDialog
         open={selectorOpen}
+        fields_present={Array.from(
+          new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
+        )}
+        elevations={Array.from(
+          new Set(filesInfo.map((f) => f.metadata.elevations).flat())
+        )}
         onClose={() => setSelectorOpen(false)}
         onConfirm={handleProductChosen}
       />
