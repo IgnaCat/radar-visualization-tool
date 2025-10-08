@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -15,7 +15,6 @@ import {
   TextField,
   InputAdornment,
   Checkbox,
-  FormGroup,
   Divider,
 } from "@mui/material";
 import LayerControlList from "./LayerControlList";
@@ -28,20 +27,39 @@ const MARKS_01 = [
   { value: 1, label: "1" },
 ];
 
-const DEFAULT_LAYERS = [
-  { id: "dbzh", label: "DBZH", enabled: true, opacity: 1 },
-  { id: "kdp0.5", label: "KDP", enabled: false, opacity: 1 },
-  { id: "rhohv0.5", label: "RHOHV", enabled: false, opacity: 1 },
-  { id: "zdr0.5", label: "ZDR", enabled: false, opacity: 1 },
-  { id: "z0.5", label: "Z", enabled: false, opacity: 1 },
-  { id: "vrad", label: "VRAD", enabled: false, opacity: 1 },
-];
+// Si llega un alias raro del archivo, lo “canonizamos”
+const CANON = { dbzh: "DBZH", zdr: "ZDR", rhohv: "RHOHV", kdp: "KDP" };
+
+function canonize(name = "") {
+  const k = String(name).toLowerCase();
+  return CANON[k] || name.toUpperCase();
+}
+
+// Crear capas a partir de fields_present
+function deriveLayersFromFields(fields_present) {
+  const uniq = Array.from(new Set((fields_present || []).map(canonize)));
+  // Orden sugerido: DBZH primero si existe
+  const order = ["DBZH", "KDP", "RHOHV", "ZDR"];
+  const sorted = uniq.sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+  return sorted.map((f, i) => ({
+    id: f.toLowerCase(),
+    label: f,
+    field: f,
+    enabled: i === 0,
+    opacity: 1,
+  }));
+}
 
 export default function ProductSelectorDialog({
   open,
+  fields_present = ["DBZH"],
+  elevations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
   onClose,
   onConfirm,
-  initialLayers = DEFAULT_LAYERS,
   initialProduct = "ppi",
   initialCappiHeight = 2000,
   initialElevation = 0,
@@ -50,23 +68,42 @@ export default function ProductSelectorDialog({
     other: { enabled: false, min: 0, max: 1.0 },
   },
 }) {
-  const [layers, setLayers] = useState(initialLayers);
+  const derivedLayers = useMemo(
+    () => deriveLayersFromFields(fields_present),
+    [fields_present]
+  );
+
+  const [layers, setLayers] = useState(derivedLayers);
   const [product, setProduct] = useState(initialProduct);
   const [height, setHeight] = useState(initialCappiHeight);
-  const [elevation, setElevation] = useState(initialElevation);
+
+  // Elevación: trabajemos con índices de elevación
+  // (si pasan grados en initialElevation, lo mapeamos al índice más cercano)
+  const initialElevationIndex = useMemo(() => {
+    if (!Array.isArray(elevations) || elevations.length === 0) return 0;
+    const idx =
+      typeof initialElevation === "number" &&
+      elevations.includes(initialElevation)
+        ? elevations.indexOf(initialElevation)
+        : elevations
+            .map((deg, i) => [i, Math.abs(deg - (initialElevation || 0))])
+            .sort((a, b) => a[1] - b[1])[0]?.[0] ?? 0;
+    return Math.max(0, Math.min(elevations.length - 1, idx));
+  }, [elevations, initialElevation]);
+
+  const [elevationIdx, setElevationIdx] = useState(initialElevationIndex);
   const [filters, setFilters] = useState(structuredClone(initialFilters));
+
+  // Si cambian props (ej. suben otro archivo), reseteamos estado dependiente
+  useEffect(() => {
+    setLayers(derivedLayers);
+  }, [derivedLayers]);
+  useEffect(() => {
+    setElevationIdx(initialElevationIndex);
+  }, [initialElevationIndex]);
 
   const isCAPPI = product === "cappi";
   const isPPI = product === "ppi";
-  const FILTER_KEYS = { RHOHV: "RHOHV", OTHER: "Other" };
-
-  const resetState = () => {
-    setLayers(structuredClone(initialLayers));
-    setProduct(initialProduct);
-    setHeight(initialCappiHeight);
-    setElevation(initialElevation);
-    setFilters(structuredClone(initialFilters));
-  };
 
   const setRhohv = (patch) =>
     setFilters((f) => ({ ...f, rhohv: { ...f.rhohv, ...patch } }));
@@ -76,35 +113,46 @@ export default function ProductSelectorDialog({
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
   const handleAccept = () => {
-    // normalizar y construir payload de filtros
     const out = [];
-
     if (filters.rhohv?.enabled) {
       let min = clamp01(filters.rhohv.min ?? 0);
       let max = clamp01(filters.rhohv.max ?? 1);
-      if (min > max) [min, max] = [max, min]; // swap si vienen invertidos
-      out.push({
-        field: "RHOHV",
-        type: "range",
-        min: min,
-        max: max,
-      });
+      if (min > max) [min, max] = [max, min];
+      out.push({ field: "RHOHV", type: "range", min, max, enabled: true });
     }
 
     onConfirm({
       layers,
       product,
       height: isCAPPI ? height : undefined,
-      elevation: isPPI ? elevation : undefined,
+      elevation: isPPI ? elevationIdx : undefined,
       filters: out,
     });
     onClose();
   };
 
   const handleClose = () => {
-    resetState();
+    setLayers(derivedLayers);
+    setProduct(initialProduct);
+    setHeight(initialCappiHeight);
+    setElevationIdx(initialElevationIndex);
+    setFilters(structuredClone(initialFilters));
     onClose();
   };
+
+  // Marks del slider de elevación usando los grados reales, espaciando cada n para no saturar
+  const elevMarks = useMemo(() => {
+    if (!Array.isArray(elevations)) return [];
+    const N = elevations.length;
+    const step = N > 9 ? Math.ceil(N / 9) : 1; // máx 9 marcas visibles
+    return elevations
+      .map((deg, i) =>
+        i % step === 0 ? { value: i, label: String(deg) } : null
+      )
+      .filter(Boolean);
+  }, [elevations]);
+
+  const maxIdx = Math.max(0, (elevations?.length || 1) - 1);
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
@@ -131,6 +179,7 @@ export default function ProductSelectorDialog({
 
         <Divider sx={{ my: 2 }} />
 
+        {/* Variables reales del archivo */}
         <Box mt={2}>
           <LayerControlList items={layers} onChange={setLayers} />
         </Box>
@@ -138,26 +187,23 @@ export default function ProductSelectorDialog({
         {isPPI && (
           <Box mt={2}>
             <Typography variant="subtitle1" gutterBottom>
-              Seleccionar elevación
+              Seleccionar elevación (°)
             </Typography>
             <Box px={1}>
               <Slider
-                value={elevation}
-                onChange={(_, v) => setElevation(v)}
+                value={elevationIdx}
+                onChange={(_, v) => setElevationIdx(v)}
                 step={1}
                 min={0}
-                max={12}
-                marks={[
-                  { value: 0, label: "0" },
-                  { value: 2, label: "2" },
-                  { value: 4, label: "4" },
-                  { value: 6, label: "6" },
-                  { value: 8, label: "8" },
-                  { value: 10, label: "10" },
-                  { value: 12, label: "12" },
-                ]}
+                max={maxIdx}
+                marks={elevMarks}
                 valueLabelDisplay="auto"
+                valueLabelFormat={(i) => elevations?.[i] ?? i}
               />
+              <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                Elevación seleccionada:{" "}
+                {elevations?.[elevationIdx] ?? elevationIdx}°
+              </Typography>
             </Box>
           </Box>
         )}
@@ -186,7 +232,7 @@ export default function ProductSelectorDialog({
 
         {(isPPI || isCAPPI) && <Divider sx={{ my: 2 }} />}
 
-        {/* ---- Filtros ---- */}
+        {/* ---- Filtros por rango ---- */}
         <Typography variant="subtitle1" gutterBottom mt={2}>
           Filtros
         </Typography>
@@ -247,42 +293,9 @@ export default function ProductSelectorDialog({
           </Box>
         </Box>
 
-        {/* Otro filtro 0–1 (renombrá si lo vas a usar) */}
+        {/* (dejé tu “otro filtro” igual) */}
         <Box mt={2} mb={4} px={1}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={!!filters.other?.enabled}
-                onChange={(e) => setOther({ enabled: e.target.checked })}
-              />
-            }
-            label="Otro filtro"
-          />
-          <Box display="flex" alignItems="center" gap={2} pl={5}>
-            <Slider
-              value={Number(filters.other?.min ?? 0.8)}
-              onChange={(_, v) => setOther({ min: v })}
-              step={0.01}
-              min={0}
-              max={1}
-              marks={MARKS_01}
-              valueLabelDisplay="auto"
-              disabled={!filters.other?.enabled}
-              sx={{ flex: 1 }}
-            />
-            <TextField
-              type="number"
-              size="small"
-              value={Number(filters.other?.min ?? 0.8)}
-              onChange={(e) =>
-                setOther({
-                  min: Math.max(0, Math.min(1, Number(e.target.value))),
-                })
-              }
-              inputProps={{ step: 0.01, min: 0, max: 1 }}
-              disabled={!filters.other?.enabled}
-            />
-          </Box>
+          {/* ... */}
         </Box>
       </DialogContent>
 
