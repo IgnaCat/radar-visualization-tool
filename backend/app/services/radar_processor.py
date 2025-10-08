@@ -274,22 +274,22 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
+    range_max_m =  radar_to_use.range["data"] or 240e3
     if product_upper == "CAPPI":
         z_top_m = cappi_height + 2000  # +2 km de margen
         elev_deg = None
     else:
-        range_max_m = 240e3
         elev_deg = float(radar.fixed_angle['data'][elevation])
         hmax_km = beam_height_max_km(range_max_m, elev_deg)
         z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen
     
     z_grid_limits = (0.0, z_top_m)
-    y_grid_limits = (-240e3, 240e3)
-    x_grid_limits = (-240e3, 240e3)
+    y_grid_limits = (-range_max_m, range_max_m)
+    x_grid_limits = (-range_max_m, range_max_m)
 
     # Calculamos la cantidad de puntos en cada dimensión
     grid_resolution = 1000
-    z_points = int(np.ceil((z_grid_limits[1] - z_grid_limits[0]) / grid_resolution)) + 1
+    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution)) + 1
     z_points = max(z_points, 2)
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
