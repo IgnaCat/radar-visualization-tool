@@ -70,14 +70,18 @@ export default function ProductSelectorDialog({
   initialProduct = "ppi",
   initialCappiHeight = 2000,
   initialElevation = 0,
+  initialLayers = [],
   initialFilters = {
     rhohv: { enabled: true, min: 0, max: 0.92 },
     other: { enabled: false, min: 0, max: 1.0 },
   },
 }) {
   const derivedLayers = useMemo(
-    () => deriveLayersFromFields(fields_present),
-    [fields_present]
+    () =>
+      initialLayers.length > 0
+        ? initialLayers
+        : deriveLayersFromFields(fields_present),
+    [fields_present, initialLayers]
   );
 
   const [layers, setLayers] = useState(derivedLayers);
@@ -101,10 +105,12 @@ export default function ProductSelectorDialog({
   const [elevationIdx, setElevationIdx] = useState(initialElevationIndex);
   const [filters, setFilters] = useState(structuredClone(initialFilters));
 
-  // Si cambian props (ej. suben otro archivo), reseteamos estado dependiente
   useEffect(() => {
-    setLayers(derivedLayers);
+    if (layers.length === 0 || !layers.some((l) => l.enabled)) {
+      setLayers(derivedLayers);
+    }
   }, [derivedLayers]);
+
   useEffect(() => {
     setElevationIdx(initialElevationIndex);
   }, [initialElevationIndex]);

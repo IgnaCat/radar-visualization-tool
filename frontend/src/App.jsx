@@ -22,6 +22,7 @@ export default function App() {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [field, setField] = useState("DBZH");
   const [filesInfo, setFilesInfo] = useState([]);
+  const [savedLayers, setSavedLayers] = useState([]);
   const allCogsRef = useRef(new Set());
 
   const [alert, setAlert] = useState({
@@ -107,6 +108,7 @@ export default function App() {
 
       setOpacity(layers.find((l) => l.enabled)?.opacity || 0.95);
       setField(layers.find((l) => l.enabled)?.label || "DBZH");
+      setSavedLayers(data.layers);
 
       const processResp = await processFile({
         files,
@@ -181,6 +183,7 @@ export default function App() {
         elevations={Array.from(
           new Set(filesInfo.map((f) => f.metadata.elevations).flat())
         )}
+        initialLayers={savedLayers}
         onClose={() => setSelectorOpen(false)}
         onConfirm={handleProductChosen}
       />
