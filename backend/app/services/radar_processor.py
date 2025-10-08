@@ -274,7 +274,10 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
-    range_max_m =  radar_to_use.range["data"] or 240e3
+    r = radar_to_use.range["data"]
+    arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)
+    range_max_m = float(arr[-1]) if (arr.size > 0 and np.isfinite(arr[-1])) else 240e3
+
     if product_upper == "CAPPI":
         z_top_m = cappi_height + 2000  # +2 km de margen
         elev_deg = None
