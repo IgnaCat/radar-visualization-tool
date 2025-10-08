@@ -27,6 +27,13 @@ const MARKS_01 = [
   { value: 1, label: "1" },
 ];
 
+const FIELD_LIMITS = {
+  DBZH: { min: -30, max: 70 },
+  ZDR: { min: -5, max: 10.5 },
+  RHOHV: { min: 0.5, max: 1.0 },
+  KDP: { min: 0, max: 8 },
+};
+
 // Si llega un alias raro del archivo, lo “canonizamos”
 const CANON = { dbzh: "DBZH", zdr: "ZDR", rhohv: "RHOHV", kdp: "KDP" };
 
@@ -102,6 +109,20 @@ export default function ProductSelectorDialog({
     setElevationIdx(initialElevationIndex);
   }, [initialElevationIndex]);
 
+  // Variable activa (usamos para los filtros)
+  const activeField = (
+    layers.find((l) => l.enabled)?.field ||
+    layers.find((l) => l.enabled)?.label ||
+    "DBZH"
+  ).toUpperCase();
+  const limits = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
+
+  const [activeRange, setActiveRange] = useState([limits.min, limits.max]);
+  useEffect(() => {
+    const lim = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
+    setActiveRange([lim.min, lim.max]);
+  }, [activeField]);
+
   const isCAPPI = product === "cappi";
   const isPPI = product === "ppi";
 
@@ -113,12 +134,28 @@ export default function ProductSelectorDialog({
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
   const handleAccept = () => {
-    const out = [];
+    const [amin, amax] = activeRange;
+    const filtersOut = [
+      {
+        field: activeField,
+        type: "range",
+        min: amin,
+        max: amax,
+        enabled: true,
+      },
+    ];
+
     if (filters.rhohv?.enabled) {
       let min = clamp01(filters.rhohv.min ?? 0);
       let max = clamp01(filters.rhohv.max ?? 1);
       if (min > max) [min, max] = [max, min];
-      out.push({ field: "RHOHV", type: "range", min, max, enabled: true });
+      filtersOut.push({
+        field: "RHOHV",
+        type: "range",
+        min,
+        max,
+        enabled: true,
+      });
     }
 
     onConfirm({
@@ -126,7 +163,7 @@ export default function ProductSelectorDialog({
       product,
       height: isCAPPI ? height : undefined,
       elevation: isPPI ? elevationIdx : undefined,
-      filters: out,
+      filters: filtersOut,
     });
     onClose();
   };
@@ -293,9 +330,48 @@ export default function ProductSelectorDialog({
           </Box>
         </Box>
 
-        {/* (dejé tu “otro filtro” igual) */}
-        <Box mt={2} mb={4} px={1}>
-          {/* ... */}
+        {/* Filtros de variable seleccionada */}
+        <Box
+          mt={2}
+          mb={4}
+          display="flex"
+          alignItems="center"
+          gap={2}
+          pl={5}
+          sx={{ flexWrap: "wrap" }}
+        >
+          <Typography variant="subtitle1" sx={{ mt: 2 }}>
+            Rango de {activeField}
+          </Typography>
+          <Box px={1} display="flex" alignItems="center" gap={2}>
+            <Slider
+              value={activeRange}
+              onChange={(_, v) => setActiveRange(v)}
+              step={0.1}
+              min={limits.min}
+              max={limits.max}
+              valueLabelDisplay="auto"
+              sx={{ flex: 1, minWidth: 220, mr: 1 }}
+            />
+            <TextField
+              size="small"
+              type="number"
+              label="Min"
+              value={activeRange[0]}
+              onChange={(e) =>
+                setActiveRange(([_, b]) => [Number(e.target.value), b])
+              }
+            />
+            <TextField
+              size="small"
+              type="number"
+              label="Max"
+              value={activeRange[1]}
+              onChange={(e) =>
+                setActiveRange(([a, _]) => [a, Number(e.target.value)])
+              }
+            />
+          </Box>
         </Box>
       </DialogContent>
 
