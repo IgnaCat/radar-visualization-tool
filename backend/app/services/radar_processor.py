@@ -217,7 +217,7 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     # defaults de render por variable
     render = FIELD_RENDER.get(field_key, {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
     vmin = render["vmin"]; vmax = render["vmax"]; cmap_key = render["cmap"]
-    if field_key not in ["VRAD", "WRAD"]:
+    if field_key not in ["VRAD", "WRAD", "PHIDP"]:
         cmap = getattr(colores, f"get_cmap_{cmap_key}")()
     else: # Usamos directamente cmap de pyart
         cmap = cmap_key
