@@ -1,5 +1,5 @@
-from pydantic import BaseModel, AnyHttpUrl, Field, field_serializer
-from typing import List, Optional, Any, Literal
+from pydantic import BaseModel, Field, field_serializer
+from typing import List, Optional, Literal
 from datetime import datetime
 from pathlib import Path
 
@@ -12,7 +12,7 @@ class RangeFilter(BaseModel):
 
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
-    product: str = Field(..., description="Producto a procesar")
+    product: str = Field(..., description="Producto a procesar, ej PPI")
     field: str = Field(..., description="Campo a procesar")
     height: Optional[int] = Field(
         default=4000, ge=0, le=12000,
@@ -55,3 +55,22 @@ class CleanupRequest(BaseModel):
     delete_cache: bool = False
 
 
+class PseudoRHIRequest(BaseModel):
+    filepaths: List[str] = Field(..., min_items=1)
+    field: str = Field(..., description="Campo a visualizar, ej. DBZH")
+    end_lon: float       # Coordenadas punto de interés
+    end_lat: float
+    max_length_km: float = 240.0
+    elevation: Optional[int] = Field(
+        default=0, ge=0, le=12,
+        description="Ángulo de elevación en grados (0-12). Default 0"
+    )
+    filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
+    png_width_px: int = 900
+    png_height_px: int = 500
+
+class PseudoRHIResponse(BaseModel):
+    image_url: str
+    metadata: Optional[dict] = None
+    timestamp: Optional[datetime] = None
+    source_file: Optional[Path] = None
