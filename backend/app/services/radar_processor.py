@@ -2,7 +2,6 @@ import math
 import os
 import pyart
 import uuid
-import hashlib
 import numpy as np
 import cartopy.crs as ccrs
 import pyproj
@@ -18,21 +17,14 @@ from urllib.parse import quote
 from ..core.config import settings
 from ..core.constants import FIELD_ALIASES, FIELD_RENDER
 
-
-def resolve_field(radar, field_requested: str):
-    """Devuelve el nombre real del campo en el radar a partir del 'field_requested'."""
-    key = field_requested.upper()
-    if key not in FIELD_ALIASES:
-        raise KeyError(f"Campo no soportado: {field_requested}")
-    for candidate in FIELD_ALIASES[key]:
-        if candidate in radar.fields:
-            return candidate, key
-    raise KeyError(f"No se encontró ningún alias disponible para {field_requested} en el radar.")
+from .radar_common import (
+    md5_file, resolve_field, build_gatefilter, colormap_for
+)
 
 
 def reproject_to_cog(src_path, cog_path, dst_crs="EPSG:3857"):
     """
-    Reproyecta un archivo Geotiff a un nuevo CRS y lo guarda como COG.
+    Reproyecta un archivo Geotiff a un nuevo CRS y lo guarda como COG (Cloud Optimized GeoTIFF).
     """
 
     with rasterio.open(src_path) as src:
@@ -172,13 +164,6 @@ def collapse_grid_to_2d(grid, field, product, *,
     grid.z['data'] = np.array([0.0], dtype=float)
 
 
-def md5_file(path, chunk=1024*1024):
-    h = hashlib.md5()
-    with open(path, "rb") as f:
-        for b in iter(lambda: f.read(chunk), b""):
-            h.update(b)
-    return h.hexdigest()
-
 def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_height=4000, elevation=0, filters=[], output_dir="app/storage/tmp"):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
@@ -215,12 +200,7 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
         return {"Error": str(e)}
     
     # defaults de render por variable
-    render = FIELD_RENDER.get(field_key, {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
-    vmin = render["vmin"]; vmax = render["vmax"]; cmap_key = render["cmap"]
-    if field_key not in ["VRAD", "WRAD", "PHIDP"]:
-        cmap = getattr(colores, f"get_cmap_{cmap_key}")()
-    else: # Usamos directamente cmap de pyart
-        cmap = cmap_key
+    cmap, vmin, vmax, cmap_key = colormap_for(field_key)
 
     if field_name == "DBZH" and product.upper() in ["CAPPI", "COLMAX"]:
         # Relleno el campo DBZH sino los -- no dejan interpolar
@@ -250,16 +230,7 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
         raise ValueError(f"Producto inválido: {product_upper}")
 
     # Aplicar filtros si se proporcionan
-    gf = pyart.filters.GateFilter(radar_to_use)
-    if field_to_use in radar_to_use.fields:
-        gf.exclude_invalid(field_to_use)
-        gf.exclude_masked(field_to_use)
-    gf.exclude_transition()
-
-    for f in filters:
-        if f.field in radar_to_use.fields:
-            gf.exclude_below(f.field, f.min)
-            gf.exclude_above(f.field, f.max)
+    gf = build_gatefilter(radar_to_use, field_to_use, filters)
 
     # Generamos la imagen PNG para previsualización y referencia
     png.create_png(
