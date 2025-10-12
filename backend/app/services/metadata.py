@@ -6,7 +6,7 @@ from ..core.constants import FIELD_ALIASES
 import numpy as np
 import pyart
 
-
+# (Usado mas que nada en el upload request)
 def extract_radar_metadata(path: str) -> Dict[str, Any]:
     """
     Lee un NetCDF de radar con Py-ART y devuelve metadata básica:
