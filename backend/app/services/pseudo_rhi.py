@@ -2,10 +2,12 @@ import os
 import pyart
 import copy
 import numpy as np
+from fastapi import HTTPException
 from pathlib import Path
 from matplotlib import pyplot as plt
 from typing import List
 from ..core.constants import VARIABLE_UNITS
+from ..core.config import settings
 
 from ..schemas import RangeFilter
 from .radar_common import (
@@ -73,11 +75,11 @@ def variable_radar_cross_section(volumen_radar_data, radial_angle, output_path, 
     units = VARIABLE_UNITS.get(variable, '')
 
     # Se realiza gráfico del cross section
-    xsect = pyart.util.cross_section_ppi(radar_data_copy_3, [radial_angle], gatefilter=gf)
+    xsect = pyart.util.cross_section_ppi(radar_data_copy_3, [radial_angle])
     display = pyart.graph.RadarDisplay(xsect)  # Crear el display de Py-ART
 
     # Crear la figura y el subplot
-    fig = plt.figure(figsize=[15, 3.5])
+    fig = plt.figure(figsize=[17, 5.5])
     ax2 = plt.subplot(1, 1, 1)
 
     # Graficar la variable especificada
@@ -96,6 +98,12 @@ def variable_radar_cross_section(volumen_radar_data, radial_angle, output_path, 
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
 
+from pyproj import Geod
+_GEOD = Geod(ellps="WGS84")
+
+def _km_between(lon0, lat0, lon1, lat1):
+  _, _, d = _GEOD.inv(lon0, lat0, lon1, lat1)
+  return d / 1000.0
 
 def generate_pseudo_rhi_png(
     filepath: str,
@@ -110,19 +118,24 @@ def generate_pseudo_rhi_png(
     
     file_hash = md5_file(filepath)[:12]
     filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
-    unique_out_name = f"pseudo_rhi_{field}_{filters_str}_{elevation}_{file_hash}.png"
+    points = f"{end_lon}_{end_lat}"
+    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
     if out_path.exists():
-        return {"image_url": f"static/tmp/{unique_out_name}", "metadata": None}
+        return {"image_url": f"{settings.BASE_URL}/static/tmp/{unique_out_name}", "metadata": None}
 
     os.makedirs(output_dir, exist_ok=True)
     radar = pyart.io.read(filepath)
-    radar = radar.extract_sweeps([elevation]) if elevation < radar.nsweeps else radar.extract_sweeps([0])
+    # radar = radar.extract_sweeps([elevation]) if elevation < radar.nsweeps else radar.extract_sweeps([0])
 
-    field_name = resolve_field(radar, field)
+    field_name, _ = resolve_field(radar, field)
     site_lon, site_lat, site_alt = get_radar_site(radar)
     range_max_km = safe_range_max_m(radar) / 1000.0
+
+    if _km_between(site_lon, site_lat, end_lon, end_lat) > range_max_km:
+        print(f"El punto está fuera del alcance ({range_max_km:.1f} km).")
+        raise HTTPException(status_code=400, detail=f"El punto está fuera del alcance ({range_max_km:.1f} km).")
 
     # Filtros (se aplican por GateFilter para enmascarar fuera de rango)
     gf = build_gatefilter(radar, field_name, filters)
@@ -135,7 +148,7 @@ def generate_pseudo_rhi_png(
         radar,
         calcule_radial_angle(site_lat, site_lon, end_lat, end_lon),
         out_path,
-        range_max=min(max_length_km, range_max_km),
+        range_max=range_max_km,
         variable=field_name,
         cmap=cmap,
         gf=gf
@@ -143,7 +156,7 @@ def generate_pseudo_rhi_png(
 
 
     return {
-        "image_url": f"static/tmp/{unique_out_name}",
+        "image_url": f"{settings.BASE_URL}/static/tmp/{unique_out_name}",
         "metadata": {
             "radar_site": {"lon": site_lon, "lat": site_lat, "alt_m": site_alt},
             "field": field.upper(),

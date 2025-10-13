@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { uploadFile, processFile } from "./api/backend";
+import { uploadFile, processFile, generatePseudoRHI } from "./api/backend";
 import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
 import MapView from "./components/MapView";
 import UploadButton from "./components/UploadButton";
@@ -9,6 +9,7 @@ import ColorLegend from "./components/ColorLegend";
 import Loader from "./components/Loader";
 import AnimationControls from "./components/AnimationControls";
 import ProductSelectorDialog from "./components/ProductSelectorDialog";
+import PseudoRHIDialog from "./components/PseudoRHIDialog";
 
 export default function App() {
   const [overlayData, setOverlayData] = useState({
@@ -17,19 +18,24 @@ export default function App() {
   });
   const [opacity, setOpacity] = useState(0.95);
   const [uploadedFiles, setUploadedFiles] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [field, setField] = useState("DBZH");
   const [filesInfo, setFilesInfo] = useState([]);
-  const [savedLayers, setSavedLayers] = useState([]);
+  const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const allCogsRef = useRef(new Set());
-
+  var currentOverlay = overlayData.outputs?.[currentIndex] || null;
   const [alert, setAlert] = useState({
     open: false,
     message: "",
     severity: "info",
   });
+
+  const [rhiOpen, setRhiOpen] = useState(false);
+  const [pickPointMode, setPickPointMode] = useState(false);
+  const [pickedPoint, setPickedPoint] = useState(null); // { lat, lon } seleccionado
+  var radarSite = overlayData?.metadata?.site || null;
 
   // Registrar cleanup en cierre de pestaña/ventana
   useEffect(() => {
@@ -68,7 +74,6 @@ export default function App() {
           severity: "warning",
         });
       }
-      console.log("Uploaded files info:", filesInfo);
       setFilesInfo(filesInfo);
       setUploadedFiles((prev) => {
         const merged = [...prev, ...filepaths];
@@ -154,15 +159,52 @@ export default function App() {
     }
   };
 
-  var currentOverlay = overlayData.outputs?.[currentIndex] || null;
+  const handleOpenRHI = () => setRhiOpen(true);
+
+  const handleRequestPickPoint = () => {
+    setPickedPoint(null);
+    setPickPointMode(true);
+  };
+  const handlePickPoint = (pt) => {
+    setPickedPoint(pt);
+    setPickPointMode(false); // se desactiva al elegir
+  };
+  const handleClearPickedPoint = () => setPickedPoint(null);
+
+  const handleGenerateRHI = async ({
+    filepath,
+    field,
+    end_lat,
+    end_lon,
+    // max_length_km,
+    // elevation,
+    // filters,
+  }) => {
+    const resp = await generatePseudoRHI({
+      filepath,
+      field,
+      end_lat,
+      end_lon,
+    });
+    // devolvemos lo que el dialog espera
+    return resp.data;
+  };
 
   return (
     <>
-      <MapView overlayData={currentOverlay} opacity={opacity} />
+      <MapView
+        overlayData={currentOverlay}
+        opacity={opacity}
+        pickPointMode={pickPointMode}
+        radarSite={radarSite}
+        pickedPoint={pickedPoint}
+        onPickPoint={handlePickPoint}
+      />
       <ColorLegend key={field} field={field} />
       <FloatingMenu
         onUploadClick={handleFileUpload}
         onChangeProductClick={() => setSelectorOpen(true)}
+        onPseudoRhiClick={handleOpenRHI}
       />
       <UploadButton onFilesSelected={handleFilesSelected} />
 
@@ -186,6 +228,23 @@ export default function App() {
         initialLayers={savedLayers}
         onClose={() => setSelectorOpen(false)}
         onConfirm={handleProductChosen}
+      />
+
+      {/* Dialog Pseudo-RHI */}
+      <PseudoRHIDialog
+        open={rhiOpen}
+        onClose={() => setRhiOpen(false)}
+        filepath={uploadedFiles[currentIndex]}
+        radarSite={radarSite}
+        fields_present={
+          Array.from(
+            new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
+          ) || ["DBZH", "KDP", "RHOHV", "ZDR"]
+        }
+        onRequestPickPoint={handleRequestPickPoint}
+        pickedPoint={pickedPoint}
+        onClearPickedPoint={handleClearPickedPoint}
+        onGenerate={handleGenerateRHI}
       />
 
       <Alerts

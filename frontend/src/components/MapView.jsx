@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
+import MapPickOverlay from "./MapPickOverlay";
 
 function COGTile({ tilejsonUrl, opacity }) {
   const map = useMap();
@@ -114,7 +115,14 @@ function COGTile({ tilejsonUrl, opacity }) {
   ) : null;
 }
 
-export default function MapView({ overlayData, opacity = 0.95 }) {
+export default function MapView({
+  overlayData,
+  opacity = 0.95,
+  pickPointMode = false,
+  radarSite = null,
+  pickedPoint = null,
+  onPickPoint,
+}) {
   const center = useMemo(() => [-31.4, -64.2], []);
   return (
     <MapContainer
@@ -131,6 +139,12 @@ export default function MapView({ overlayData, opacity = 0.95 }) {
       {overlayData?.tilejson_url && (
         <COGTile tilejsonUrl={overlayData.tilejson_url} opacity={opacity} />
       )}
+      <MapPickOverlay
+        enabled={pickPointMode}
+        radarSite={radarSite}
+        pickedPoint={pickedPoint}
+        onPick={onPickPoint}
+      />
     </MapContainer>
   );
 }
