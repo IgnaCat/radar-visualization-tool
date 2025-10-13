@@ -45,3 +45,27 @@ export function cleanupClose(payload) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+export async function generatePseudoRHI({
+  filepath,
+  field,
+  end_lon,
+  end_lat,
+  max_length_km = 240,
+  elevation = 0,
+  filters = [],
+  png_width_px = 900,
+  png_height_px = 500,
+}) {
+  return api.post("/process/pseudo_rhi", {
+    filepaths: [filepath],
+    field,
+    end_lon,
+    end_lat,
+    max_length_km,
+    elevation,
+    filters,
+    png_width_px,
+    png_height_px,
+  });
+}

@@ -4,13 +4,13 @@ from typing import List
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 from ..schemas import PseudoRHIRequest, PseudoRHIResponse, RangeFilter
-from ..services import pseudo_rhi
+from ..services.pseudo_rhi import generate_pseudo_rhi_png
 from ..core.config import settings
 from ..utils import helpers
 
 router = APIRouter(prefix="/process", tags=["process"])
 
-@router.post("/pseudo_rhi", response_model=PseudoRHIResponse)
+@router.post("/pseudo_rhi", response_model=List[PseudoRHIResponse])
 async def pseudo_rhi(payload: PseudoRHIRequest):
     """
     Generate a pseudo RHI images.
@@ -71,7 +71,7 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
 
             # Ejecutar el procesamiento bloqueante para generar COG
             result_dict = await run_in_threadpool(
-                pseudo_rhi.generate_pseudo_rhi_png,
+                generate_pseudo_rhi_png,
                 filepath=filepath,
                 field=field,
                 end_lon=end_lon,
