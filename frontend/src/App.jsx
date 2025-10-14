@@ -15,6 +15,7 @@ export default function App() {
   const [overlayData, setOverlayData] = useState({
     outputs: [],
     animation: false,
+    metadata: {},
   });
   const [opacity, setOpacity] = useState(0.95);
   const [uploadedFiles, setUploadedFiles] = useState([]);
@@ -25,7 +26,9 @@ export default function App() {
   const [filesInfo, setFilesInfo] = useState([]);
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const allCogsRef = useRef(new Set());
+  const [showPlayButton, setShowPlayButton] = useState(false); // animacion
   var currentOverlay = overlayData.outputs?.[currentIndex] || null;
+
   const [alert, setAlert] = useState({
     open: false,
     message: "",
@@ -137,6 +140,9 @@ export default function App() {
 
       setOverlayData(processResp.data);
       setCurrentIndex(0);
+      setShowPlayButton(
+        processResp.data?.outputs && processResp.data.outputs.length > 1
+      );
 
       // Guardar todos los cogs para el cleanup
       const fromOutputs = cogFsPaths(processResp.data?.outputs || []);
@@ -209,11 +215,12 @@ export default function App() {
       <UploadButton onFilesSelected={handleFilesSelected} />
 
       {/* Slider para múltiples imágenes */}
-      {overlayData.outputs && overlayData.outputs.length > 1 && (
+      {overlayData?.outputs && overlayData?.outputs.length > 0 && (
         <AnimationControls
           overlayData={overlayData}
           currentIndex={currentIndex}
           setCurrentIndex={setCurrentIndex}
+          showPlayButton={showPlayButton}
         />
       )}
 
