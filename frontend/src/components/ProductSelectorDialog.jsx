@@ -29,13 +29,26 @@ const MARKS_01 = [
 
 const FIELD_LIMITS = {
   DBZH: { min: -30, max: 70 },
+  DBZV: { min: -30, max: 70 },
   ZDR: { min: -5, max: 10.5 },
-  RHOHV: { min: 0.5, max: 1.0 },
+  RHOHV: { min: 0.3, max: 1.0 },
   KDP: { min: 0, max: 8 },
+  VRAD: { min: -35, max: 35 },
+  WRAD: { min: 0, max: 10 },
+  PHIDP: { min: -180, max: 180 },
 };
 
 // Si llega un alias raro del archivo, lo “canonizamos”
-const CANON = { dbzh: "DBZH", zdr: "ZDR", rhohv: "RHOHV", kdp: "KDP" };
+const CANON = {
+  dbzh: "DBZH",
+  zdr: "ZDR",
+  rhohv: "RHOHV",
+  kdp: "KDP",
+  dbzv: "DBZV",
+  vrad: "VRAD",
+  wrad: "WRAD",
+  phidp: "PHIDP",
+};
 
 function canonize(name = "") {
   const k = String(name).toLowerCase();
@@ -46,7 +59,16 @@ function canonize(name = "") {
 function deriveLayersFromFields(fields_present) {
   const uniq = Array.from(new Set((fields_present || []).map(canonize)));
   // Orden sugerido: DBZH primero si existe
-  const order = ["DBZH", "KDP", "RHOHV", "ZDR"];
+  const order = [
+    "DBZH",
+    "DBZV",
+    "KDP",
+    "RHOHV",
+    "ZDR",
+    "VRAD",
+    "WRAD",
+    "PHIDP",
+  ];
   const sorted = uniq.sort((a, b) => {
     const ia = order.indexOf(a);
     const ib = order.indexOf(b);

@@ -36,6 +36,19 @@ const LEGENDS = {
       { value: -10, color: "#f0f6f2", label: "Nubes no precipitantes" },
     ],
   },
+  DBZV: {
+    steps: [
+      { value: 70, color: "#FF29E3", label: "Lluvia muy intensa / granizo" },
+      { value: 60, color: "#FF2A98", label: "Lluvia muy intensa / granizo" },
+      { value: 50, color: "#FF2A0C", label: "Lluvia intensa" },
+      { value: 40, color: "#f7a600", label: "Lluvia intensa" },
+      { value: 30, color: "#EAF328", label: "Lluvia moderada" },
+      { value: 20, color: "#00AD5A", label: "Lluvia leve" },
+      { value: 10, color: "#00E68A", label: "Llovizna" },
+      { value: 0, color: "#95b4dc", label: "Neblina" },
+      { value: -10, color: "#f0f6f2", label: "Nubes no precipitantes" },
+    ],
+  },
   ZDR: {
     steps: [
       { value: 7, color: "#ff0064", label: "Eco biológico / Ruido" },
@@ -78,6 +91,47 @@ const LEGENDS = {
       { value: 2, color: "#38DC70", label: "Lluvia moderada" },
       { value: 1, color: "#769ED5", label: "Llovisna" },
       { value: 0, color: "#dce7ed", label: "Granizo" },
+    ],
+  },
+  VRAD: {
+    steps: [
+      { value: 70, color: "#FF29E3", label: "Lluvia muy intensa y granizo" },
+      { value: 30, color: "#ff0000", label: "m/s desde el radar" },
+      { value: 20, color: "#d40000", label: "m/s desde el radar" },
+      { value: 10, color: "#a40000", label: "m/s desde el radar" },
+      { value: 0, color: "#200b0b", label: "tangencial al radar" },
+      { value: -10, color: "#009f00", label: "m/s hacia el radar" },
+      { value: -20, color: "#00cf00", label: "m/s hacia el radar" },
+      { value: -30, color: "#00ff00", label: "m/s hacia el radar" },
+    ],
+  },
+  WRAD: {
+    steps: [
+      { value: 8, color: "#7f2704", label: "Muy alta dispersión" },
+      { value: 6, color: "#d94801", label: "Alta dispersión" },
+      { value: 4, color: "#fd8d3c", label: "Moderada dispersión" },
+      { value: 2, color: "#fdae6b", label: "Baja dispersión" },
+      { value: 1, color: "#fdd0a2", label: "Muy baja dispersión" },
+      { value: 0, color: "#fff5eb", label: "Sin dispersión" },
+    ],
+  },
+  PHIDP: {
+    steps: [
+      { value: 180, color: "#800080", label: "Fase alta / ciclo completo" },
+      { value: 120, color: "#0000ff", label: "Fase positiva" },
+      { value: 60, color: "#00ffff", label: "Cambio de fase moderado" },
+      { value: 0, color: "#00ff00", label: "Sin cambio de fase" },
+      { value: -60, color: "#ffff00", label: "Cambio de fase leve (negativo)" },
+      {
+        value: -120,
+        color: "#ff8000",
+        label: "Cambio de fase moderado (negativo)",
+      },
+      {
+        value: -180,
+        color: "#ff0000",
+        label: "Fase negativa / ciclo completo",
+      },
     ],
   },
 };
