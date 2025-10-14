@@ -9,6 +9,7 @@ export default function AnimationControls({
   overlayData,
   currentIndex,
   setCurrentIndex,
+  showPlayButton = false,
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
 
@@ -28,8 +29,6 @@ export default function AnimationControls({
   }, [isPlaying, overlayData]);
 
   const currentOverlay = overlayData.outputs[currentIndex];
-
-  if (!overlayData || overlayData.outputs.length < 2) return null;
 
   useEffect(() => {
     if (overlayData && overlayData.outputs && overlayData.outputs.length > 0) {
@@ -52,65 +51,66 @@ export default function AnimationControls({
         zIndex: 900,
       }}
     >
-      <Box
-        width={"35%"}
-        display="flex"
-        flexDirection="column"
-        alignItems="center"
-        justifyContent="center"
-        mb={1}
-      >
-        <Slider
-          value={currentIndex}
-          onChange={(e, val) => setCurrentIndex(val)}
-          step={1}
-          min={0}
-          max={overlayData.outputs.length - 1}
-          marks
-        />
+      {showPlayButton && (
+        <Box
+          width={"35%"}
+          display="flex"
+          flexDirection="column"
+          alignItems="center"
+          justifyContent="center"
+          mb={1}
+        >
+          <Slider
+            value={currentIndex}
+            onChange={(e, val) => setCurrentIndex(val)}
+            step={1}
+            min={0}
+            max={overlayData.outputs.length - 1}
+            marks
+          />
 
-        {overlayData.animation && (
-          <Box mt={1} gap={2} display="flex">
-            <IconButton
-              onClick={() =>
-                setCurrentIndex((prev) => (prev > 0 ? prev - 1 : 0))
-              }
-              sx={{
-                backgroundColor: "#42A5F5",
-                color: "white",
-                "&:hover": { backgroundColor: "#1E88E5" },
-              }}
-            >
-              <SkipPreviousIcon />
-            </IconButton>
-            <IconButton
-              onClick={() => setIsPlaying(!isPlaying)}
-              sx={{
-                backgroundColor: "#42A5F5",
-                color: "white",
-                "&:hover": { backgroundColor: "#1E88E5" },
-              }}
-            >
-              {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
-            </IconButton>
-            <IconButton
-              onClick={() =>
-                setCurrentIndex((prev) =>
-                  prev < overlayData.outputs.length - 1 ? prev + 1 : 0
-                )
-              }
-              sx={{
-                backgroundColor: "#42A5F5",
-                color: "white",
-                "&:hover": { backgroundColor: "#1E88E5" },
-              }}
-            >
-              <SkipNextIcon />
-            </IconButton>
-          </Box>
-        )}
-      </Box>
-
+          {overlayData.animation && (
+            <Box mt={1} gap={2} display="flex">
+              <IconButton
+                onClick={() =>
+                  setCurrentIndex((prev) => (prev > 0 ? prev - 1 : 0))
+                }
+                sx={{
+                  backgroundColor: "#42A5F5",
+                  color: "white",
+                  "&:hover": { backgroundColor: "#1E88E5" },
+                }}
+              >
+                <SkipPreviousIcon />
+              </IconButton>
+              <IconButton
+                onClick={() => setIsPlaying(!isPlaying)}
+                sx={{
+                  backgroundColor: "#42A5F5",
+                  color: "white",
+                  "&:hover": { backgroundColor: "#1E88E5" },
+                }}
+              >
+                {isPlaying ? <PauseIcon /> : <PlayArrowIcon />}
+              </IconButton>
+              <IconButton
+                onClick={() =>
+                  setCurrentIndex((prev) =>
+                    prev < overlayData.outputs.length - 1 ? prev + 1 : 0
+                  )
+                }
+                sx={{
+                  backgroundColor: "#42A5F5",
+                  color: "white",
+                  "&:hover": { backgroundColor: "#1E88E5" },
+                }}
+              >
+                <SkipNextIcon />
+              </IconButton>
+            </Box>
+          )}
+        </Box>
+      )}
       <Box
         position="absolute"
         bottom={0}
