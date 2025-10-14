@@ -2,9 +2,10 @@ import os
 import pyart
 import copy
 import numpy as np
+from matplotlib import pyplot as plt
+# matplotlib.rcParams['pcolormesh.shading'] = 'auto' # evita el error de pcolormesh
 from fastapi import HTTPException
 from pathlib import Path
-from matplotlib import pyplot as plt
 from typing import List
 from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
@@ -83,7 +84,7 @@ def variable_radar_cross_section(volumen_radar_data, radial_angle, output_path, 
     ax2 = plt.subplot(1, 1, 1)
 
     # Graficar la variable especificada
-    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2)
+    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, shading='auto')
     display.set_limits(xlim=[0, range_max], ylim=[0, 30])
 
     # Agregar el valor del ángulo radial al gráfico

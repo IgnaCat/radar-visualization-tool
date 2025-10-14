@@ -66,7 +66,6 @@ export default function PseudoRHIDialog({
         field,
         end_lat,
         end_lon,
-        max_length_km: Number(maxKm) || 240,
       });
       setResultImg(resp?.[0].image_url || null);
     } catch (e) {

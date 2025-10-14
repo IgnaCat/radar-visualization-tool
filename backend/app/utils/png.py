@@ -32,13 +32,17 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
     gf.exclude_transition()
     for f in filters:
         if f.field in radar.fields:
-            gf.exclude_below(f.field, f.min)
+            if f.field != "RHOHV" and f.min <= 0.3:
+                gf.exclude_below(f.field, f.min)
             gf.exclude_above(f.field, f.max)
 
     if cmap_key == "grc_zdr2":
         cmap_key = "grc_zdr"
 
-    cmap = getattr(colores, f"get_cmap_{cmap_key}")()
+    if field_used not in ["VRAD", "WRAD", "PHIDP"]:
+        cmap = getattr(colores, f"get_cmap_{cmap_key}")()
+    else: # Usamos directamente cmap de pyart
+        cmap = cmap_key
 
     # Enmascarar datos inválidos
     # radar.fields[field_used]['data'] = np.ma.masked_invalid(radar.fields[field_used]['data'])
