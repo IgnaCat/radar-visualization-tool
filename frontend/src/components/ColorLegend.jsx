@@ -1,4 +1,5 @@
 import React from "react";
+import { Typography } from "@mui/material";
 
 // --- Función para decidir color de texto ---
 function getTextColor(hex) {
@@ -24,6 +25,19 @@ function getTextColor(hex) {
 // --- Configuración de paletas ---
 const LEGENDS = {
   DBZH: {
+    steps: [
+      { value: 70, color: "#FF29E3", label: "Lluvia muy intensa / granizo" },
+      { value: 60, color: "#FF2A98", label: "Lluvia muy intensa / granizo" },
+      { value: 50, color: "#FF2A0C", label: "Lluvia intensa" },
+      { value: 40, color: "#f7a600", label: "Lluvia intensa" },
+      { value: 30, color: "#EAF328", label: "Lluvia moderada" },
+      { value: 20, color: "#00AD5A", label: "Lluvia leve" },
+      { value: 10, color: "#00E68A", label: "Llovizna" },
+      { value: 0, color: "#95b4dc", label: "Neblina" },
+      { value: -10, color: "#f0f6f2", label: "Nubes no precipitantes" },
+    ],
+  },
+  DBZHF: {
     steps: [
       { value: 70, color: "#FF29E3", label: "Lluvia muy intensa / granizo" },
       { value: 60, color: "#FF2A98", label: "Lluvia muy intensa / granizo" },
@@ -136,8 +150,67 @@ const LEGENDS = {
   },
 };
 
-export default function ColorLegend({ field = "DBZH" }) {
-  const legendData = LEGENDS[field.toUpperCase()] || LEGENDS.DBZH;
+export default function ColorLegend({
+  field = "DBZH",
+  fields, // opcional: array de variables, e.g. ['DBZH','RHOHV']
+  style, // opcional: para permitir override de estilos de posicionamiento
+}) {
+  const fieldsList =
+    Array.isArray(fields) && fields.length > 0 ? fields : [field];
+
+  const renderLegendColumn = (fld) => {
+    const key = String(fld || "").toUpperCase();
+    const legendData = LEGENDS[key] || LEGENDS.DBZH;
+
+    return (
+      <div
+        key={key}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          minWidth: 60,
+        }}
+      >
+        <Typography variant="subtitle" color="white" gutterBottom>
+          {key}
+        </Typography>
+
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 5,
+          }}
+        >
+          {legendData.steps.map((item) => {
+            const textColor = getTextColor(item.color);
+            return (
+              <div
+                key={`${key}-${item.value}`}
+                title={item.label}
+                style={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: "50%",
+                  backgroundColor: item.color,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontWeight: "bold",
+                  color: textColor,
+                  fontSize: 16,
+                }}
+              >
+                {item.value}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -147,35 +220,14 @@ export default function ColorLegend({ field = "DBZH" }) {
         bottom: 10,
         zIndex: 1000,
         display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: "5px",
+        flexDirection: "row",
+        alignItems: "flex-start",
+        gap: 16,
+        padding: 4,
+        ...style,
       }}
     >
-      {legendData.steps.map((item) => {
-        const textColor = getTextColor(item.color);
-        return (
-          <div
-            key={item.value}
-            title={item.label}
-            style={{
-              width: "26px",
-              height: "26px",
-              borderRadius: "50%",
-              backgroundColor: item.color,
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontWeight: "bold",
-              color: textColor,
-              fontSize: "16px",
-            }}
-          >
-            {item.value}
-          </div>
-        );
-      })}
+      {fieldsList.map(renderLegendColumn)}
     </div>
   );
 }
