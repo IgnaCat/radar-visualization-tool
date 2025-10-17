@@ -30,6 +30,7 @@ const MARKS_01 = [
 const FIELD_LIMITS = {
   DBZH: { min: -30, max: 70 },
   DBZV: { min: -30, max: 70 },
+  DBZHF: { min: -30, max: 70 },
   ZDR: { min: -5, max: 10.5 },
   RHOHV: { min: 0.3, max: 1.0 },
   KDP: { min: 0, max: 8 },
@@ -111,17 +112,10 @@ export default function ProductSelectorDialog({
   const [height, setHeight] = useState(initialCappiHeight);
 
   // Elevación: trabajemos con índices de elevación
-  // (si pasan grados en initialElevation, lo mapeamos al índice más cercano)
   const initialElevationIndex = useMemo(() => {
-    if (!Array.isArray(elevations) || elevations.length === 0) return 0;
-    const idx =
-      typeof initialElevation === "number" &&
-      elevations.includes(initialElevation)
-        ? elevations.indexOf(initialElevation)
-        : elevations
-            .map((deg, i) => [i, Math.abs(deg - (initialElevation || 0))])
-            .sort((a, b) => a[1] - b[1])[0]?.[0] ?? 0;
-    return Math.max(0, Math.min(elevations.length - 1, idx));
+    const N = Array.isArray(elevations) ? elevations.length : 0;
+    const idx = Number.isInteger(initialElevation) ? initialElevation : 0;
+    return Math.max(0, Math.min(Math.max(N - 1, 0), idx));
   }, [elevations, initialElevation]);
 
   const [elevationIdx, setElevationIdx] = useState(initialElevationIndex);
@@ -205,16 +199,13 @@ export default function ProductSelectorDialog({
     onClose();
   };
 
-  // Marks del slider de elevación usando los grados reales, espaciando cada n para no saturar
+  // Marks del slider de elevación
   const elevMarks = useMemo(() => {
-    if (!Array.isArray(elevations)) return [];
-    const N = elevations.length;
+    const N = Array.isArray(elevations) ? elevations.length : 0;
     const step = N > 9 ? Math.ceil(N / 9) : 1; // máx 9 marcas visibles
-    return elevations
-      .map((deg, i) =>
-        i % step === 0 ? { value: i, label: String(deg) } : null
-      )
-      .filter(Boolean);
+    return Array.from({ length: N }, (_, i) =>
+      i % step === 0 ? { value: i, label: String(i) } : null
+    ).filter(Boolean);
   }, [elevations]);
 
   const maxIdx = Math.max(0, (elevations?.length || 1) - 1);
@@ -263,11 +254,10 @@ export default function ProductSelectorDialog({
                 max={maxIdx}
                 marks={elevMarks}
                 valueLabelDisplay="auto"
-                valueLabelFormat={(i) => elevations?.[i] ?? i}
+                valueLabelFormat={(i) => i}
               />
               <Typography variant="caption" sx={{ opacity: 0.7 }}>
-                Elevación seleccionada:{" "}
-                {elevations?.[elevationIdx] ?? elevationIdx}°
+                Índice de elevación seleccionado: {elevationIdx}
               </Typography>
             </Box>
           </Box>
