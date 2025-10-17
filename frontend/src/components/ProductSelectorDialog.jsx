@@ -94,7 +94,7 @@ export default function ProductSelectorDialog({
   initialElevation = 0,
   initialLayers = [],
   initialFilters = {
-    rhohv: { enabled: true, min: 0, max: 0.92 },
+    rhohv: { enabled: false, min: 0, max: 0.92 },
     other: { enabled: false, min: 0, max: 1.0 },
   },
 }) {
