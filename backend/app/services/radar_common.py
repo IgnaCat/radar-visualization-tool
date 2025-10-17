@@ -120,8 +120,11 @@ def build_gatefilter(
     for f in filters:
         fld = f.field
         if fld in radar.fields:
-            if f.min is not None and fld != "RHOHV" and f.min <= 0.3:
-                    gf.exclude_below(fld, float(f.min))
+            if f.min is not None:
+                    if fld == "RHOHV" and f.min <= 0.3:
+                        continue
+                    else:
+                        gf.exclude_below(fld, float(f.min))
             if f.max is not None:
                 gf.exclude_above(fld, float(f.max))
     return gf

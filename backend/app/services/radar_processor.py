@@ -154,13 +154,14 @@ def collapse_grid_to_2d(grid, field, product, *,
 
     # Re-máscarar
     arr2d = np.ma.masked_invalid(arr2d)
-    if field in ["filled_DBZH", "DBZH", "composite_reflectivity", "cappi"]:
+    if field in ["filled_DBZH", "DBZH", "DBZV", "DBZHF", "composite_reflectivity", "cappi"]:
         arr2d = np.ma.masked_less_equal(arr2d, vmin)
     elif field in ["KDP", "ZDR"]:
         arr2d = np.ma.masked_less(arr2d, vmin)
 
     # Lo escribimos como un único nivel
     grid.fields[field]['data'] = arr2d[np.newaxis, ...]   # (1,ny,nx)
+    grid.fields[field]['_FillValue'] = -9999.0
     grid.z['data'] = np.array([0.0], dtype=float)
 
 
@@ -248,8 +249,8 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
-    r = radar_to_use.range["data"]
-    arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)
+    r = radar_to_use.range["data"]    # distancia al centro de cada gate
+    arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)    #puede tener valores enmascarados como inválidos
     range_max_m = float(arr[-1]) if (arr.size > 0 and np.isfinite(arr[-1])) else 240e3
 
     if product_upper == "CAPPI":
