@@ -182,8 +182,8 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
 
     style = "&resampling=nearest&warp_resampling=nearest"
     summary = {
-        "method": "pyart",
         "image_url": f"static/tmp/{unique_cog_name}",
+        "field": field_requested,
         "source_file": filepath,
         "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
     }

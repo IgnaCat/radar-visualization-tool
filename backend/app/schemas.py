@@ -13,7 +13,7 @@ class RangeFilter(BaseModel):
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
     product: str = Field(..., description="Producto a procesar, ej PPI")
-    field: str = Field(..., description="Campo a procesar")
+    fields: List[str] = Field(..., min_items=1, description="Campos a procesar")
     height: Optional[int] = Field(
         default=4000, ge=0, le=12000,
         description="Altura en metros (0-12000). Default 4000m"
@@ -28,6 +28,8 @@ class ProcessOutput(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL
     tilejson_url: str
     metadata: Optional[dict] = None
+    field: Optional[str] = None
+    order: Optional[int] = None  # para ordenar capas
     bounds: Optional[List[List[float]]] = Field(
         default=None, min_length=2, max_length=2,
         description="BBox [[west, south], [east, north]]"
@@ -46,7 +48,7 @@ class ProcessOutput(BaseModel):
 
 class ProcessResponse(BaseModel):
     animation: bool
-    outputs: List[ProcessOutput]
+    outputs: List[List[ProcessOutput]] # frames x layers
     product: str
 
 class CleanupRequest(BaseModel):
