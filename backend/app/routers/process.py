@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List
 import os
 
-from ..schemas import ProcessRequest, ProcessResponse, ProcessOutput, RangeFilter
+from ..schemas import ProcessRequest, ProcessResponse, LayerResult, RangeFilter
 from ..core.config import settings
 
 from ..services import radar_processor
@@ -76,13 +76,13 @@ async def process_file(payload: ProcessRequest):
         # Limpieza de temporales (en threadpool para no bloquear)
         await run_in_threadpool(helpers.cleanup_tmp)
 
-        frames: List[List[ProcessOutput]] = []
+        frames: List[List[LayerResult]] = []
         # Iteramos por file → procesar todas las capas (posible paralelismo)
         for file, timestamp in files_sorted:
             filepath = Path(UPLOAD_DIR) / file
 
             futures = []
-            results: List[ProcessOutput] = [] # imagenes procesadas de este archivo
+            results: List[LayerResult] = [] # imagenes procesadas de este archivo
             with ThreadPoolExecutor(max_workers=min(8, len(fields))) as ex:
                 for idx, field in enumerate(fields):
                     
@@ -103,7 +103,7 @@ async def process_file(payload: ProcessRequest):
                         result_dict = future.result()
                         result_dict["timestamp"] = timestamp
                         result_dict["order"] = idx
-                        results.append(ProcessOutput(**result_dict))
+                        results.append(LayerResult(**result_dict))
                     except Exception as e:
                         print(f"Error procesando {field}: {e}")
 
