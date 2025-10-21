@@ -24,7 +24,7 @@ class ProcessRequest(BaseModel):
     )
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
 
-class ProcessOutput(BaseModel):
+class LayerResult(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL
     tilejson_url: str
     metadata: Optional[dict] = None
@@ -48,7 +48,7 @@ class ProcessOutput(BaseModel):
 
 class ProcessResponse(BaseModel):
     animation: bool
-    outputs: List[List[ProcessOutput]] # frames x layers
+    outputs: List[List[LayerResult]] # frames x layers
     product: str
 
 class CleanupRequest(BaseModel):
