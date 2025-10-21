@@ -117,13 +117,15 @@ function COGTile({ tilejsonUrl, opacity }) {
 
 export default function MapView({
   overlayData,
-  opacity = 0.95,
+  opacities = [0.95],
   pickPointMode = false,
   radarSite = null,
   pickedPoint = null,
   onPickPoint,
 }) {
+  console.log("MapView render", { overlayData, opacities });
   const center = useMemo(() => [-31.4, -64.2], []);
+  const baseZ = 500;
   return (
     <MapContainer
       center={center}
@@ -136,9 +138,15 @@ export default function MapView({
       markerZoomAnimation={true}
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {overlayData?.tilejson_url && (
-        <COGTile tilejsonUrl={overlayData.tilejson_url} opacity={opacity} />
-      )}
+
+      {overlayData?.map((L, idx) => (
+        <COGTile
+          key={`${L.field || "layer"}|${L.tilejson_url}`}
+          tilejsonUrl={L.tilejson_url}
+          opacity={opacities[idx]}
+          zIndex={baseZ - idx * 20}
+        />
+      ))}
       <MapPickOverlay
         enabled={pickPointMode}
         radarSite={radarSite}

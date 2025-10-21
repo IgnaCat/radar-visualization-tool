@@ -17,7 +17,7 @@ export default function App() {
     animation: false,
     metadata: {},
   });
-  const [opacity, setOpacity] = useState(0.95);
+  const [opacity, setOpacity] = useState([0.95]);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
@@ -109,13 +109,14 @@ export default function App() {
 
       const files = uploadedFiles;
       const layers = data.layers;
-      const enabledLayers = layers.filter((l) => l.enabled).map((l) => l.label);
       const product = data.product;
       const height = data.height;
       const elevation = data.elevation;
       const filters = data.filters;
+      const enabledLayers = layers.filter((l) => l.enabled).map((l) => l.label);
+      const opacities = layers.filter((l) => l.enabled).map((l) => l.opacity);
 
-      setOpacity(layers.find((l) => l.enabled)?.opacity || 0.95);
+      setOpacity(opacities);
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
 
@@ -141,13 +142,13 @@ export default function App() {
 
       console.log("Process response:", processResp.data);
 
-      // setOverlayData(processResp.data);
-      // setCurrentIndex(0);
-      // setShowPlayButton(
-      //   processResp.data?.outputs && processResp.data.outputs.length > 1
-      // );
+      setOverlayData(processResp.data);
+      setCurrentIndex(0);
+      setShowPlayButton(
+        processResp.data?.outputs && processResp.data.outputs.length > 1
+      );
 
-      // // Guardar todos los cogs para el cleanup
+      // Guardar todos los cogs para el cleanup
       // const fromOutputs = cogFsPaths(processResp.data?.outputs || []);
       // fromOutputs.forEach((p) => allCogsRef.current.add(p));
 
@@ -203,7 +204,7 @@ export default function App() {
     <>
       <MapView
         overlayData={currentOverlay}
-        opacity={opacity}
+        opacities={opacity}
         pickPointMode={pickPointMode}
         radarSite={radarSite}
         pickedPoint={pickedPoint}
