@@ -18,19 +18,10 @@ export const processFile = async ({
   elevation,
   filters,
 }) => {
-  //Busca la primera layer enabled para usar su field
-  let field = "DBZH";
-  for (let layer of layers) {
-    if (layer.enabled) {
-      field = layer.label;
-      break;
-    }
-  }
-
   const payload = {
     filepaths: files,
     product: product,
-    field: field,
+    field: layers.find((l) => l.enabled)?.label || "DBZH",
     ...(height !== undefined && { height: parseInt(height) }),
     ...(elevation !== undefined && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
