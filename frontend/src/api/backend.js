@@ -21,7 +21,7 @@ export const processFile = async ({
   const payload = {
     filepaths: files,
     product: product,
-    field: layers.find((l) => l.enabled)?.label || "DBZH",
+    fields: layers,
     ...(height !== undefined && { height: parseInt(height) }),
     ...(elevation !== undefined && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),

@@ -1,6 +1,7 @@
 from fileinput import filename
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List
 import os
@@ -13,6 +14,13 @@ from ..utils import helpers
 
 router = APIRouter(prefix="/process", tags=["process"])
 
+def _timestamp_of(filepath: str):
+    try:
+        md = helpers.extract_metadata_from_filename(filepath)
+        return md.get("timestamp")  # datetime | None
+    except Exception:
+        return None
+
 @router.post("", response_model=ProcessResponse)
 async def process_file(payload: ProcessRequest):
     """
@@ -20,7 +28,7 @@ async def process_file(payload: ProcessRequest):
     """
     filepaths: List[str] = payload.filepaths
     product: str = payload.product
-    field: str = payload.field
+    fields: List[str] = payload.fields
     height: int = payload.height
     elevation: int = payload.elevation
     filters: List[RangeFilter] = payload.filters
@@ -60,34 +68,57 @@ async def process_file(payload: ProcessRequest):
                 detail=f"Archivo no encontrado: {file}"
             )
 
+    files_with_ts = [(f, _timestamp_of(f)) for f in filepaths]
+    files_sorted = sorted(files_with_ts, key=lambda x: (x[1] is None, x[1] or 0))
+
     try:
 
         # Limpieza de temporales (en threadpool para no bloquear)
         await run_in_threadpool(helpers.cleanup_tmp)
 
-        processed: List[ProcessOutput] = []
-
-        for file in filepaths:
+        frames: List[List[ProcessOutput]] = []
+        # Iteramos por file → procesar todas las capas (posible paralelismo)
+        for file, timestamp in files_sorted:
             filepath = Path(UPLOAD_DIR) / file
 
-            # Extraer metadata del nombre del archivo
-            _, _, _, timestamp = await run_in_threadpool(
-                helpers.extract_metadata_from_filename, filepath
-            )
+            futures = []
+            results: List[ProcessOutput] = [] # imagenes procesadas de este archivo
+            with ThreadPoolExecutor(max_workers=min(8, len(fields))) as ex:
+                for idx, field in enumerate(fields):
+                    
+                    futures.append(
+                        ex.submit(
+                            radar_processor.process_radar_to_cog,
+                            filepath,
+                            product,
+                            field,
+                            height,
+                            elevation,
+                            filters
+                        )
+                    )
 
-            # Ejecutar el procesamiento bloqueante para generar COG
-            result_dict = await run_in_threadpool(radar_processor.process_radar_to_cog, filepath, product, field, height, elevation, filters)
+                for future in as_completed(futures):
+                    try:
+                        result_dict = future.result()
+                        result_dict["timestamp"] = timestamp
+                        result_dict["order"] = idx
+                        results.append(ProcessOutput(**result_dict))
+                    except Exception as e:
+                        print(f"Error procesando {field}: {e}")
 
-            result_dict["timestamp"] = timestamp
-            processed.append(ProcessOutput(**result_dict))
+            # ordenar capas por order antes de agregar el frame
+            results.sort(key=lambda r: r.order)
+            if results:
+                frames.append(results)
+
+        if not frames:
+            raise HTTPException(status_code=500, detail="No se generó ninguna capa")
 
         # Decidir si animación
-        animate = await run_in_threadpool(helpers.should_animate, [r.dict() for r in processed])
+        # animate = await run_in_threadpool(helpers.should_animate, [r.dict() for r in frames])
 
-        # Ordenar los resultados por timestamp
-        processed.sort(key=lambda x: x.timestamp)
-
-        return ProcessResponse(animation=bool(animate), outputs=processed, product=product)
+        return ProcessResponse(animation=(len(frames) > 1), outputs=frames, product=product)
 
     except HTTPException:
         # Re-emitir las HTTPException tal cual

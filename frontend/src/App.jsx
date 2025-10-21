@@ -121,7 +121,7 @@ export default function App() {
 
       const processResp = await processFile({
         files,
-        layers,
+        layers: enabledLayers,
         product,
         height,
         elevation,
@@ -139,15 +139,17 @@ export default function App() {
         });
       }
 
-      setOverlayData(processResp.data);
-      setCurrentIndex(0);
-      setShowPlayButton(
-        processResp.data?.outputs && processResp.data.outputs.length > 1
-      );
+      console.log("Process response:", processResp.data);
 
-      // Guardar todos los cogs para el cleanup
-      const fromOutputs = cogFsPaths(processResp.data?.outputs || []);
-      fromOutputs.forEach((p) => allCogsRef.current.add(p));
+      // setOverlayData(processResp.data);
+      // setCurrentIndex(0);
+      // setShowPlayButton(
+      //   processResp.data?.outputs && processResp.data.outputs.length > 1
+      // );
+
+      // // Guardar todos los cogs para el cleanup
+      // const fromOutputs = cogFsPaths(processResp.data?.outputs || []);
+      // fromOutputs.forEach((p) => allCogsRef.current.add(p));
 
       setAlert({
         open: true,
