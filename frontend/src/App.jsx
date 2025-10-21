@@ -22,7 +22,7 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
-  const [field, setField] = useState("DBZH");
+  const [fieldsUsed, setFieldsUsed] = useState("DBZH");
   const [filesInfo, setFilesInfo] = useState([]);
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const allCogsRef = useRef(new Set());
@@ -109,13 +109,14 @@ export default function App() {
 
       const files = uploadedFiles;
       const layers = data.layers;
+      const enabledLayers = layers.filter((l) => l.enabled).map((l) => l.label);
       const product = data.product;
       const height = data.height;
       const elevation = data.elevation;
       const filters = data.filters;
 
       setOpacity(layers.find((l) => l.enabled)?.opacity || 0.95);
-      setField(layers.find((l) => l.enabled)?.label || "DBZH");
+      setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
 
       const processResp = await processFile({
@@ -206,7 +207,7 @@ export default function App() {
         pickedPoint={pickedPoint}
         onPickPoint={handlePickPoint}
       />
-      <ColorLegend key={field} field={field} />
+      <ColorLegend fields={fieldsUsed} />
       <FloatingMenu
         onUploadClick={handleFileUpload}
         onChangeProductClick={() => setSelectorOpen(true)}
