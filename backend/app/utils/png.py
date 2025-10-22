@@ -32,9 +32,11 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
     gf.exclude_transition()
     for f in filters:
         if f.field in radar.fields:
-            if f.field != "RHOHV" and f.min <= 0.3:
-                gf.exclude_below(f.field, f.min)
             gf.exclude_above(f.field, f.max)
+            if f.field == "RHOHV" and f.min <= 0.3:
+                continue
+            else:
+                gf.exclude_below(f.field, f.min)
 
     if cmap_key == "grc_zdr2":
         cmap_key = "grc_zdr"
