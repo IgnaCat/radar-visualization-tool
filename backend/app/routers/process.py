@@ -81,24 +81,24 @@ async def process_file(payload: ProcessRequest):
         for file, timestamp in files_sorted:
             filepath = Path(UPLOAD_DIR) / file
 
-            futures = []
+            future_to_meta = {} # mapear cada future a su metadata (idx, field)
             results: List[LayerResult] = [] # imagenes procesadas de este archivo
             with ThreadPoolExecutor(max_workers=min(8, len(fields))) as ex:
                 for idx, field in enumerate(fields):
-                    
-                    futures.append(
-                        ex.submit(
-                            radar_processor.process_radar_to_cog,
-                            filepath,
-                            product,
-                            field,
-                            height,
-                            elevation,
-                            filters
-                        )
-                    )
 
-                for future in as_completed(futures):
+                    fut = ex.submit(
+                        radar_processor.process_radar_to_cog,
+                        filepath=filepath,
+                        product=product,
+                        field_requested=field,
+                        cappi_height=height,
+                        elevation=elevation,
+                        filters=filters,
+                    )
+                    future_to_meta[fut] = (idx, field)
+
+                for future in as_completed(future_to_meta):
+                    idx, field = future_to_meta[future]
                     try:
                         result_dict = future.result()
                         result_dict["timestamp"] = timestamp
