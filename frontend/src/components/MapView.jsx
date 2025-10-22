@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "./MapPickOverlay";
 
-function COGTile({ tilejsonUrl, opacity }) {
+function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
   const map = useMap();
   const [template, setTemplate] = useState(null);
   const [llb, setLLB] = useState(null);
@@ -104,7 +104,7 @@ function COGTile({ tilejsonUrl, opacity }) {
       updateWhenZooming={true}
       reuseTiles={false}
       keepBuffer={1}
-      zIndex={500}
+      zIndex={zIndex}
       // tile transparente en caso de error puntual
       errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
       eventHandlers={{
@@ -123,9 +123,9 @@ export default function MapView({
   pickedPoint = null,
   onPickPoint,
 }) {
-  console.log("MapView render", { overlayData, opacities });
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
+  const n = overlayData?.length ?? 0;
   return (
     <MapContainer
       center={center}
@@ -143,8 +143,8 @@ export default function MapView({
         <COGTile
           key={`${L.field || "layer"}|${L.tilejson_url}`}
           tilejsonUrl={L.tilejson_url}
-          opacity={opacities[idx]}
-          zIndex={baseZ - idx * 20}
+          opacity={opacities[idx] ?? 1}
+          zIndex={baseZ + (n - 1 - idx) * 10}
         />
       ))}
       <MapPickOverlay
