@@ -50,6 +50,14 @@ function LayerControlList({ title = "Productos de Radar", items, onChange }) {
 
   const toggleEnabled = (idx) => {
     const next = items.slice();
+    const currentEnabledCount = next.filter((l) => l.enabled).length;
+
+    // Si intenta habilitar y ya hay 3 habilitadas no permitir
+    if (!next[idx].enabled && currentEnabledCount >= 3) {
+      alert("Solo se pueden habilitar hasta 3 capas al mismo tiempo.");
+      return;
+    }
+
     next[idx] = { ...next[idx], enabled: !next[idx].enabled };
     onChange(next);
   };
@@ -106,6 +114,9 @@ function LayerControlList({ title = "Productos de Radar", items, onChange }) {
                 <Checkbox
                   checked={!!it.enabled}
                   onChange={() => toggleEnabled(idx)}
+                  disabled={
+                    !it.enabled && items.filter((l) => l.enabled).length >= 3
+                  }
                   inputProps={{ "aria-label": `activar ${it.label}` }}
                 />
 

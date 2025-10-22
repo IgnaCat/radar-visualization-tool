@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { uploadFile, processFile, generatePseudoRHI } from "./api/backend";
 import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
+import stableStringify from "json-stable-stringify";
 import MapView from "./components/MapView";
 import UploadButton from "./components/UploadButton";
 import FloatingMenu from "./components/FloatingMenu";
@@ -10,6 +11,24 @@ import Loader from "./components/Loader";
 import AnimationControls from "./components/AnimationControls";
 import ProductSelectorDialog from "./components/ProductSelectorDialog";
 import PseudoRHIDialog from "./components/PseudoRHIDialog";
+
+function buildComputeKey({
+  files,
+  product,
+  fields,
+  elevation,
+  height,
+  filters,
+}) {
+  return stableStringify({
+    files,
+    product,
+    fields,
+    elevation,
+    height,
+    filters,
+  });
+}
 
 export default function App() {
   const [overlayData, setOverlayData] = useState({
@@ -27,6 +46,7 @@ export default function App() {
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const allCogsRef = useRef(new Set());
   const [showPlayButton, setShowPlayButton] = useState(false); // animacion
+  const [computeKey, setComputeKey] = useState("");
   var currentOverlay = overlayData.outputs?.[currentIndex] || null;
 
   const [alert, setAlert] = useState({
@@ -120,6 +140,20 @@ export default function App() {
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
 
+      const nextKey = buildComputeKey({
+        files: uploadedFiles,
+        product,
+        fields: enabledLayers,
+        elevation,
+        height,
+        filters,
+      });
+
+      // Si solo cambió UI (opacidad/orden), no reproceses:
+      if (nextKey === computeKey) {
+        return;
+      }
+
       const processResp = await processFile({
         files,
         layers: enabledLayers,
@@ -140,10 +174,9 @@ export default function App() {
         });
       }
 
-      console.log("Process response:", processResp.data);
-
       setOverlayData(processResp.data);
       setCurrentIndex(0);
+      setComputeKey(nextKey);
       setShowPlayButton(
         processResp.data?.outputs && processResp.data.outputs.length > 1
       );
