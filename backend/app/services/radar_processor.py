@@ -198,7 +198,10 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     try:
         field_name, field_key = resolve_field(radar, field_requested)
     except KeyError as e:
-        return {"Error": str(e)}
+        raise ValueError(e)
+    
+    if elevation > radar.nsweeps - 1:
+        raise ValueError(f"El ángulo de elevación {elevation} no existe en el archivo.")
     
     # defaults de render por variable
     cmap, vmin, vmax, cmap_key = colormap_for(field_key)

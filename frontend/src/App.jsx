@@ -11,6 +11,7 @@ import Loader from "./components/Loader";
 import AnimationControls from "./components/AnimationControls";
 import ProductSelectorDialog from "./components/ProductSelectorDialog";
 import PseudoRHIDialog from "./components/PseudoRHIDialog";
+import WarningPanel from "./components/WarningPanel";
 
 function buildComputeKey({
   files,
@@ -47,6 +48,7 @@ export default function App() {
   const allCogsRef = useRef(new Set());
   const [showPlayButton, setShowPlayButton] = useState(false); // animacion
   const [computeKey, setComputeKey] = useState("");
+  const [warnings, setWarnings] = useState([]);
   var currentOverlay = overlayData.outputs?.[currentIndex] || null;
 
   const [alert, setAlert] = useState({
@@ -175,6 +177,7 @@ export default function App() {
       }
 
       setOverlayData(processResp.data);
+      setWarnings(processResp.data.warnings || []);
       setCurrentIndex(0);
       setComputeKey(nextKey);
       setShowPlayButton(
@@ -297,6 +300,7 @@ export default function App() {
         severity={alert.severity}
         onClose={() => setAlert({ ...alert, open: false })}
       />
+      <WarningPanel warnings={warnings} />
       <Loader open={loading} />
     </>
   );
