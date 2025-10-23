@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -10,9 +10,24 @@ import {
   MenuItem,
   Typography,
   Divider,
+  Paper,
 } from "@mui/material";
+import Draggable from "react-draggable";
 
 const FIELD_OPTIONS = ["DBZH", "KDP", "RHOHV", "ZDR"];
+
+function PaperComponent(props) {
+  const nodeRef = useRef(null);
+  return (
+    <Draggable
+      nodeRef={nodeRef}
+      handle="#draggable-dialog-title"
+      cancel={'[class*="MuiDialogContent-root"]'}
+    >
+      <Paper {...props} ref={nodeRef} />
+    </Draggable>
+  );
+}
 
 export default function PseudoRHIDialog({
   open,
@@ -83,8 +98,28 @@ export default function PseudoRHIDialog({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} fullWidth maxWidth="md">
-      <DialogTitle>Pseudo-RHI (corte vertical)</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      fullWidth
+      maxWidth="md"
+      hideBackdrop
+      disableEnforceFocus
+      disableAutoFocus
+      disableRestoreFocus
+      disableScrollLock
+      slotProps={{
+        root: { sx: { pointerEvents: "none" } },
+      }}
+      PaperProps={{
+        sx: { pointerEvents: "auto" },
+      }}
+      PaperComponent={PaperComponent}
+      aria-labelledby="draggable-dialog-title"
+    >
+      <DialogTitle id="draggable-dialog-title">
+        Pseudo-RHI (corte vertical)
+      </DialogTitle>
       <DialogContent dividers>
         <Typography variant="body2" gutterBottom>
           Seleccioná un punto destino en el mapa
