@@ -44,10 +44,10 @@ async def process_file(payload: ProcessRequest):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La altura debe estar entre 0 y 12000 metros."
         )
-    if elevation < 0 or elevation > 12:
+    if elevation < 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El ángulo de elevación debe estar entre 0 y 12."
+            detail="El ángulo de elevación debe ser positivo."
         )
 
     # Verificar que se proporcionen filepaths
@@ -70,6 +70,7 @@ async def process_file(payload: ProcessRequest):
 
     files_with_ts = [(f, _timestamp_of(f)) for f in filepaths]
     files_sorted = sorted(files_with_ts, key=lambda x: (x[1] is None, x[1] or 0))
+    warnings: List[str] = []
 
     try:
 
@@ -106,10 +107,11 @@ async def process_file(payload: ProcessRequest):
                         results.append(LayerResult(**result_dict))
                     except Exception as e:
                         print(f"Error procesando {field}: {e}")
+                        warnings.append(f"{filepath.name}: {e}")
 
-            # ordenar capas por order antes de agregar el frame
-            results.sort(key=lambda r: r.order)
             if results:
+                # ordenar capas por order antes de agregar el frame
+                results.sort(key=lambda r: r.order)
                 frames.append(results)
 
         if not frames:
@@ -118,7 +120,12 @@ async def process_file(payload: ProcessRequest):
         # Decidir si animación
         # animate = await run_in_threadpool(helpers.should_animate, [r.dict() for r in frames])
 
-        return ProcessResponse(animation=(len(frames) > 1), outputs=frames, product=product)
+        return ProcessResponse(
+            animation=(len(frames) > 1),
+            outputs=frames,
+            product=product,
+            warnings=warnings
+        )
 
     except HTTPException:
         # Re-emitir las HTTPException tal cual

@@ -50,6 +50,7 @@ class ProcessResponse(BaseModel):
     animation: bool
     outputs: List[List[LayerResult]] # frames x layers
     product: str
+    warnings: Optional[List[str]] = []
 
 class CleanupRequest(BaseModel):
     uploads: list[str] = []
