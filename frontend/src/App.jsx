@@ -20,6 +20,7 @@ function buildComputeKey({
   elevation,
   height,
   filters,
+  selectedVolumes,
 }) {
   return stableStringify({
     files,
@@ -28,6 +29,7 @@ function buildComputeKey({
     elevation,
     height,
     filters,
+    selectedVolumes,
   });
 }
 
@@ -44,6 +46,7 @@ export default function App() {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [fieldsUsed, setFieldsUsed] = useState("DBZH");
   const [filesInfo, setFilesInfo] = useState([]);
+  const [volumes, setVolumes] = useState([]); // lista de volúmenes cargados sin repetidos
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const allCogsRef = useRef(new Set());
   const [showPlayButton, setShowPlayButton] = useState(false); // animacion
@@ -100,6 +103,10 @@ export default function App() {
         });
       }
       setFilesInfo(filesInfo);
+      setVolumes((prev) => {
+        const merged = [...prev, ...uploadResp.data.volumes];
+        return Array.from(new Set(merged));
+      });
       setUploadedFiles((prev) => {
         const merged = [...prev, ...filepaths];
         // elimina duplicados preservando el orden
@@ -135,6 +142,7 @@ export default function App() {
       const height = data.height;
       const elevation = data.elevation;
       const filters = data.filters;
+      const selectedVolumes = data.selectedVolumes;
       const enabledLayers = layers.filter((l) => l.enabled).map((l) => l.label);
       const opacities = layers.filter((l) => l.enabled).map((l) => l.opacity);
 
@@ -149,6 +157,7 @@ export default function App() {
         elevation,
         height,
         filters,
+        selectedVolumes,
       });
 
       // Si solo cambió UI (opacidad/orden), no reproceses:
@@ -163,6 +172,7 @@ export default function App() {
         height,
         elevation,
         filters,
+        selectedVolumes,
       });
       if (
         !processResp.data ||
@@ -272,6 +282,7 @@ export default function App() {
         elevations={Array.from(
           new Set(filesInfo.map((f) => f.metadata.elevations).flat())
         )}
+        volumes={volumes}
         initialLayers={savedLayers}
         onClose={() => setSelectorOpen(false)}
         onConfirm={handleProductChosen}

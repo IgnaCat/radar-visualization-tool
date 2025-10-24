@@ -4,6 +4,7 @@ from werkzeug.utils import secure_filename
 import os
 
 from ..core.config import settings
+from ..utils import helpers
 from ..services.metadata import extract_radar_metadata
 
 router = APIRouter(prefix="/upload", tags=["upload"])
@@ -33,6 +34,7 @@ async def upload(files: list[UploadFile] = File(...)):
 
     warnings: list[str] = []
     saved_files: list[dict] = []
+    volumes: set[int] = set()
 
     try:
         for file in files:
@@ -50,6 +52,9 @@ async def upload(files: list[UploadFile] = File(...)):
             if target.exists():
                 warnings.append(f"El archivo '{file.filename}' ya existe")
                 meta = extract_radar_metadata(str(target))
+                _, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
+                if volume is not None:
+                    volumes.add(volume)
                 saved_files.append({
                     "filepath": str(target),
                     "filename": file.filename,
@@ -86,8 +91,13 @@ async def upload(files: list[UploadFile] = File(...)):
                     pass
                 raise HTTPException(status_code=400, detail=f"'{file.filename}' está vacío.")
 
-            # Extraer metadata (modular)
+            # Extraer radar metadata (modular)
             meta = extract_radar_metadata(str(target))
+
+            # Extraer volumen del nombre de archivo
+            _, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
+            if volume is not None:
+                volumes.add(volume)
 
             saved_files.append({
                 "filepath": str(target),
@@ -96,7 +106,7 @@ async def upload(files: list[UploadFile] = File(...)):
                 "metadata": meta,
             })
 
-        return {"files": saved_files, "warnings": warnings}
+        return {"files": saved_files, "warnings": warnings, "volumes": list(volumes)}
 
     except HTTPException as exc:
         # rollback de los que se alcanzaron a guardar

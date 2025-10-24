@@ -88,6 +88,7 @@ export default function ProductSelectorDialog({
   open,
   fields_present = ["DBZH"],
   elevations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+  volumes = [],
   onClose,
   onConfirm,
   initialProduct = "ppi",
@@ -110,6 +111,7 @@ export default function ProductSelectorDialog({
   const [layers, setLayers] = useState(derivedLayers);
   const [product, setProduct] = useState(initialProduct);
   const [height, setHeight] = useState(initialCappiHeight);
+  const [selectedVolumes, setSelectedVolumes] = useState(volumes);
 
   // Elevación: trabajemos con índices de elevación
   const initialElevationIndex = useMemo(() => {
@@ -130,6 +132,10 @@ export default function ProductSelectorDialog({
   useEffect(() => {
     setElevationIdx(initialElevationIndex);
   }, [initialElevationIndex]);
+
+  useEffect(() => {
+    setSelectedVolumes(volumes);
+  }, [volumes]);
 
   // Variable activa (usamos para los filtros)
   const activeField = (
@@ -186,6 +192,7 @@ export default function ProductSelectorDialog({
       height: isCAPPI ? height : undefined,
       elevation: isPPI ? elevationIdx : undefined,
       filters: filtersOut,
+      selectedVolumes,
     });
     onClose();
   };
@@ -196,6 +203,7 @@ export default function ProductSelectorDialog({
     setHeight(initialCappiHeight);
     setElevationIdx(initialElevationIndex);
     setFilters(structuredClone(initialFilters));
+    setSelectedVolumes(volumes);
     onClose();
   };
 
@@ -232,6 +240,53 @@ export default function ProductSelectorDialog({
             <FormControlLabel value="cappi" control={<Radio />} label="CAPPI" />
           </RadioGroup>
         </FormControl>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Selección de volúmenes */}
+        {Array.isArray(volumes) && volumes.length > 0 && (
+          <Box mt={2} mb={2}>
+            <Typography variant="subtitle1" mb={2} gutterBottom>
+              Seleccionar volúmenes
+            </Typography>
+            <Box display="flex" flexWrap="wrap" gap={1}>
+              {volumes.map((vol, idx) => {
+                const isSelected = selectedVolumes.includes(vol);
+                return (
+                  <Button
+                    key={vol}
+                    variant={isSelected ? "contained" : "outlined"}
+                    onClick={() => {
+                      setSelectedVolumes((prev) =>
+                        prev.includes(vol)
+                          ? prev.filter((v) => v !== vol)
+                          : [...prev, vol]
+                      );
+                    }}
+                    sx={{
+                      borderRadius: 999,
+                      backgroundColor: isSelected ? "#888" : "#eee",
+                      color: isSelected ? "#fff" : "#333",
+                      fontWeight: 500,
+                      textTransform: "none",
+                      boxShadow: isSelected ? 2 : 0,
+                      transition: "all 0.2s",
+                      "&:hover": {
+                        backgroundColor: isSelected ? "#555" : "#ccc",
+                        color: isSelected ? "#fff" : "#111",
+                      },
+                      minWidth: 90,
+                      px: 2,
+                      py: 1,
+                    }}
+                  >
+                    {`Volumen ${vol}`}
+                  </Button>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
 
         <Divider sx={{ my: 2 }} />
 

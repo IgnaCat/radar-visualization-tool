@@ -17,6 +17,7 @@ export const processFile = async ({
   height,
   elevation,
   filters,
+  selectedVolumes,
 }) => {
   const payload = {
     filepaths: files,
@@ -25,6 +26,7 @@ export const processFile = async ({
     ...(height !== undefined && { height: parseInt(height) }),
     ...(elevation !== undefined && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
+    ...(selectedVolumes && { selectedVolumes }),
   };
 
   return api.post("/process", payload);

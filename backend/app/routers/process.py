@@ -16,8 +16,8 @@ router = APIRouter(prefix="/process", tags=["process"])
 
 def _timestamp_of(filepath: str):
     try:
-        md = helpers.extract_metadata_from_filename(filepath)
-        return md.get("timestamp")  # datetime | None
+        _,_,_, timestamp = helpers.extract_metadata_from_filename(filepath)
+        return timestamp  # datetime | None
     except Exception:
         return None
 
@@ -32,6 +32,8 @@ async def process_file(payload: ProcessRequest):
     height: int = payload.height
     elevation: int = payload.elevation
     filters: List[RangeFilter] = payload.filters
+    selected_volumes: List[str] = getattr(payload, "selectedVolumes", None) or []
+    warnings: List[str] = []
 
     # Validar inputs
     if product.upper() not in settings.ALLOWED_PRODUCTS:
@@ -60,6 +62,7 @@ async def process_file(payload: ProcessRequest):
     UPLOAD_DIR = settings.UPLOAD_DIR
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+    # Verificar que los archivos existan
     for file in filepaths:
         filepath = os.path.join(UPLOAD_DIR, file)
         if not Path(filepath).exists():
@@ -67,13 +70,21 @@ async def process_file(payload: ProcessRequest):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Archivo no encontrado: {file}"
             )
-
+        
+    # Filtrar archivos por los volúmenes seleccionados
+    if len(selected_volumes) > 0:
+        def extract_volume_from_filename(filename):
+            _,_,volume,_ = helpers.extract_metadata_from_filename(filename)
+            return str(volume) if volume else None
+        filepaths = [f for f in filepaths if extract_volume_from_filename(f) in selected_volumes]
+    else:
+        print("No se seleccionaron volúmenes, procesando todos los archivos.")
+        warnings.append("No se seleccionaron volúmenes, procesando todo.")
+    
     files_with_ts = [(f, _timestamp_of(f)) for f in filepaths]
     files_sorted = sorted(files_with_ts, key=lambda x: (x[1] is None, x[1] or 0))
-    warnings: List[str] = []
 
     try:
-
         # Limpieza de temporales (en threadpool para no bloquear)
         await run_in_threadpool(helpers.cleanup_tmp)
 
