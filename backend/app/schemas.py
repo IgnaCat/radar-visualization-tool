@@ -12,6 +12,7 @@ class RangeFilter(BaseModel):
 
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
+    selectedVolumes: Optional[List[str]] = Field(default=None, description="Lista de volúmenes seleccionados")
     product: str = Field(..., description="Producto a procesar, ej PPI")
     fields: List[str] = Field(..., min_items=1, description="Campos a procesar")
     height: Optional[int] = Field(

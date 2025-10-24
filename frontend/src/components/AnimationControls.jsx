@@ -127,8 +127,9 @@ export default function AnimationControls({
         color="black"
         zIndex={999}
       >
-        Mostrando: {currentOverlay?.timestamp || `Imagen ${currentIndex + 1}`}{" "}
-        (Frame {currentIndex + 1} de {overlayData.outputs.length})
+        Mostrando:{" "}
+        {currentOverlay?.[0].timestamp || `Imagen ${currentIndex + 1}`} (Frame{" "}
+        {currentIndex + 1} de {overlayData.outputs.length})
       </Box>
     </Box>
   );
