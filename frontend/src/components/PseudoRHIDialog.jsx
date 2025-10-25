@@ -91,7 +91,7 @@ export default function PseudoRHIDialog({
   };
 
   const handleClose = () => {
-    setResultImg(null);
+    // setResultImg(null);
     setError("");
     onClearPickedPoint?.();
     onClose?.();
