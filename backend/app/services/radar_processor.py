@@ -22,44 +22,33 @@ from .radar_common import (
 )
 
 
-def reproject_to_cog(src_path, cog_path, dst_crs="EPSG:3857"):
+def convert_to_cog(src_path, cog_path):
     """
-    Reproyecta un archivo Geotiff a un nuevo CRS y lo guarda como COG (Cloud Optimized GeoTIFF).
+    Convierte un GeoTIFF existente a un COG (Cloud Optimized GeoTIFF).
     """
 
     with rasterio.open(src_path) as src:
-        # Calcular transform, width y height para el nuevo CRS
-        transform, width, height = calculate_default_transform(
-            src.crs, dst_crs, src.width, src.height, *src.bounds
-        )
 
-        # Definir el perfil base
+        # Copiar el perfil original y ajustarlo para COG
         profile = src.profile.copy()
         profile.update(
             driver="COG",
             compress="DEFLATE",
             predictor=2,
             BIGTIFF="IF_NEEDED",
-            crs=dst_crs,
-            transform=transform,
-            width=width,
-            height=height,
-            photometric="RGB"
+            photometric="RGB",
+            tiled=True
         )
         profile["band_descriptions"] = ["Red", "Green", "Blue", "Alpha"]
 
-        # Crear el archivo COG directamente
+        # Crear el archivo COG
         with rasterio.open(cog_path, "w+", **profile) as dst:
+            # Copiar bandas directamente sin reproyección
             for i in range(1, src.count + 1):
-                reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.nearest
-                )
+                data = src.read(i)
+                dst.write(data, i)
+            
+            # Definir interpretaciones de color
             dst.colorinterp = (
                 ColorInterp.red,
                 ColorInterp.green,
@@ -67,7 +56,7 @@ def reproject_to_cog(src_path, cog_path, dst_crs="EPSG:3857"):
                 ColorInterp.alpha
             )
 
-            # Generar overviews dentro del COG
+            # Generar pirámides de overviews para navegación rápida
             factors = [2, 4, 8, 16]
             dst.build_overviews(factors, Resampling.nearest)
             dst.update_tags(ns="rio_overview", resampling="nearest")
@@ -237,18 +226,18 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     gf = build_gatefilter(radar_to_use, field_to_use, filters)
 
     # Generamos la imagen PNG para previsualización y referencia
-    png.create_png(
-        radar_to_use, 
-        product, 
-        output_dir, 
-        field_to_use, 
-        filters=filters, 
-        elevation=elevation, 
-        height=cappi_height, 
-        vmin=vmin, 
-        vmax=vmax, 
-        cmap_key=cmap_key
-    )
+    # png.create_png(
+    #     radar_to_use, 
+    #     product, 
+    #     output_dir, 
+    #     field_to_use, 
+    #     filters=filters, 
+    #     elevation=elevation, 
+    #     height=cappi_height, 
+    #     vmin=vmin, 
+    #     vmax=vmax, 
+    #     cmap_key=cmap_key
+    # )
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
@@ -314,11 +303,12 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
         rgb=True,
         cmap=cmap,
         vmin=vmin,
-        vmax=vmax
+        vmax=vmax,
+        warp_to_mercator=True
     )
 
-    # Convertir a COG y reproyectar a EPSG:3857
-    _ = reproject_to_cog(tiff_path, cog_path, dst_crs="EPSG:3857")
+    # Convertir a COG
+    _ = convert_to_cog(tiff_path, cog_path)
 
      # Limpiar el GeoTIFF temporal (queda SOLO el COG)
     try:
