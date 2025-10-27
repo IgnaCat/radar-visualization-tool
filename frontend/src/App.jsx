@@ -48,6 +48,7 @@ export default function App() {
   const [filesInfo, setFilesInfo] = useState([]);
   const [volumes, setVolumes] = useState([]); // lista de volúmenes cargados sin repetidos
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
+  const [filtersUsed, setFiltersUsed] = useState([]); // filtros aplicados
   const allCogsRef = useRef(new Set());
   const [showPlayButton, setShowPlayButton] = useState(false); // animacion
   const [computeKey, setComputeKey] = useState("");
@@ -149,6 +150,7 @@ export default function App() {
       setOpacity(opacities);
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
+      setFiltersUsed(filters);
 
       const nextKey = buildComputeKey({
         files: uploadedFiles,
@@ -234,13 +236,13 @@ export default function App() {
     end_lon,
     // max_length_km,
     // elevation,
-    // filters,
   }) => {
     const resp = await generatePseudoRHI({
       filepath,
       field,
       end_lat,
       end_lon,
+      filters: filtersUsed,
     });
     // devolvemos lo que el dialog espera
     return resp.data;
