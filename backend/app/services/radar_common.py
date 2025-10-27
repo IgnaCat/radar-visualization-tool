@@ -1,18 +1,20 @@
 from __future__ import annotations
 from typing import Iterable, Optional, Tuple
+from dataclasses import dataclass, asdict
 
 import numpy as np
 import pyart
-from pyproj import Geod
 import hashlib
+import json
+from pyproj import Geod
 
 from ..utils import colores
-from ..core.constants import FIELD_ALIASES, FIELD_RENDER
+from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS
 from ..schemas import RangeFilter
 
 
 # ------------------------------
-# Hash de archivo
+# Hashes utilitarios
 # ------------------------------
 
 def md5_file(path, chunk=1024*1024):
@@ -24,6 +26,11 @@ def md5_file(path, chunk=1024*1024):
         for b in iter(lambda: f.read(chunk), b""):
             h.update(b)
     return h.hexdigest()
+
+def stable_hash(obj):
+    """Hash estable de un objeto JSON-serializable."""
+    s = json.dumps(obj, sort_keys=True, default=str)
+    return hashlib.sha1(s.encode("utf-8")).hexdigest()
 
 
 # ------------------------------
@@ -96,7 +103,8 @@ def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3) -> float:
 def build_gatefilter(
     radar: pyart.core.Radar,
     field: Optional[str],
-    filters: Optional[Iterable[RangeFilter]] = []
+    filters: Optional[Iterable[RangeFilter]] = [],
+    is_rhi: Optional[bool] = False
 ) -> pyart.filters.GateFilter:
     """
     Construye un GateFilter consistente:
@@ -117,17 +125,85 @@ def build_gatefilter(
         except Exception:
             pass
 
-    for f in filters:
-        fld = f.field
-        if fld in radar.fields:
-            if f.min is not None:
-                    if fld == "RHOHV" and f.min <= 0.3:
+    for f in (filters or []):
+        fld = getattr(f, "field", None)
+        if not fld:
+            continue
+        # solo aplicamos por ahora si es RHOHV (QC) si es otro campo se hace post-grid el filtro
+        # si es RHI, los aplicamos todos (porque no hay grilla ni cacheo)
+        if fld in radar.fields and (fld in AFFECTS_INTERP_FIELDS or (is_rhi and fld == field)):
+            fmin = getattr(f, "min", None)
+            fmax = getattr(f, "max", None)
+            if fmin is not None:
+                    if fmin <= 0.3:
                         continue
                     else:
-                        gf.exclude_below(fld, float(f.min))
-            if f.max is not None:
-                gf.exclude_above(fld, float(f.max))
+                        gf.exclude_below(fld, float(fmin))
+            if fmax is not None:
+                gf.exclude_above(fld, float(fmax))
     return gf
+
+
+# ------------------------------
+# Grilla 2D cacheada
+# ------------------------------
+
+def nbytes(arr):
+    if isinstance(arr, np.ma.MaskedArray):
+        base = arr.data.nbytes
+        mask = 0 if arr.mask is np.ma.nomask else np.asarray(arr.mask, dtype=np.bool_).nbytes
+        return base + mask
+    return arr.nbytes
+
+def filters_affect_interpolation(filters, field_to_use):
+    """
+    Regla: regridear si hay filtros sobre campos QC (RHOHV/NCP/SNR)
+    o sobre un campo distinto al visualizado (porque cambia qué gates aportan).
+    """
+    ft = field_to_use.upper()
+    for f in (filters or []):
+        ffield = getattr(f, "field", None)
+        if not ffield:
+            continue
+        up = str(ffield).upper()
+        if up in AFFECTS_INTERP_FIELDS:
+            return True
+        if up != ft:
+            # Cualquier filtro sobre OTRA variable (e.g., filtrar por RHOHV mientras muestro DBZH)
+            return True
+    return False
+
+def qc_signature(filters):
+    """
+    Solo los filtros que afectan interpolación entran a la firma QC (para cache).
+    QC(Quality Control): filtros que sí cambian qué datos se usan para construir la grilla
+    """
+    sig = []
+    for f in (filters or []):
+        ffield = getattr(f, "field", None)
+        if not ffield:
+            continue
+        up = str(ffield).upper()
+        if up in AFFECTS_INTERP_FIELDS:
+            sig.append((up, getattr(f, "min", None), getattr(f, "max", None)))
+        # también contamos filtros sobre otras variables (distintas al campo visualizado)
+        # la distinción campo mostrado la hacemos arriba; acá metemos todo “potencialmente QC”
+        elif up not in AFFECTS_INTERP_FIELDS:
+            # los no-QC no suman aquí; si querés ser más estricto, podés incluirlos
+            pass
+    return tuple(sig)
+
+def grid2d_cache_key(*, file_hash, product_upper, field_to_use, elevation, cappi_height,
+                      grid_shape, grid_limits, interp, qc_sig):
+    return (
+        file_hash, product_upper, field_to_use,
+        float(elevation) if elevation is not None else None,
+        int(cappi_height) if cappi_height is not None else None,
+        tuple(grid_shape),
+        tuple((tuple(x) for x in grid_limits)),
+        str(interp),
+        qc_sig  # firma de QC: si cambia, es otra entrada
+    )
 
 
 # ------------------------------

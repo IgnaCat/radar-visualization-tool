@@ -12,14 +12,23 @@ from pathlib import Path
 import rasterio
 from rasterio.shutil import copy
 from rasterio.enums import ColorInterp
-from rasterio.warp import calculate_default_transform, reproject, Resampling
+from rasterio.warp import Resampling
 from urllib.parse import quote
 from ..core.config import settings
-from ..core.constants import FIELD_ALIASES, FIELD_RENDER
+from cachetools import LRUCache
 
 from .radar_common import (
-    md5_file, resolve_field, build_gatefilter, colormap_for
+    md5_file, 
+    resolve_field, 
+    build_gatefilter, 
+    colormap_for, 
+    nbytes, 
+    filters_affect_interpolation, 
+    qc_signature, 
+    grid2d_cache_key
 )
+
+GRID2D_CACHE = LRUCache(maxsize=200 * 1024 * 1024, getsizeof=nbytes)
 
 
 def convert_to_cog(src_path, cog_path):
@@ -222,22 +231,19 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     else:
         raise ValueError(f"Producto inválido: {product_upper}")
 
-    # Aplicar filtros si se proporcionan
-    gf = build_gatefilter(radar_to_use, field_to_use, filters)
-
     # Generamos la imagen PNG para previsualización y referencia
-    # png.create_png(
-    #     radar_to_use, 
-    #     product, 
-    #     output_dir, 
-    #     field_to_use, 
-    #     filters=filters, 
-    #     elevation=elevation, 
-    #     height=cappi_height, 
-    #     vmin=vmin, 
-    #     vmax=vmax, 
-    #     cmap_key=cmap_key
-    # )
+    png.create_png(
+        radar_to_use, 
+        product, 
+        output_dir, 
+        field_to_use, 
+        filters=filters, 
+        elevation=elevation, 
+        height=cappi_height, 
+        vmin=vmin, 
+        vmax=vmax, 
+        cmap_key=cmap_key
+    )
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
@@ -264,39 +270,103 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 
+    grid_shape = (z_points, y_points, x_points)
+    grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
+    interp = 'nearest'
 
-    # Esta proyeccion en el grid no funciona, lo deja en Azimutal Equidistance
-    # projection = ccrs.Mercator()
-    # merc = pyproj.CRS.from_epsg(3857)
+    # Verificamos si los filtros afectan la interpolación (y por ende la grilla)
+    # Basicamente, si hay filtros sobre campos QC (RHOHV/NCP/SNR) aplicamos GateFilter
+    needs_regrid = filters_affect_interpolation(filters, field_to_use)
+    qc_sig = qc_signature(filters)
 
-    grid = pyart.map.grid_from_radars(
-        radar_to_use,
-        grid_shape=(z_points, y_points, x_points),
-        grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
-        # projection=merc,
-        weighting_function='nearest',
-        gatefilters=gf
+    # Intentamos cachear la 2D colapsada post-grid
+    cache_key = grid2d_cache_key(
+        file_hash=file_hash,
+        product_upper=product_upper,
+        field_to_use=field_to_use,
+        elevation=elevation if product_upper == "PPI" else None,
+        cappi_height=cappi_height if product_upper == "CAPPI" else None,
+        grid_shape=grid_shape,
+        grid_limits=grid_limits,
+        interp=interp,
+        qc_sig=qc_sig if needs_regrid else tuple(),  # si no afecta, usamos firma vacía
     )
-    grid.to_xarray()
 
-    # Pasamos de grilla 3D a 2D
-    collapse_grid_to_2d(
-        grid,
-        field=field_to_use,
-        product=product.lower(),
-        elevation_deg=elev_deg,
-        target_height_m=cappi_height,
-        vmin=vmin
-    )
+    arr2d_cached = GRID2D_CACHE.get(cache_key)
+
+    if arr2d_cached is None:
+        # Aplicar filtros no visuales (ej., sobre RHOHV)
+        gf = build_gatefilter(radar_to_use, field_to_use, filters) if needs_regrid else None
+
+        grid = pyart.map.grid_from_radars(
+            radar_to_use,
+            grid_shape=(z_points, y_points, x_points),
+            grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
+            weighting_function='nearest',
+            gatefilters=gf
+        )
+        grid.to_xarray()
+
+        # Pasamos de grilla 3D a 2D
+        collapse_grid_to_2d(
+            grid,
+            field=field_to_use,
+            product=product.lower(),
+            elevation_deg=elev_deg,
+            target_height_m=cappi_height,
+            vmin=vmin
+        )
+
+        # Tomamos el 2D colapsado y lo cacheamos
+        arr2d = grid.fields[field_to_use]['data'][0, :, :]
+        # Garantizamos float32/máscara
+        arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
+        GRID2D_CACHE[cache_key] = arr2d
+        arr2d_cached = arr2d
+
+    # --- Si hay filtros “visuales” sobre el MISMO campo, aplicar máscara post-grid ---
+    # Regla: cualquier filtro cuyo .field == field_to_use (mismo campo) lo aplicamos como máscara 2D
+    masked = np.ma.array(arr2d_cached, copy=True)
+    dyn_mask = np.zeros(masked.shape, dtype=bool)
+
+    for f in (filters or []):
+        ffield = getattr(f, "field", None)
+        if not ffield:
+            continue
+        if str(ffield).upper() == str(field_to_use).upper():
+            fmin = getattr(f, "min", None)
+            fmax = getattr(f, "max", None)
+            if fmin is not None:
+                dyn_mask |= (masked < float(fmin))
+            if fmax is not None:
+                dyn_mask |= (masked > float(fmax))
+
+    masked.mask = np.ma.getmaskarray(masked) | dyn_mask
 
     # Crear path único para el GeoTIFF temporal (antes de convertir a Cloud Optimized GeoTIFF)
     os.makedirs(output_dir, exist_ok=True)
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
     tiff_path = Path(output_dir) / unique_tif_name
 
+    # Creamos un grid de "bolsillo” (sin reinterpolar)
+    # Reusamos la malla x/y de la cache: como no guardamos grid completo, derivamos dims del array
+    ny, nx = masked.shape
+    # Armamos un grid pyart mínimo para write_grid_geotiff, escribiendo el 2D como nivel 0
+    grid_fake = pyart.core.Grid(
+        time={'data': np.array([0])},
+        fields={field_to_use: {'data': masked[np.newaxis, :, :], '_FillValue': -9999.0}},
+        metadata={'instrument_name': 'RADAR'},
+        origin_latitude={'data': radar_to_use.latitude['data']},
+        origin_longitude={'data': radar_to_use.longitude['data']},
+        origin_altitude={'data': radar_to_use.altitude['data']},
+        x={'data': np.linspace(x_grid_limits[0], x_grid_limits[1], nx).astype(np.float32)},
+        y={'data': np.linspace(y_grid_limits[0], y_grid_limits[1], ny).astype(np.float32)},
+        z={'data': np.array([0.0], dtype=np.float32)}
+    )
+
     # Exportar a GeoTIFF
     pyart.io.write_grid_geotiff(
-        grid=grid,
+        grid=grid_fake,
         filename=str(tiff_path),
         field=field_to_use,
         level=0,
