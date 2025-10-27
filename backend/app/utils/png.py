@@ -8,6 +8,10 @@ import cartopy.crs as ccrs
 import uuid
 import numpy as np
 from . import colores
+from ..services.radar_common import (
+    build_gatefilter
+)
+
 
 
 def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, height=None, vmin=-30, vmax=70, cmap_key="grc_th"):
@@ -28,15 +32,7 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
     display = pyart.graph.RadarMapDisplay(radar)
 
     # Aplicar filtros si se proporcionan
-    gf = pyart.filters.GateFilter(radar)
-    gf.exclude_transition()
-    for f in filters:
-        if f.field in radar.fields:
-            gf.exclude_above(f.field, f.max)
-            if f.field == "RHOHV" and f.min <= 0.3:
-                continue
-            else:
-                gf.exclude_below(f.field, f.min)
+    gf = build_gatefilter(radar, field_used, filters) if filters else None
 
     if cmap_key == "grc_zdr2":
         cmap_key = "grc_zdr"

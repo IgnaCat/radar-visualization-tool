@@ -19,7 +19,6 @@ from .radar_common import (
     safe_range_max_m, get_radar_site, md5_file, limit_line_to_range
 )
 
-
 def calcule_radial_angle(radar_lat, radar_lon, punto_lat, punto_lon):
     """
     Calcula el ángulo en grados desde la latitud y longitud del radar hasta el punto de interés.
@@ -152,7 +151,7 @@ def variable_radar_cross_section(lat, lon, radar_lat, radar_lon, volumen_radar_d
     ax2 = plt.subplot(1, 1, 1)
 
     # Graficar la variable especificada
-    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True)
+    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True, gatefilter=gf)
     display.set_limits(xlim=[0, range_max], ylim=[-0.5, 30])
 
     # Grafico el perfil de elevación del terreno
@@ -223,7 +222,7 @@ def generate_pseudo_rhi_png(
         raise HTTPException(status_code=400, detail=f"El punto está fuera del alcance ({range_max_km:.1f} km).")
 
     # Filtros (se aplican por GateFilter para enmascarar fuera de rango)
-    gf = build_gatefilter(radar, field_name, filters)
+    gf = build_gatefilter(radar, field_name, filters, is_rhi=True)
 
     # Colormap + vmin/vmax
     cmap, vmin, vmax, _ = colormap_for(field)
