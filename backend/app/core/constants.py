@@ -33,3 +33,5 @@ VARIABLE_UNITS = {
     'RHOHV': '',
     'PHIDP': 'deg'
 }
+
+AFFECTS_INTERP_FIELDS = {"RHOHV"}
