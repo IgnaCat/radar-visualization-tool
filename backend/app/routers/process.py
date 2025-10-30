@@ -57,8 +57,8 @@ async def process_file(payload: ProcessRequest):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Debe proporcionar una lista de 'filepaths'"
-        )
-    
+        )   
+        
     UPLOAD_DIR = settings.UPLOAD_DIR
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -76,14 +76,24 @@ async def process_file(payload: ProcessRequest):
         def extract_volume_from_filename(filename):
             _,_,volume,_ = helpers.extract_metadata_from_filename(filename)
             return str(volume) if volume else None
-        filepaths = [f for f in filepaths if extract_volume_from_filename(f) in selected_volumes]
+        filtered_filepaths = []
+        for f in filepaths:
+            vol = extract_volume_from_filename(f)
+            filename = Path(f).name
+            if vol == '03' and product.upper() == 'PPI':
+                warnings.append(f"{filename}: El volumen '03' no es válido para el producto PPI.")
+                continue
+            if vol in selected_volumes:
+                filtered_filepaths.append(f)
+            else:
+                warnings.append(f"{filename}: Volumen '{vol}' no seleccionado, se omite.")
     else:
         print("No se seleccionaron volúmenes, procesando todos los archivos.")
         warnings.append("No se seleccionaron volúmenes, procesando todo.")
-    
+
+    filepaths = filtered_filepaths
     files_with_ts = [(f, _timestamp_of(f)) for f in filepaths]
     files_sorted = sorted(files_with_ts, key=lambda x: (x[1] is None, x[1] or 0))
-
     try:
         # Limpieza de temporales (en threadpool para no bloquear)
         await run_in_threadpool(helpers.cleanup_tmp)
@@ -106,6 +116,7 @@ async def process_file(payload: ProcessRequest):
                         cappi_height=height,
                         elevation=elevation,
                         filters=filters,
+                        volume=extract_volume_from_filename(filepath.name)
                     )
                     future_to_meta[fut] = (idx, field)
 
@@ -126,8 +137,8 @@ async def process_file(payload: ProcessRequest):
                 frames.append(results)
 
         if not frames:
-            raise HTTPException(status_code=500, detail="No se generó ninguna capa")
-
+            warnings.append("No se generaron imágenes de salida.")
+            
         # Decidir si animación
         # animate = await run_in_threadpool(helpers.should_animate, [r.dict() for r in frames])
 
