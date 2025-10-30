@@ -9,7 +9,9 @@ from fastapi import HTTPException
 from pathlib import Path
 from typing import List
 from geopy.distance import geodesic
+from rasterio.vrt import WarpedVRT
 from scipy.interpolate import RegularGridInterpolator
+from rasterio.enums import Resampling
 from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
 
@@ -67,66 +69,58 @@ def variable_radar_cross_section(lat, lon, radar_lat, radar_lon, volumen_radar_d
     - variable: Variable a graficar (por defecto 'DBZH').
     """
     ######################################################################
-    tif_path = Path("app/storage/data/DEM_Cba_100_LL.tif")
-    with rasterio.open(tif_path) as src:
-        elevacion = src.read(1, masked=True)  # Leo el primer haz con máscara para los valores nodata.
-                                        #Es una matriz NumPy que contiene los datos de elevación leídos de la banda del raster.
-        # Reemplazo los valores "nodata" por NaN si es necesario
-        elevacion_filled = elevacion.filled(np.nan)
-    ######################################################################
-    # Del archivo raster cargado anteriormente se obtiene la elevación de forma geográfica
-    transform = src.transform #Obtiene la transformación affine del raster, que es una matriz que convierte las coordenadas de la imagen
-                                            #(pixeles) a coordenadas espaciales (geográficas).
-    extent = [src.bounds.left, src.bounds.right, src.bounds.bottom, src.bounds.top] #Obtiene los límites espaciales del raster,
-                                                      #que son las coordenadas del borde del raster en el sistema de coordenadas del raster.
-    ######################################################################
+    tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
 
-    # Calculo el ángulo radial
     radial_angle = calcule_radial_angle(radar_lat, radar_lon, lat, lon)
 
-    # Obtengo el perfil de elevación del terreno y las distancias desde el radar
-    num_points = 10000
-    elev_x = np.linspace(transform[0] * 0 + transform[2], transform[0] * elevacion.shape[1] + transform[2], elevacion.shape[1])
-    elev_y = np.linspace(transform[4] * 0 + transform[5], transform[4] * elevacion.shape[0] + transform[5], elevacion.shape[0])
-    interpolator = RegularGridInterpolator((elev_y, elev_x), elevacion, bounds_error=False, fill_value=None)
+    # Distancia máxima según el radar (en km)
+    radar_range_km = round(volumen_radar_data.ngates * volumen_radar_data.range['meters_between_gates'] / 1000)
 
-    # Destino calculado en base al rango del radar
-    radar_range=round(volumen_radar_data.ngates*volumen_radar_data.range['meters_between_gates']/1000)
-    destination = geodesic(kilometers=radar_range).destination((radar_lat, radar_lon), radial_angle)
-    lat_final = destination.latitude
-    lon_final = destination.longitude
+    # Defino densidad de muestreo sobre la línea (cada N metros)
+    # Podés ajustar este step si querés más/menos detalle
+    step_m = 150.0
+    num_points = int((radar_range_km * 1000) // step_m) + 1
+    # Genero los puntos geodésicos desde el radar hacia el bearing
+    lat_points = np.empty(num_points, dtype=np.float64)
+    lon_points = np.empty(num_points, dtype=np.float64)
+    for i in range(num_points):
+        d_km = (i * step_m) / 1000.0
+        p = geodesic(kilometers=d_km).destination((radar_lat, radar_lon), radial_angle)
+        lat_points[i], lon_points[i] = p.latitude, p.longitude
 
-    # Puntos de latitud y longitud
-    lat_points = np.linspace(radar_lat, lat_final, num_points)
-    lon_points = np.linspace(radar_lon, lon_final, num_points)
-
-    points = np.vstack([lat_points, lon_points]).T
-    perfil_elevacion = interpolator(points)
+    # Muestreo del DEM (Digital Elevation Model) solo en esos puntos y en float32 con NaN
+    with rasterio.open(tif_path) as src:
+        # WarpedVRT reprojecta/ajusta al CRS del raster y lee solo ventanas necesarias
+        with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
+            coords = list(zip(lon_points, lat_points))  # (x=lon, y=lat)
+            # sample devuelve un generador de arrays; lo convertimos y casteamos a float32
+            perfil_elevacion = np.fromiter((v[0] for v in vrt.sample(coords)),
+                                           dtype=np.float32, count=len(coords))
+            # Manejo de nodata -> NaN
+            nodata = vrt.nodata
+            if nodata is not None:
+                mask = perfil_elevacion == nodata
+                if mask.any():
+                    perfil_elevacion[mask] = np.nan
 
     # Detectar último índice válido
+    last_valid_index = len(perfil_elevacion) - 1
     valid_indices = np.where(~np.isnan(perfil_elevacion))[0]
-    last_valid_index = num_points - 1  # Inicialmente, el último índice es el último punto calculado
-
     if valid_indices.size > 0:
-        last_valid_index = valid_indices[-1]  # Último índice válido
-
-        # Comprobar cambios abruptos en la elevación (ej. si baja más de 500m)
+        last_valid_index = valid_indices[-1]
         for i in range(1, last_valid_index + 1):
             if perfil_elevacion[i] < perfil_elevacion[i - 1] - 500:
-                last_valid_index = i - 1  # Cortar antes de este índice
+                last_valid_index = i - 1
                 break
-
-        # Cortar los arrays a los valores válidos
         perfil_elevacion = perfil_elevacion[:last_valid_index + 1]
         lat_points = lat_points[:last_valid_index + 1]
         lon_points = lon_points[:last_valid_index + 1]
 
-    # Restar offset para alinear con la salida del radar y convertir a kilómetros
+    # Restar offset y pasar a km
     offset = 439.0423493233697
-    perfil_elevacion -= offset
-    perfil_elevacion_km = perfil_elevacion / 1000.0
+    perfil_elevacion_km = (perfil_elevacion - offset) / 1000.0
 
-    # Calculamos las distancias al radar
+    # Distancias al radar para eje X del perfil
     distances = [geodesic((radar_lat, radar_lon), (lat_points[i], lon_points[i])).km for i in range(len(lat_points))]
 
     # Empezamos con la parte del pseudo corte
@@ -160,11 +154,13 @@ def variable_radar_cross_section(lat, lon, radar_lat, radar_lon, volumen_radar_d
     # Marcar el punto de interés con un asterisco
     distancia_interes = geodesic((radar_lat, radar_lon), (lat, lon)).km
 
-    # Asegurarse de que la interpolación reciba una lista bidimensional
-    elevacion_interes = interpolator([[lat, lon]])
-    if elevacion_interes.size > 0 and not np.isnan(elevacion_interes[0]):
-        # Aplicar el mismo offset y convertir a kilómetros
-        elevacion_interes_value = (elevacion_interes[0] - offset) / 1000.0
+    # Interpolar la elevación del punto interés directamente del DEM
+    with rasterio.open(tif_path) as src:
+        with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
+            val = next(vrt.sample([(lon, lat)]))[0]
+            elevacion_interes = np.float32(np.nan if (vrt.nodata is not None and val == vrt.nodata) else val)
+    if np.isfinite(elevacion_interes):
+        elevacion_interes_value = (elevacion_interes - offset) / 1000.0
         ax2.plot(distancia_interes, elevacion_interes_value, 'r*', markersize=15, label='Punto de interés')
     else:
         elevacion_interes_value = None
