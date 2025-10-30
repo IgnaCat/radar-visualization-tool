@@ -160,7 +160,16 @@ def collapse_grid_to_2d(grid, field, product, *,
     grid.z['data'] = np.array([0.0], dtype=float)
 
 
-def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_height=4000, elevation=0, filters=[], output_dir="app/storage/tmp"):
+def process_radar_to_cog(
+        filepath, 
+        product="PPI", 
+        field_requested="DBZH", 
+        cappi_height=4000, 
+        elevation=0, 
+        filters=[], 
+        output_dir="app/storage/tmp",
+        volume=None
+    ):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
@@ -229,18 +238,18 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
         raise ValueError(f"Producto inválido: {product_upper}")
 
     # Generamos la imagen PNG para previsualización y referencia
-    png.create_png(
-        radar_to_use, 
-        product, 
-        output_dir, 
-        field_to_use, 
-        filters=filters, 
-        elevation=elevation, 
-        height=cappi_height, 
-        vmin=vmin, 
-        vmax=vmax, 
-        cmap_key=cmap_key
-    )
+    # png.create_png(
+    #     radar_to_use, 
+    #     product, 
+    #     output_dir, 
+    #     field_to_use, 
+    #     filters=filters, 
+    #     elevation=elevation, 
+    #     height=cappi_height, 
+    #     vmin=vmin, 
+    #     vmax=vmax, 
+    #     cmap_key=cmap_key
+    # )
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
@@ -261,7 +270,7 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
     x_grid_limits = (-range_max_m, range_max_m)
 
     # Calculamos la cantidad de puntos en cada dimensión
-    grid_resolution = 1000
+    grid_resolution = 300 if volume == '03' else 1000
     z_points = int(np.ceil(z_grid_limits[1] / grid_resolution)) + 1
     z_points = max(z_points, 2)
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
