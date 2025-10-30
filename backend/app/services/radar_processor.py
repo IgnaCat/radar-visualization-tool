@@ -3,9 +3,6 @@ import os
 import pyart
 import uuid
 import numpy as np
-import cartopy.crs as ccrs
-import pyproj
-from ..utils import colores
 from ..utils import cappi as cappi_utils
 from ..utils import png
 from pathlib import Path
@@ -298,12 +295,25 @@ def process_radar_to_cog(filepath, product="PPI", field_requested="DBZH", cappi_
         # Aplicar filtros no visuales (ej., sobre RHOHV)
         gf = build_gatefilter(radar_to_use, field_to_use, filters) if needs_regrid else None
 
+        grid_origin = (
+            float(radar_to_use.latitude['data'][0]),
+            float(radar_to_use.longitude['data'][0]),
+        )
+
+        min_radius = max(800.0, 1.2 * grid_resolution)
+        xy_factor = 0.02
+
         grid = pyart.map.grid_from_radars(
             radar_to_use,
             grid_shape=(z_points, y_points, x_points),
             grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
+            grid_origin=grid_origin,
             weighting_function='nearest',
-            gatefilters=gf
+            gatefilters=gf,
+            roi_func="dist",
+            z_factor=0.0,
+            xy_factor=xy_factor,
+            min_radius=min_radius,
         )
         grid.to_xarray()
 
