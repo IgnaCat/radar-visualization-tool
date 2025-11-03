@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "./MapPickOverlay";
+import AreaDrawOverlay from "./AreaDrawOverlay";
 
 function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
   const map = useMap();
@@ -122,6 +123,8 @@ export default function MapView({
   radarSite = null,
   pickedPoint = null,
   onPickPoint,
+  drawAreaMode = false,
+  onAreaComplete,
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -152,6 +155,11 @@ export default function MapView({
         radarSite={radarSite}
         pickedPoint={pickedPoint}
         onPick={onPickPoint}
+      />
+      <AreaDrawOverlay
+        enabled={drawAreaMode}
+        onComplete={onAreaComplete}
+        modes={{ polygon: true, rectangle: true }}
       />
     </MapContainer>
   );

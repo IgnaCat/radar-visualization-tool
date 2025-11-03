@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { uploadFile, processFile, generatePseudoRHI } from "./api/backend";
+import {
+  uploadFile,
+  processFile,
+  generatePseudoRHI,
+  generateAreaStats,
+} from "./api/backend";
 import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
 import MapView from "./components/MapView";
@@ -12,6 +17,7 @@ import AnimationControls from "./components/AnimationControls";
 import ProductSelectorDialog from "./components/ProductSelectorDialog";
 import PseudoRHIDialog from "./components/PseudoRHIDialog";
 import WarningPanel from "./components/WarningPanel";
+import AreaStatsDialog from "./components/AreaStatsDialog";
 
 function buildComputeKey({
   files,
@@ -49,6 +55,8 @@ export default function App() {
   const [volumes, setVolumes] = useState([]); // lista de volúmenes cargados sin repetidos
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const [filtersUsed, setFiltersUsed] = useState([]); // filtros aplicados
+  const [activeElevation, setActiveElevation] = useState(null);
+  const [activeHeight, setActiveHeight] = useState(null);
   const allCogsRef = useRef(new Set());
   const [showPlayButton, setShowPlayButton] = useState(false); // animacion
   const [computeKey, setComputeKey] = useState("");
@@ -64,6 +72,10 @@ export default function App() {
   const [rhiOpen, setRhiOpen] = useState(false);
   const [pickPointMode, setPickPointMode] = useState(false);
   const [pickedPoint, setPickedPoint] = useState(null); // { lat, lon } seleccionado
+  const [areaDrawMode, setAreaDrawMode] = useState(false);
+  const [areaPolygon, setAreaPolygon] = useState(null);
+  const [areaStatsOpen, setAreaStatsOpen] = useState(false);
+  const drawnLayerRef = useRef(null); // referencia a la capa dibujada
   var radarSite = overlayData?.metadata?.site || null;
 
   // Registrar cleanup en cierre de pestaña/ventana
@@ -151,6 +163,8 @@ export default function App() {
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
       setFiltersUsed(filters);
+      if (elevation) setActiveElevation(elevation);
+      if (height) setActiveHeight(height);
 
       const nextKey = buildComputeKey({
         files: uploadedFiles,
@@ -234,6 +248,7 @@ export default function App() {
     field,
     end_lat,
     end_lon,
+    filters,
     // max_length_km,
     // elevation,
   }) => {
@@ -242,10 +257,37 @@ export default function App() {
       field,
       end_lat,
       end_lon,
-      filters: filtersUsed,
+      filters,
     });
     // devolvemos lo que el dialog espera
     return resp.data;
+  };
+
+  const handleOpenAreaStatsMode = () => {
+    setAreaPolygon(null);
+    setAreaDrawMode(true);
+  };
+
+  const handleAreaComplete = (gj, layer) => {
+    drawnLayerRef.current = layer;
+    setAreaDrawMode(false);
+    setAreaPolygon(gj);
+    setAreaStatsOpen(true);
+  };
+
+  const handleCloseAreaStats = () => {
+    // al cerrar el diálogo, removemos la capa del mapa
+    try {
+      drawnLayerRef.current?.remove();
+    } catch {}
+    drawnLayerRef.current = null;
+    setAreaStatsOpen(false);
+  };
+
+  const handleAreaStatsRequest = async (payload) => {
+    // backend espera: filepath, field, product, elevation?, height?, filters?, polygon
+    const r = await generateAreaStats(payload);
+    return r.data;
   };
 
   return (
@@ -257,12 +299,15 @@ export default function App() {
         radarSite={radarSite}
         pickedPoint={pickedPoint}
         onPickPoint={handlePickPoint}
+        drawAreaMode={areaDrawMode}
+        onAreaComplete={handleAreaComplete}
       />
       <ColorLegend fields={fieldsUsed} />
       <FloatingMenu
         onUploadClick={handleFileUpload}
         onChangeProductClick={() => setSelectorOpen(true)}
         onPseudoRhiClick={handleOpenRHI}
+        onAreaStatsClick={handleOpenAreaStatsMode}
       />
       <UploadButton onFilesSelected={handleFilesSelected} />
 
@@ -305,6 +350,22 @@ export default function App() {
         pickedPoint={pickedPoint}
         onClearPickedPoint={handleClearPickedPoint}
         onGenerate={handleGenerateRHI}
+      />
+
+      <AreaStatsDialog
+        open={areaStatsOpen}
+        onClose={handleCloseAreaStats}
+        requestFn={handleAreaStatsRequest}
+        payload={{
+          filepath: uploadedFiles[currentIndex],
+          field: fieldsUsed?.[0] || "DBZH",
+          product: overlayData?.product || "PPI",
+          elevation:
+            activeElevation?.upper() === "PPI" ? activeElevation : undefined,
+          height: activeHeight?.upper() === "CAPPI" ? activeHeight : undefined,
+          filters: filtersUsed,
+          polygon: areaPolygon,
+        }}
       />
 
       <Alerts

@@ -2,6 +2,7 @@ import math
 import os
 import pyart
 import uuid
+import pyproj
 import numpy as np
 from ..utils import cappi as cappi_utils
 from ..utils import png
@@ -12,20 +13,20 @@ from rasterio.enums import ColorInterp
 from rasterio.warp import Resampling
 from urllib.parse import quote
 from ..core.config import settings
-from cachetools import LRUCache
+from ..core.cache import GRID2D_CACHE
+from affine import Affine
 
 from .radar_common import (
     md5_file, 
     resolve_field, 
     build_gatefilter, 
     colormap_for, 
-    nbytes, 
     filters_affect_interpolation, 
     qc_signature, 
-    grid2d_cache_key
+    grid2d_cache_key,
+    normalize_proj_dict
 )
 
-GRID2D_CACHE = LRUCache(maxsize=200 * 1024 * 1024, getsizeof=nbytes)
 
 
 def convert_to_cog(src_path, cog_path):
@@ -276,8 +277,6 @@ def process_radar_to_cog(
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 
-    grid_shape = (z_points, y_points, x_points)
-    grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
     interp = 'nearest'
 
     # Verificamos si los filtros afectan la interpolación (y por ende la grilla)
@@ -292,15 +291,14 @@ def process_radar_to_cog(
         field_to_use=field_to_use,
         elevation=elevation if product_upper == "PPI" else None,
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
-        grid_shape=grid_shape,
-        grid_limits=grid_limits,
+        volume=volume,
         interp=interp,
         qc_sig=qc_sig if needs_regrid else tuple(),  # si no afecta, usamos firma vacía
     )
 
-    arr2d_cached = GRID2D_CACHE.get(cache_key)
+    pkg_cached = GRID2D_CACHE.get(cache_key)
 
-    if arr2d_cached is None:
+    if pkg_cached is None:
         # Aplicar filtros no visuales (ej., sobre RHOHV)
         gf = build_gatefilter(radar_to_use, field_to_use, filters) if needs_regrid else None
 
@@ -340,12 +338,34 @@ def process_radar_to_cog(
         arr2d = grid.fields[field_to_use]['data'][0, :, :]
         # Garantizamos float32/máscara
         arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
-        GRID2D_CACHE[cache_key] = arr2d
-        arr2d_cached = arr2d
+
+        # ejes x/y del grid (en la proyección nativa del grid)
+        x = grid.x['data'].astype(float)  # (nx,)
+        y = grid.y['data'].astype(float)  # (ny,)
+        ny, nx = arr2d.shape
+
+        # pasos y origen (formato raster “arriba-izquierda”)
+        dx = float(np.mean(np.diff(x))) if x.size > 1 else (x_grid_limits[1]-x_grid_limits[0]) / max(nx-1, 1)
+        dy = float(np.mean(np.diff(y))) if y.size > 1 else (y_grid_limits[1]-y_grid_limits[0]) / max(ny-1, 1)
+        xmin = float(x.min()) if x.size else x_grid_limits[0]
+        ymax = float(y.max()) if y.size else y_grid_limits[1]
+
+        transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
+
+        # CRS nativo del grid de Py-ART
+        proj_dict_norm = normalize_proj_dict(grid, grid_origin)
+        crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
+
+        pkg_cached = {
+            "arr": arr2d,
+            "crs": crs_wkt,
+            "transform": transform,
+        }
+        GRID2D_CACHE[cache_key] = pkg_cached
 
     # --- Si hay filtros “visuales” sobre el MISMO campo, aplicar máscara post-grid ---
     # Regla: cualquier filtro cuyo .field == field_to_use (mismo campo) lo aplicamos como máscara 2D
-    masked = np.ma.array(arr2d_cached, copy=True)
+    masked = np.ma.array(pkg_cached["arr"], copy=True)
     dyn_mask = np.zeros(masked.shape, dtype=bool)
 
     for f in (filters or []):

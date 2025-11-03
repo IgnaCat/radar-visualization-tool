@@ -73,12 +73,9 @@ async def process_file(payload: ProcessRequest):
         
     # Filtrar archivos por los volúmenes seleccionados
     if len(selected_volumes) > 0:
-        def extract_volume_from_filename(filename):
-            _,_,volume,_ = helpers.extract_metadata_from_filename(filename)
-            return str(volume) if volume else None
         filtered_filepaths = []
         for f in filepaths:
-            vol = extract_volume_from_filename(f)
+            vol = helpers.extract_volume_from_filename(f)
             filename = Path(f).name
             if vol == '03' and product.upper() == 'PPI':
                 warnings.append(f"{filename}: El volumen '03' no es válido para el producto PPI.")
@@ -96,7 +93,7 @@ async def process_file(payload: ProcessRequest):
     files_sorted = sorted(files_with_ts, key=lambda x: (x[1] is None, x[1] or 0))
     try:
         # Limpieza de temporales (en threadpool para no bloquear)
-        await run_in_threadpool(helpers.cleanup_tmp)
+        # await run_in_threadpool(helpers.cleanup_tmp)
 
         frames: List[List[LayerResult]] = []
         # Iteramos por file → procesar todas las capas (posible paralelismo)
@@ -116,7 +113,7 @@ async def process_file(payload: ProcessRequest):
                         cappi_height=height,
                         elevation=elevation,
                         filters=filters,
-                        volume=extract_volume_from_filename(filepath.name)
+                        volume=helpers.extract_volume_from_filename(filepath.name)
                     )
                     future_to_meta[fut] = (idx, field)
 

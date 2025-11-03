@@ -1,6 +1,5 @@
 from __future__ import annotations
-from typing import Iterable, Optional, Tuple
-from dataclasses import dataclass, asdict
+from typing import Iterable, Optional, Tuple, Any
 
 import numpy as np
 import pyart
@@ -31,6 +30,29 @@ def stable_hash(obj):
     """Hash estable de un objeto JSON-serializable."""
     s = json.dumps(obj, sort_keys=True, default=str)
     return hashlib.sha1(s.encode("utf-8")).hexdigest()
+
+def _roundf(x: float, nd=6) -> float:
+    try:
+        return float(round(float(x), nd))
+    except Exception:
+        return float(x)
+
+def _stable(obj: Any):
+    """
+    Convierte a una estructura JSON-estable (tuplas/listas → listas, floats redondeados).
+    """
+    if isinstance(obj, dict):
+        return {k: _stable(v) for k, v in sorted(obj.items())}
+    if isinstance(obj, (list, tuple)):
+        return [_stable(v) for v in obj]
+    if isinstance(obj, float):
+        return _roundf(obj, 6)
+    return obj
+
+# Usado para generar las cache keys
+def _hash_of(payload: Any) -> str:
+    s = json.dumps(_stable(payload), separators=(",", ":"), ensure_ascii=False)
+    return hashlib.blake2b(s.encode("utf-8"), digest_size=16).hexdigest()
 
 
 # ------------------------------
@@ -148,13 +170,6 @@ def build_gatefilter(
 # Grilla 2D cacheada
 # ------------------------------
 
-def nbytes(arr):
-    if isinstance(arr, np.ma.MaskedArray):
-        base = arr.data.nbytes
-        mask = 0 if arr.mask is np.ma.nomask else np.asarray(arr.mask, dtype=np.bool_).nbytes
-        return base + mask
-    return arr.nbytes
-
 def filters_affect_interpolation(filters, field_to_use):
     """
     Regla: regridear si hay filtros sobre campos QC (RHOHV/NCP/SNR)
@@ -193,17 +208,53 @@ def qc_signature(filters):
             pass
     return tuple(sig)
 
-def grid2d_cache_key(*, file_hash, product_upper, field_to_use, elevation, cappi_height,
-                      grid_shape, grid_limits, interp, qc_sig):
-    return (
-        file_hash, product_upper, field_to_use,
-        float(elevation) if elevation is not None else None,
-        int(cappi_height) if cappi_height is not None else None,
-        tuple(grid_shape),
-        tuple((tuple(x) for x in grid_limits)),
-        str(interp),
-        qc_sig  # firma de QC: si cambia, es otra entrada
-    )
+def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
+                     elevation, cappi_height, volume,
+                     interp, qc_sig) -> str:
+    payload = {
+        "v": 1,  # versión del formato de clave
+        "file": file_hash,
+        "prod": product_upper,
+        "field": str(field_to_use).upper(),
+        "elev": float(elevation) if elevation is not None else None,
+        "h": int(cappi_height) if cappi_height is not None else None,
+        "vol": str(volume) if volume is not None else None,
+        "interp": str(interp),
+        "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple)) else qc_sig,
+    }
+    return "g2d_" + _hash_of(payload)
+
+def normalize_proj_dict(grid, grid_origin):
+    """
+    Convierte el dict de proyección de Py-ART a algo que pyproj entienda.
+    """
+    proj = dict(getattr(grid, "projection", {}) or {})
+    if not proj:
+        proj = dict(grid.get_projparams() or {})
+
+    # Fallback a origen del radar si faltan lat/lon
+    lat0 = float(proj.get("lat_0", grid_origin[0]))
+    lon0 = float(proj.get("lon_0", grid_origin[1]))
+
+    # Py-ART usa "pyart_aeqd" como alias interno; PROJ quiere "aeqd"
+    if proj.get("proj") in ("pyart_aeqd", None):
+        proj = {
+            "proj": "aeqd",
+            "lat_0": lat0,
+            "lon_0": lon0,
+            "datum": "WGS84",
+            "units": "m",
+            # "no_defs": True,   # opcional
+        }
+    else:
+        # Asegurar unidades/datum razonables
+        proj.setdefault("datum", "WGS84")
+        proj.setdefault("units", "m")
+
+    # A veces viene "type":"crs" que a ciertos builds les molesta
+    proj.pop("type", None)
+    return proj
+
 
 
 # ------------------------------

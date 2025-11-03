@@ -57,7 +57,18 @@ def calcule_radial_angle(radar_lat, radar_lon, punto_lat, punto_lon):
     return radial_angle
 
 
-def variable_radar_cross_section(lat, lon, radar_lat, radar_lon, volumen_radar_data, output_path, range_max, variable='DBZH', cmap='viridis', gf=None):
+def variable_radar_cross_section(
+        lat, 
+        lon, 
+        radar_lat,
+        radar_lon,
+        volumen_radar_data,
+        output_path,
+        range_max,
+        variable='DBZH',
+        cmap='viridis',
+        gf=None
+):
     """
     Función para graficar datos radiales del radar en un perfil a un ángulo dado.
     Esta función grafica en un ángulo dado que esta definido por una latitud y longitud.

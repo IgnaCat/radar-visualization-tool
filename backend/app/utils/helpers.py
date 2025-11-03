@@ -38,6 +38,9 @@ def extract_metadata_from_filename(filename):
     timestamp = datetime.strptime(timestamp_str, "%Y%m%dT%H%M%S")
     return radar, estrategia, volumen, timestamp
 
+def extract_volume_from_filename(filename):
+    _, _, volume, _ = extract_metadata_from_filename(filename)
+    return str(volume) if volume else None
 
 def should_animate(results, max_minutes_diff=30):
     """
