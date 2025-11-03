@@ -13,6 +13,7 @@ import {
   Paper,
 } from "@mui/material";
 import Draggable from "react-draggable";
+import RadarFilterControls from "./RadarFilterControls";
 
 const FIELD_OPTIONS = ["DBZH", "KDP", "RHOHV", "ZDR"];
 
@@ -46,6 +47,7 @@ export default function PseudoRHIDialog({
   const [loading, setLoading] = useState(false);
   const [resultImg, setResultImg] = useState(null);
   const [error, setError] = useState("");
+  const [filters, setFilters] = useState([]);
 
   // sync coords desde el picker
   useEffect(() => {
@@ -81,6 +83,7 @@ export default function PseudoRHIDialog({
         field,
         end_lat,
         end_lon,
+        filters,
       });
       setResultImg(resp?.[0].image_url || null);
     } catch (e) {
@@ -120,14 +123,20 @@ export default function PseudoRHIDialog({
       <DialogTitle id="draggable-dialog-title">
         Pseudo-RHI (corte vertical)
       </DialogTitle>
-      <DialogContent dividers>
+      <DialogContent id="draggable-dialog-title" dividers>
         <Typography variant="body2" gutterBottom>
           Seleccioná un punto destino en el mapa
         </Typography>
 
-        <Box display="grid" gridTemplateColumns="1fr 1fr" gap={2} mt={1}>
+        <Box
+          display="grid"
+          gridTemplateColumns="1fr 1fr 1fr auto"
+          gap={2}
+          mt={2}
+        >
           <TextField
             select
+            size="small"
             label="Campo"
             value={field}
             onChange={(e) => setField(e.target.value)}
@@ -138,15 +147,14 @@ export default function PseudoRHIDialog({
               </MenuItem>
             ))}
           </TextField>
-        </Box>
-
-        <Box display="grid" gridTemplateColumns="1fr 1fr auto" gap={2} mt={2}>
           <TextField
+            size="small"
             label="Latitud"
             value={lat}
             onChange={(e) => setLat(e.target.value)}
           />
           <TextField
+            size="small"
             label="Longitud"
             value={lon}
             onChange={(e) => setLon(e.target.value)}
@@ -162,6 +170,12 @@ export default function PseudoRHIDialog({
             lon {radarSite.lon.toFixed?.(4) ?? radarSite.lon}
           </Typography>
         )}
+
+        <RadarFilterControls
+          selectedField={field}
+          onFiltersChange={setFilters}
+          showVariableFilterDefault={true}
+        />
 
         {error && (
           <Typography color="error" mt={2}>
