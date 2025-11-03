@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field, field_serializer
-from typing import List, Optional, Literal
+from pydantic import BaseModel, Field, field_serializer, validator
+from typing import List, Optional, Literal, Dict, Any
 from datetime import datetime
 from pathlib import Path
 
@@ -78,3 +78,38 @@ class PseudoRHIResponse(BaseModel):
     metadata: Optional[dict] = None
     timestamp: Optional[datetime] = None
     source_file: Optional[Path] = None
+
+class RadarStatsRequest(BaseModel):
+    polygon_geojson: Dict[str, Any] = Field(..., description="Polígono GeoJSON en EPSG:4326")
+    filepath: Optional[str] = None
+    product: str
+    field: str
+    height: Optional[int] = Field(
+        default=4000, ge=0, le=12000,
+        description="Altura en metros (0-12000). Default 4000m"
+    )
+    elevation: Optional[int] = Field(
+        default=0, ge=0, le=12,
+        description="Ángulo de elevación en grados (0-12). Default 0"
+    )
+    filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
+
+    @validator("filepath")
+    def validate_filepath(cls, v):
+        if v in (None, "", "undefined"):
+            raise ValueError("Debe enviarse un filepath válido (no 'undefined').")
+        return v
+
+class StatsResult(BaseModel):
+    min: float
+    max: float
+    mean: float
+    median: float
+    std: float
+    count: int
+    valid_pct: float
+
+class RadarStatsResponse(BaseModel):
+    stats: Optional[StatsResult] = None
+    noCoverage: bool = False
+    reason: Optional[str] = None

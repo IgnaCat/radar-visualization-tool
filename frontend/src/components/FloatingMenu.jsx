@@ -2,10 +2,12 @@ import { SpeedDial, SpeedDialAction } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import PercentIcon from "@mui/icons-material/Percent";
 export default function FloatingMenu({
   onUploadClick,
   onChangeProductClick,
   onPseudoRhiClick,
+  onAreaStatsClick,
 }) {
   const actions = [
     { icon: <CloudUploadIcon />, name: "Subir archivo", action: onUploadClick },
@@ -18,6 +20,11 @@ export default function FloatingMenu({
       icon: <MenuIcon />,
       name: "Generar Pseudo-RHI",
       action: onPseudoRhiClick,
+    },
+    {
+      icon: <PercentIcon />,
+      name: "Estadísticas",
+      action: onAreaStatsClick,
     },
   ];
 

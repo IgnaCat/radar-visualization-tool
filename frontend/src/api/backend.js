@@ -62,3 +62,18 @@ export async function generatePseudoRHI({
     png_height_px,
   });
 }
+
+export async function generateAreaStats(payload) {
+  const { polygon, filepath, product, field, height, elevation, filters } =
+    payload;
+
+  return api.post("/stats/area", {
+    polygon_geojson: polygon,
+    filepath,
+    product,
+    field,
+    ...(height !== undefined && { height: parseInt(height) }),
+    ...(elevation !== undefined && { elevation: parseInt(elevation) }),
+    ...(filters && { filters }),
+  });
+}
