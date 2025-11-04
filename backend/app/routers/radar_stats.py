@@ -54,6 +54,7 @@ async def radar_stats(payload: RadarStatsRequest):
             polygon_gj_4326
         )
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
     if stats_result.get("noCoverage"):

@@ -67,6 +67,7 @@ export async function generateAreaStats(payload) {
   const { polygon, filepath, product, field, height, elevation, filters } =
     payload;
 
+  console.log("area", payload)
   return api.post("/stats/area", {
     polygon_geojson: polygon,
     filepath,
@@ -75,5 +76,21 @@ export async function generateAreaStats(payload) {
     ...(height !== undefined && { height: parseInt(height) }),
     ...(elevation !== undefined && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
+  });
+}
+
+export async function generatePixelStat(payload) {
+  const { filepath, product, field, height, elevation, filters, lat, lon } = payload;
+
+  console.log(payload)
+  return api.post("/stats/pixel", {
+    filepath,
+    product,
+    field,
+    ...(height !== undefined && { height: parseInt(height) }),
+    ...(elevation !== undefined && { elevation: parseInt(elevation) }),
+    ...(filters && { filters }),
+    lat,
+    lon
   });
 }

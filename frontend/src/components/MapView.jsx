@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "./MapPickOverlay";
 import AreaDrawOverlay from "./AreaDrawOverlay";
+import UsePixelStatClick from "./UsePixelStatClick"
 
 function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
   const map = useMap();
@@ -83,7 +84,7 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
       // liberar maxBounds al cambiar de producto
       try {
         map.setMaxBounds(null);
-      } catch {}
+      } catch { }
     };
   }, [tilejsonUrl, map]);
 
@@ -125,6 +126,8 @@ export default function MapView({
   onPickPoint,
   drawAreaMode = false,
   onAreaComplete,
+  pixelStatMode = false,
+  onPixelStatClick
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -161,6 +164,7 @@ export default function MapView({
         onComplete={onAreaComplete}
         modes={{ polygon: true, rectangle: true }}
       />
+      <UsePixelStatClick enabled={pixelStatMode} onPixelStatClick={onPixelStatClick} />
     </MapContainer>
   );
 }
