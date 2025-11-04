@@ -12,7 +12,6 @@ class RangeFilter(BaseModel):
 
 class ProcessRequest(BaseModel):
     filepaths: List[str] = Field(..., min_items=1)
-    selectedVolumes: Optional[List[str]] = Field(default=None, description="Lista de volúmenes seleccionados")
     product: str = Field(..., description="Producto a procesar, ej PPI")
     fields: List[str] = Field(..., min_items=1, description="Campos a procesar")
     height: Optional[int] = Field(
@@ -113,3 +112,26 @@ class RadarStatsResponse(BaseModel):
     stats: Optional[StatsResult] = None
     noCoverage: bool = False
     reason: Optional[str] = None
+
+class RadarPixelRequest(BaseModel):
+    filepath: str
+    product: str
+    field: str
+    height: Optional[int] = Field(
+        default=4000, ge=0, le=12000,
+        description="Altura en metros (0-12000). Default 4000m"
+    )
+    elevation: Optional[int] = Field(
+        default=0, ge=0, le=12,
+        description="Ángulo de elevación en grados (0-12). Default 0"
+    )
+    filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
+    lat: float                   # click del usuario (EPSG:4326)
+    lon: float
+
+class RadarPixelResponse(BaseModel):
+    value: Optional[float] = None
+    masked: bool = False
+    row: Optional[int] = None
+    col: Optional[int] = None
+    message: Optional[str] = None

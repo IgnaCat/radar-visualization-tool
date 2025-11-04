@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import { useSnackbar } from "notistack";
 import {
   uploadFile,
   processFile,
   generatePseudoRHI,
   generateAreaStats,
+  generatePixelStat
 } from "./api/backend";
 import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
@@ -69,6 +71,8 @@ export default function App() {
     severity: "info",
   });
 
+  const { enqueueSnackbar } = useSnackbar();
+  const [pixelStatMode, setPixelStatMode] = useState(false);
   const [rhiOpen, setRhiOpen] = useState(false);
   const [pickPointMode, setPickPointMode] = useState(false);
   const [pickedPoint, setPickedPoint] = useState(null); // { lat, lon } seleccionado
@@ -279,7 +283,9 @@ export default function App() {
     // al cerrar el diálogo, removemos la capa del mapa
     try {
       drawnLayerRef.current?.remove();
-    } catch {}
+    } catch {
+      console.log("Error")
+    }
     drawnLayerRef.current = null;
     setAreaStatsOpen(false);
   };
@@ -289,6 +295,34 @@ export default function App() {
     const r = await generateAreaStats(payload);
     return r.data;
   };
+
+  const handleTogglePixelStat = () => setPixelStatMode(v => !v);
+
+  const handleMapClickPixelStat = async (latlng) => {
+    try {
+      const payload = {
+        filepath: uploadedFiles[currentIndex],
+        field: fieldsUsed?.[0] || "DBZH",
+        product: overlayData?.product || "PPI",
+        elevation:
+          activeElevation?.upper() === "PPI" ? activeElevation : undefined,
+        height: activeHeight?.upper() === "CAPPI" ? activeHeight : undefined,
+        filters: filtersUsed,
+        lat: latlng.lat,
+        lon: latlng.lng,
+      };
+      const resp = await generatePixelStat(payload);
+      const v = resp.data?.value;
+      if (resp.data.masked || v == null) {
+        enqueueSnackbar("Sin dato (masked / fuera de cobertura)", { variant: "warning" });
+      } else {
+        enqueueSnackbar(`${fieldsUsed?.[0] || "DBZH"}: ${v}`, { variant: "success" });
+      }
+    } catch (e) {
+      enqueueSnackbar(e?.response?.data?.detail || "Error", { variant: "error" });
+    }
+  };
+
 
   return (
     <>
@@ -301,6 +335,8 @@ export default function App() {
         onPickPoint={handlePickPoint}
         drawAreaMode={areaDrawMode}
         onAreaComplete={handleAreaComplete}
+        pixelStatMode={pixelStatMode}
+        onPixelStatClick={handleMapClickPixelStat}
       />
       <ColorLegend fields={fieldsUsed} />
       <FloatingMenu
@@ -308,6 +344,7 @@ export default function App() {
         onChangeProductClick={() => setSelectorOpen(true)}
         onPseudoRhiClick={handleOpenRHI}
         onAreaStatsClick={handleOpenAreaStatsMode}
+        onPixelStatToggle={handleTogglePixelStat}
       />
       <UploadButton onFilesSelected={handleFilesSelected} />
 

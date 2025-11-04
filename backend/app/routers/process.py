@@ -61,6 +61,7 @@ async def process_file(payload: ProcessRequest):
         
     UPLOAD_DIR = settings.UPLOAD_DIR
     os.makedirs(UPLOAD_DIR, exist_ok=True)
+    filtered_filepaths = []
 
     # Verificar que los archivos existan
     for file in filepaths:
@@ -73,7 +74,6 @@ async def process_file(payload: ProcessRequest):
         
     # Filtrar archivos por los volúmenes seleccionados
     if len(selected_volumes) > 0:
-        filtered_filepaths = []
         for f in filepaths:
             vol = helpers.extract_volume_from_filename(f)
             filename = Path(f).name
@@ -84,11 +84,11 @@ async def process_file(payload: ProcessRequest):
                 filtered_filepaths.append(f)
             else:
                 warnings.append(f"{filename}: Volumen '{vol}' no seleccionado, se omite.")
+        filepaths = filtered_filepaths
     else:
         print("No se seleccionaron volúmenes, procesando todos los archivos.")
         warnings.append("No se seleccionaron volúmenes, procesando todo.")
 
-    filepaths = filtered_filepaths
     files_with_ts = [(f, _timestamp_of(f)) for f in filepaths]
     files_sorted = sorted(files_with_ts, key=lambda x: (x[1] is None, x[1] or 0))
     try:
