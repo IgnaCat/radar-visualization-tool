@@ -1,9 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MapContainer, TileLayer, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  useMap,
+  CircleMarker,
+  Tooltip,
+} from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "./MapPickOverlay";
 import AreaDrawOverlay from "./AreaDrawOverlay";
-import UsePixelStatClick from "./UsePixelStatClick"
+import UsePixelStatClick from "./UsePixelStatClick";
 
 function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
   const map = useMap();
@@ -84,7 +90,7 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
       // liberar maxBounds al cambiar de producto
       try {
         map.setMaxBounds(null);
-      } catch { }
+      } catch {}
     };
   }, [tilejsonUrl, map]);
 
@@ -127,7 +133,8 @@ export default function MapView({
   drawAreaMode = false,
   onAreaComplete,
   pixelStatMode = false,
-  onPixelStatClick
+  onPixelStatClick,
+  pixelStatMarker = null,
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -164,7 +171,25 @@ export default function MapView({
         onComplete={onAreaComplete}
         modes={{ polygon: true, rectangle: true }}
       />
-      <UsePixelStatClick enabled={pixelStatMode} onPixelStatClick={onPixelStatClick} />
+      <UsePixelStatClick
+        enabled={pixelStatMode}
+        onPixelStatClick={onPixelStatClick}
+      />
+      {pixelStatMarker &&
+        Number.isFinite(pixelStatMarker.lat) &&
+        Number.isFinite(pixelStatMarker.lon) && (
+          <CircleMarker
+            center={[pixelStatMarker.lat, pixelStatMarker.lon]}
+            radius={6}
+            pathOptions={{ color: "#ff3b30", weight: 2, fillOpacity: 0.7 }}
+          >
+            <Tooltip direction="top" offset={[0, -6]} permanent>
+              {pixelStatMarker.value == null
+                ? "masked"
+                : String(pixelStatMarker.value)}
+            </Tooltip>
+          </CircleMarker>
+        )}
     </MapContainer>
   );
 }

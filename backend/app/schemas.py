@@ -23,6 +23,7 @@ class ProcessRequest(BaseModel):
         description="Ángulo de elevación en grados (0-12). Default 0"
     )
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
+    selectedVolumes: Optional[List[str]]
 
 class LayerResult(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL
@@ -135,3 +136,5 @@ class RadarPixelResponse(BaseModel):
     row: Optional[int] = None
     col: Optional[int] = None
     message: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
