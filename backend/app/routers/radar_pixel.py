@@ -100,6 +100,11 @@ def _probe_pixel_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     col = int(np.floor(col_f))
     row = int(np.floor(row_f))
 
+    # transformar a WGS84 (lon/lat)
+    xc, yc = transform * (col + 0.5, row + 0.5)
+    to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+    lonc, latc = to_wgs84.transform(xc, yc)
+
     ny, nx = arr.shape
     if row < 0 or row >= ny or col < 0 or col >= nx:
         return RadarPixelResponse(value=None, masked=True, row=row, col=col, message="Fuera de limites")
@@ -109,4 +114,4 @@ def _probe_pixel_impl(p: RadarPixelRequest) -> RadarPixelResponse:
         return RadarPixelResponse(value=None, masked=True, row=row, col=col, message="masked")
 
     val = float(arr[row, col])
-    return RadarPixelResponse(value=round(val, 2), masked=False, row=row, col=col)
+    return RadarPixelResponse(value=round(val, 2), masked=False, row=row, col=col, lat=latc, lon=lonc)

@@ -23,8 +23,10 @@ export const processFile = async ({
     filepaths: files,
     product: product,
     fields: layers,
-    ...(height !== undefined && { height: parseInt(height) }),
-    ...(elevation !== undefined && { elevation: parseInt(elevation) }),
+    ...(height !== null &&
+      height !== undefined && { height: parseInt(height) }),
+    ...(elevation !== undefined &&
+      elevation !== null && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
     ...(selectedVolumes && { selectedVolumes }),
   };
@@ -67,30 +69,33 @@ export async function generateAreaStats(payload) {
   const { polygon, filepath, product, field, height, elevation, filters } =
     payload;
 
-  console.log("area", payload)
   return api.post("/stats/area", {
     polygon_geojson: polygon,
     filepath,
     product,
     field,
-    ...(height !== undefined && { height: parseInt(height) }),
-    ...(elevation !== undefined && { elevation: parseInt(elevation) }),
+    ...(height !== null &&
+      height !== undefined && { height: parseInt(height) }),
+    ...(elevation !== undefined &&
+      elevation !== null && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
   });
 }
 
 export async function generatePixelStat(payload) {
-  const { filepath, product, field, height, elevation, filters, lat, lon } = payload;
+  const { filepath, product, field, height, elevation, filters, lat, lon } =
+    payload;
 
-  console.log(payload)
   return api.post("/stats/pixel", {
     filepath,
     product,
     field,
-    ...(height !== undefined && { height: parseInt(height) }),
-    ...(elevation !== undefined && { elevation: parseInt(elevation) }),
+    ...(height !== null &&
+      height !== undefined && { height: parseInt(height) }),
+    ...(elevation !== undefined &&
+      elevation !== null && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
     lat,
-    lon
+    lon,
   });
 }

@@ -5,7 +5,7 @@ import {
   processFile,
   generatePseudoRHI,
   generateAreaStats,
-  generatePixelStat
+  generatePixelStat,
 } from "./api/backend";
 import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
@@ -73,6 +73,7 @@ export default function App() {
 
   const { enqueueSnackbar } = useSnackbar();
   const [pixelStatMode, setPixelStatMode] = useState(false);
+  const [pixelStatMarker, setPixelStatMarker] = useState(null);
   const [rhiOpen, setRhiOpen] = useState(false);
   const [pickPointMode, setPickPointMode] = useState(false);
   const [pickedPoint, setPickedPoint] = useState(null); // { lat, lon } seleccionado
@@ -167,8 +168,8 @@ export default function App() {
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
       setFiltersUsed(filters);
-      if (elevation) setActiveElevation(elevation);
-      if (height) setActiveHeight(height);
+      if (elevation !== undefined) setActiveElevation(elevation);
+      if (height !== undefined) setActiveHeight(height);
 
       const nextKey = buildComputeKey({
         files: uploadedFiles,
@@ -284,7 +285,7 @@ export default function App() {
     try {
       drawnLayerRef.current?.remove();
     } catch {
-      console.log("Error")
+      console.log("Error");
     }
     drawnLayerRef.current = null;
     setAreaStatsOpen(false);
@@ -296,7 +297,13 @@ export default function App() {
     return r.data;
   };
 
-  const handleTogglePixelStat = () => setPixelStatMode(v => !v);
+  const handleTogglePixelStat = () => {
+    setPixelStatMode((v) => {
+      const next = !v;
+      if (!next) setPixelStatMarker(null);
+      return next;
+    });
+  };
 
   const handleMapClickPixelStat = async (latlng) => {
     try {
@@ -304,9 +311,8 @@ export default function App() {
         filepath: uploadedFiles[currentIndex],
         field: fieldsUsed?.[0] || "DBZH",
         product: overlayData?.product || "PPI",
-        elevation:
-          activeElevation?.upper() === "PPI" ? activeElevation : undefined,
-        height: activeHeight?.upper() === "CAPPI" ? activeHeight : undefined,
+        elevation: activeElevation,
+        height: activeHeight,
         filters: filtersUsed,
         lat: latlng.lat,
         lon: latlng.lng,
@@ -314,15 +320,25 @@ export default function App() {
       const resp = await generatePixelStat(payload);
       const v = resp.data?.value;
       if (resp.data.masked || v == null) {
-        enqueueSnackbar("Sin dato (masked / fuera de cobertura)", { variant: "warning" });
+        enqueueSnackbar("Sin dato (masked / fuera de cobertura)", {
+          variant: "warning",
+        });
       } else {
-        enqueueSnackbar(`${fieldsUsed?.[0] || "DBZH"}: ${v}`, { variant: "success" });
+        enqueueSnackbar(`${fieldsUsed?.[0] || "DBZH"}: ${v}`, {
+          variant: "success",
+        });
+        setPixelStatMarker({
+          lat: resp.data?.lat,
+          lon: resp.data?.lon,
+          value: v,
+        });
       }
     } catch (e) {
-      enqueueSnackbar(e?.response?.data?.detail || "Error", { variant: "error" });
+      enqueueSnackbar(e?.response?.data?.detail || "Error", {
+        variant: "error",
+      });
     }
   };
-
 
   return (
     <>
@@ -337,6 +353,7 @@ export default function App() {
         onAreaComplete={handleAreaComplete}
         pixelStatMode={pixelStatMode}
         onPixelStatClick={handleMapClickPixelStat}
+        pixelStatMarker={pixelStatMarker}
       />
       <ColorLegend fields={fieldsUsed} />
       <FloatingMenu
@@ -397,9 +414,8 @@ export default function App() {
           filepath: uploadedFiles[currentIndex],
           field: fieldsUsed?.[0] || "DBZH",
           product: overlayData?.product || "PPI",
-          elevation:
-            activeElevation?.upper() === "PPI" ? activeElevation : undefined,
-          height: activeHeight?.upper() === "CAPPI" ? activeHeight : undefined,
+          elevation: activeElevation,
+          height: activeHeight,
           filters: filtersUsed,
           polygon: areaPolygon,
         }}
