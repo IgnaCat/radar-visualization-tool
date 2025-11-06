@@ -6,6 +6,7 @@ import numpy as np
 import pyproj
 from pyproj import Transformer
 from affine import Affine
+from rasterio.transform import rowcol, xy
 
 from ..core.cache import GRID2D_CACHE
 from ..schemas import RadarPixelRequest, RadarPixelResponse
@@ -71,12 +72,17 @@ def _probe_pixel_impl(p: RadarPixelRequest) -> RadarPixelResponse:
         )
 
     filepath = p.filepath
+    product = p.product
+    field = p.field
+
+    if (product.upper() == "CAPPI"): field = "cappi"
+    if (product.upper() == "COLMAX" and field.upper() == "DBZH"): field = "composite_reflectivity"
     
     volume = extract_volume_from_filename(filepath)
     cache_key = get_cache_key_for_radar_stats(
         filepath=filepath,
-        product=p.product,
-        field=p.field,
+        product=product,
+        field=field,
         elevation=p.elevation,
         cappi_height=p.height,
         volume=volume,
@@ -86,6 +92,9 @@ def _probe_pixel_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     pkg = GRID2D_CACHE.get(cache_key)
     if pkg is None:
         raise HTTPException(status_code=404, detail="No cacheado")
+    
+    if not (-90 <= float(p.lat) <= 90 and -180 <= float(p.lon) <= 180):
+        raise HTTPException(status_code=400, detail="Coordenadas no WGS84 (use lat∈[-90,90], lon∈[-180,180])")
 
     arr = pkg["arr"]                 # np.ma.MaskedArray (ny, nx)
     crs = pyproj.CRS.from_wkt(pkg["crs"])
@@ -96,12 +105,10 @@ def _probe_pixel_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     xg, yg = tf.transform(p.lon, p.lat)
 
     # coords -> (col,row)
-    col_f, row_f = (~transform) * (xg, yg)
-    col = int(np.floor(col_f))
-    row = int(np.floor(row_f))
+    row, col = rowcol(transform, xg, yg, op=round)
 
     # transformar a WGS84 (lon/lat)
-    xc, yc = transform * (col + 0.5, row + 0.5)
+    xc, yc = xy(transform, row, col, offset="center")
     to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
     lonc, latc = to_wgs84.transform(xc, yc)
 
