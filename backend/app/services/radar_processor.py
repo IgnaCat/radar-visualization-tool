@@ -223,10 +223,10 @@ def process_radar_to_cog(
         radar_to_use = radar.extract_sweeps([elevation])
         field_to_use = field_name
     elif product_upper == "CAPPI":
-        cappi = cappi_utils.create_cappi(radar, fields=["filled_DBZH"], height=cappi_height)
+        cappi = cappi_utils.create_cappi(radar, fields=[field_name], height=cappi_height)
         # Creamos un campo de 5400x523 y lo rellenamos con el cappi
         # Hacemos esto por problemas con el interpolador de pyart
-        template = cappi.fields['filled_DBZH']['data']   # (360, 523)
+        template = cappi.fields[field_name]['data']   # (360, 523)
         zeros_array = np.tile(template, (15, 1))   # (5400, 523)
         radar.add_field_like('DBZH', 'cappi', zeros_array, replace_existing=True)
 
@@ -301,7 +301,6 @@ def process_radar_to_cog(
     if pkg_cached is None:
         # Aplicar filtros no visuales (ej., sobre RHOHV)
         gf = build_gatefilter(radar_to_use, field_to_use, filters) if needs_regrid else None
-
         grid_origin = (
             float(radar_to_use.latitude['data'][0]),
             float(radar_to_use.longitude['data'][0]),
@@ -376,7 +375,10 @@ def process_radar_to_cog(
             fmin = getattr(f, "min", None)
             fmax = getattr(f, "max", None)
             if fmin is not None:
-                dyn_mask |= (masked < float(fmin))
+                if (fmin <= 0.3 and field_to_use == "RHOHV"):
+                    continue
+                else:
+                    dyn_mask |= (masked < float(fmin))
             if fmax is not None:
                 dyn_mask |= (masked > float(fmax))
 

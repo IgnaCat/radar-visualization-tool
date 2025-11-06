@@ -182,7 +182,10 @@ def filters_affect_interpolation(filters, field_to_use):
             continue
         up = str(ffield).upper()
         if up in AFFECTS_INTERP_FIELDS:
-            return True
+            if ft in AFFECTS_INTERP_FIELDS:
+                return False
+            else:
+                return True
         if up != ft:
             # Cualquier filtro sobre OTRA variable (e.g., filtrar por RHOHV mientras muestro DBZH)
             return True

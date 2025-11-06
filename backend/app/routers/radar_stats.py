@@ -34,12 +34,17 @@ async def radar_stats(payload: RadarStatsRequest):
 
     polygon_gj_4326: dict = payload.polygon_geojson
     filepath = payload.filepath
+    product = payload.product
+    field = payload.field
+
+    if (product.upper() == "CAPPI"): field = "cappi"
+    if (product.upper() == "COLMAX" and field.upper() == "DBZH"): field = "composite_reflectivity"
     
     volume = extract_volume_from_filename(filepath)
     cache_key = get_cache_key_for_radar_stats(
         filepath=filepath,
-        product=payload.product,
-        field=payload.field,
+        product=product,
+        field=field,
         elevation=payload.elevation,
         cappi_height=payload.height,
         volume=volume,
