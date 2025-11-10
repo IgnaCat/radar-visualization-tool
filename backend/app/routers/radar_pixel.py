@@ -21,9 +21,9 @@ from ..services.radar_common import (
 router = APIRouter(prefix="/stats", tags=["radar-pixel"])
 
 @router.post("/pixel", response_model=RadarPixelResponse)
-async def probe_pixel(p: RadarPixelRequest):
+async def pixel_stat(p: RadarPixelRequest):
     try:
-        return await run_in_threadpool(_probe_pixel_impl, p)
+        return await run_in_threadpool(_pixel_stat_impl, p)
     except Exception as e:
         print(e)
         raise HTTPException(status_code=500, detail=str(e))
@@ -63,7 +63,7 @@ def get_cache_key_for_radar_stats(
     return cache_key
 
 
-def _probe_pixel_impl(p: RadarPixelRequest) -> RadarPixelResponse:
+def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     
     if getattr(p, "filepath", None) in (None, "", "undefined"):
         raise HTTPException(
