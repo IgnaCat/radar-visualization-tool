@@ -349,6 +349,7 @@ def process_radar_to_cog(
         xmin = float(x.min()) if x.size else x_grid_limits[0]
         ymax = float(y.max()) if y.size else y_grid_limits[1]
 
+        # construye la transformación q ubica la esquina superior-izquierda del píxel (0,0)
         transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
 
         # CRS nativo del grid de Py-ART
