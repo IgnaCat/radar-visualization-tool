@@ -7,7 +7,7 @@ from typing import List
 from math import ceil
 import os
 
-from ..schemas import ProcessRequest, ProcessResponse, LayerResult, RangeFilter
+from ..schemas import ProcessRequest, ProcessResponse, LayerResult, RangeFilter, RadarProcessResult
 from ..core.config import settings
 
 from ..services import radar_processor
@@ -90,24 +90,29 @@ async def process_file(payload: ProcessRequest):
         print("No se seleccionaron volúmenes, procesando todos los archivos.")
         warnings.append("No se seleccionaron volúmenes, procesando todo.")
 
-    # Preparamos (filepath_abs, ts, vol) por archivo
+    # Preparamos (filepath_abs, ts, vol, radar) por archivo
     items = []
     for f in filepaths:
         fp_abs = str(Path(UPLOAD_DIR) / f)
         ts = _timestamp_of(f)  # datetime|None
-        vol = helpers.extract_volume_from_filename(Path(f).name)
-        items.append((f, fp_abs, ts, vol))
+        radar, _, vol, _ = helpers.extract_metadata_from_filename(Path(f).name)
+        items.append((f, fp_abs, ts, vol, radar))
 
     # Lanzamos todo en paralelo: (archivo × campo)
     future_to_meta = {}
     max_workers = min(max(4, (os.cpu_count() or 4) * 2), len(items) * max(1, len(fields)))
-    frames_by_file = {}   # filepath_rel -> List[LayerResult]
-    ts_by_file = {}       # filepath_rel -> timestamp (para ordenar frames)
+    # Agrupación: radar -> { timestamp -> [LayerResult, ...] }
+    results_by_radar = {}
+    warnings_by_radar = {}
+
+
+    # Para trackear campos y volúmenes por radar
+    fields_by_radar = {}
+    volumes_by_radar = {}
 
     try:
         with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            for (f_rel, f_abs, ts, vol) in items:
-                ts_by_file[f_rel] = ts
+            for (f_rel, f_abs, ts, vol, radar) in items:
                 for idx, field in enumerate(fields):
                     fut = ex.submit(
                         radar_processor.process_radar_to_cog,
@@ -119,46 +124,82 @@ async def process_file(payload: ProcessRequest):
                         filters=filters,
                         volume=vol
                     )
-                    future_to_meta[fut] = (f_rel, ts, idx, field)
+                    future_to_meta[fut] = (f_rel, ts, idx, field, radar, vol)
 
             for fut in as_completed(future_to_meta):
-                f_rel, ts, idx, field = future_to_meta[fut]
+                f_rel, ts, idx, field, radar, vol = future_to_meta[fut]
                 try:
                     result_dict = fut.result()
-                    # agregamos metadata para ordenar después
                     result_dict["timestamp"] = ts
                     result_dict["order"] = idx
-                    # acumulamos por archivo
-                    frames_by_file.setdefault(f_rel, []).append(LayerResult(**result_dict))
+                    # Agrupar por radar y timestamp
+                    if radar not in results_by_radar:
+                        results_by_radar[radar] = {}
+                    if ts not in results_by_radar[radar]:
+                        results_by_radar[radar][ts] = []
+                    results_by_radar[radar][ts].append(LayerResult(**result_dict))
+                    # Track campos y volúmenes
+                    fields_by_radar.setdefault(radar, set()).add(field)
+                    if vol:
+                        volumes_by_radar.setdefault(radar, set()).add(vol)
                 except Exception as e:
                     print(f"Error procesando {field}: {e}")
-                    warnings.append(f"{Path(f_rel).name}: {e}")
+                    if radar not in warnings_by_radar:
+                        warnings_by_radar[radar] = []
+                    warnings_by_radar[radar].append(f"{Path(f_rel).name}: {e}")
 
 
-        # Construimos frames en el orden deseado:
-        #  1) ordenar archivos por timestamp (None al final)
-        #  2) dentro de cada archivo, ordenar capas por 'order'
-        def _ts_key(k):
-            ts = ts_by_file.get(k)
-            return (ts is None, ts or 0)
+        # Calcular warnings por campos/volúmenes faltantes
+        all_fields = set()
+        all_volumes = set()
+        for s in fields_by_radar.values():
+            all_fields.update(s)
+        for s in volumes_by_radar.values():
+            all_volumes.update(s)
 
-        frames = []
-        for f_rel in sorted(frames_by_file.keys(), key=_ts_key):
-            layers = frames_by_file[f_rel]
-            layers.sort(key=lambda r: r.order)
-            frames.append(layers)
+        for radar in results_by_radar:
+            missing_fields = all_fields - fields_by_radar.get(radar, set())
+            missing_vols = all_volumes - volumes_by_radar.get(radar, set())
+            if missing_fields:
+                warnings_by_radar.setdefault(radar, []).append(
+                    f"El radar {radar} no tiene los siguientes campos: {', '.join(sorted(missing_fields))}"
+                )
+            if missing_vols:
+                warnings_by_radar.setdefault(radar, []).append(
+                    f"El radar {radar} no tiene los siguientes volúmenes: {', '.join(sorted(missing_vols))}"
+                )
 
-        if not frames:
-            warnings.append("No se generaron imágenes de salida.")
-            
-        # Decidir si animación
-        # animate = await run_in_threadpool(helpers.should_animate, [r.dict() for r in frames])
+        # Unificar todos los warnings (globales y por radar)
+        all_warnings = list(warnings)
+        for radar_warns in warnings_by_radar.values():
+            all_warnings.extend(radar_warns)
 
+        # Para cada radar, ordenar frames por timestamp y capas por 'order'
+        radar_results = []
+        for radar, ts_dict in results_by_radar.items():
+            # Ordenar timestamps (None al final)
+            sorted_ts = sorted(ts_dict.keys(), key=lambda t: (t is None, t or 0))
+            frames = []
+            for ts in sorted_ts:
+                layers = ts_dict[ts]
+                layers.sort(key=lambda r: r.order)
+                frames.append(layers)
+            # Decidir si animación
+            animation = len(frames) > 1
+            radar_results.append(RadarProcessResult(
+                radar=radar,
+                animation=animation,
+                outputs=frames,
+            ))
+
+        if not radar_results:
+            all_warnings.append("No se generaron imágenes de salida.")
+
+        print("Procesamiento completado exitosamente. Radars: " + str(list(results_by_radar.keys())))
         return ProcessResponse(
-            animation=(len(frames) > 1),
-            outputs=frames,
+            results=radar_results,
             product=product,
-            warnings=warnings
+            warnings=all_warnings
         )
 
     except HTTPException:
