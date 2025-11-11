@@ -90,7 +90,7 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
       // liberar maxBounds al cambiar de producto
       try {
         map.setMaxBounds(null);
-      } catch {}
+      } catch { }
     };
   }, [tilejsonUrl, map]);
 
@@ -138,6 +138,7 @@ export default function MapView({
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
+  // overlayData ahora puede ser un array de capas de distintos radares para el frame actual
   const n = overlayData?.length ?? 0;
   return (
     <MapContainer
@@ -152,14 +153,16 @@ export default function MapView({
     >
       <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-      {overlayData?.map((L, idx) => (
-        <COGTile
-          key={`${L.field || "layer"}|${L.tilejson_url}`}
-          tilejsonUrl={L.tilejson_url}
-          opacity={opacities[idx] ?? 1}
-          zIndex={baseZ + (n - 1 - idx) * 10}
-        />
-      ))}
+      {/* Mostrar todas las capas del frame actual (pueden ser de distintos radares) */}
+      {Array.isArray(overlayData) &&
+        overlayData.map((L, idx) => (
+          <COGTile
+            key={`${L.field || "layer"}|${L.tilejson_url}`}
+            tilejsonUrl={L.tilejson_url}
+            opacity={opacities[idx] ?? 1}
+            zIndex={baseZ + (n - 1 - idx) * 10}
+          />
+        ))}
       <MapPickOverlay
         enabled={pickPointMode}
         radarSite={radarSite}

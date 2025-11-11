@@ -28,13 +28,23 @@ export default function AnimationControls({
     return () => clearInterval(interval);
   }, [isPlaying, overlayData]);
 
+  // currentOverlay ahora es un array de capas (de distintos radares) para el frame actual
   const currentOverlay = overlayData.outputs[currentIndex];
+  // Buscar el timestamp más representativo del frame (el menor, si hay varios)
+  let frameTimestamp = null;
+  if (Array.isArray(currentOverlay) && currentOverlay.length > 0) {
+    // Preferir el timestamp más temprano del frame
+    frameTimestamp = currentOverlay
+      .map((l) => l.timestamp)
+      .filter(Boolean)
+      .sort()[0];
+  }
 
   useEffect(() => {
-    if (overlayData && overlayData.outputs && overlayData.outputs.length > 0) {
-      setCurrentIndex(0);
-    }
-  }, [overlayData]);
+    // Solo resetear si la cantidad de frames cambió
+    setCurrentIndex(0);
+    // eslint-disable-next-line
+  }, [overlayData.outputs?.length]);
 
   return (
     <Box
@@ -128,8 +138,7 @@ export default function AnimationControls({
         zIndex={999}
       >
         Mostrando:{" "}
-        {currentOverlay?.[0].timestamp || `Imagen ${currentIndex + 1}`} (Frame{" "}
-        {currentIndex + 1} de {overlayData.outputs.length})
+        {frameTimestamp || `Imagen ${currentIndex + 1}`} (Frame {currentIndex + 1} de {overlayData.outputs.length})
       </Box>
     </Box>
   );
