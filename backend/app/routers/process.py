@@ -4,6 +4,7 @@ from fastapi.concurrency import run_in_threadpool
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List
+from math import ceil
 import os
 
 from ..schemas import ProcessRequest, ProcessResponse, LayerResult, RangeFilter
@@ -89,49 +90,63 @@ async def process_file(payload: ProcessRequest):
         print("No se seleccionaron volúmenes, procesando todos los archivos.")
         warnings.append("No se seleccionaron volúmenes, procesando todo.")
 
-    files_with_ts = [(f, _timestamp_of(f)) for f in filepaths]
-    files_sorted = sorted(files_with_ts, key=lambda x: (x[1] is None, x[1] or 0))
+    # Preparamos (filepath_abs, ts, vol) por archivo
+    items = []
+    for f in filepaths:
+        fp_abs = str(Path(UPLOAD_DIR) / f)
+        ts = _timestamp_of(f)  # datetime|None
+        vol = helpers.extract_volume_from_filename(Path(f).name)
+        items.append((f, fp_abs, ts, vol))
+
+    # Lanzamos todo en paralelo: (archivo × campo)
+    future_to_meta = {}
+    max_workers = min(max(4, (os.cpu_count() or 4) * 2), len(items) * max(1, len(fields)))
+    frames_by_file = {}   # filepath_rel -> List[LayerResult]
+    ts_by_file = {}       # filepath_rel -> timestamp (para ordenar frames)
+
     try:
-        # Limpieza de temporales (en threadpool para no bloquear)
-        # await run_in_threadpool(helpers.cleanup_tmp)
-
-        frames: List[List[LayerResult]] = []
-        # Iteramos por file → procesar todas las capas (posible paralelismo)
-        for file, timestamp in files_sorted:
-            filepath = Path(UPLOAD_DIR) / file
-
-            future_to_meta = {} # mapear cada future a su metadata (idx, field)
-            results: List[LayerResult] = [] # imagenes procesadas de este archivo
-            with ThreadPoolExecutor(max_workers=min(8, len(fields))) as ex:
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            for (f_rel, f_abs, ts, vol) in items:
+                ts_by_file[f_rel] = ts
                 for idx, field in enumerate(fields):
-
                     fut = ex.submit(
                         radar_processor.process_radar_to_cog,
-                        filepath=filepath,
+                        filepath=f_abs,
                         product=product,
                         field_requested=field,
                         cappi_height=height,
                         elevation=elevation,
                         filters=filters,
-                        volume=helpers.extract_volume_from_filename(filepath.name)
+                        volume=vol
                     )
-                    future_to_meta[fut] = (idx, field)
+                    future_to_meta[fut] = (f_rel, ts, idx, field)
 
-                for future in as_completed(future_to_meta):
-                    idx, field = future_to_meta[future]
-                    try:
-                        result_dict = future.result()
-                        result_dict["timestamp"] = timestamp
-                        result_dict["order"] = idx
-                        results.append(LayerResult(**result_dict))
-                    except Exception as e:
-                        print(f"Error procesando {field}: {e}")
-                        warnings.append(f"{filepath.name}: {e}")
+            for fut in as_completed(future_to_meta):
+                f_rel, ts, idx, field = future_to_meta[fut]
+                try:
+                    result_dict = fut.result()
+                    # agregamos metadata para ordenar después
+                    result_dict["timestamp"] = ts
+                    result_dict["order"] = idx
+                    # acumulamos por archivo
+                    frames_by_file.setdefault(f_rel, []).append(LayerResult(**result_dict))
+                except Exception as e:
+                    print(f"Error procesando {field}: {e}")
+                    warnings.append(f"{Path(f_rel).name}: {e}")
 
-            if results:
-                # ordenar capas por order antes de agregar el frame
-                results.sort(key=lambda r: r.order)
-                frames.append(results)
+
+        # Construimos frames en el orden deseado:
+        #  1) ordenar archivos por timestamp (None al final)
+        #  2) dentro de cada archivo, ordenar capas por 'order'
+        def _ts_key(k):
+            ts = ts_by_file.get(k)
+            return (ts is None, ts or 0)
+
+        frames = []
+        for f_rel in sorted(frames_by_file.keys(), key=_ts_key):
+            layers = frames_by_file[f_rel]
+            layers.sort(key=lambda r: r.order)
+            frames.append(layers)
 
         if not frames:
             warnings.append("No se generaron imágenes de salida.")
