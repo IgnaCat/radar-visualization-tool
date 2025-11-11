@@ -143,8 +143,6 @@ def stats_from_cache(cache_key: str, polygon_gj_4326: dict):
     vals = np.asarray(arr)[valid].astype("float32", copy=False)
     if vals.size == 0:
         return {"noCoverage": True, "reason": "Selección vacia"}
-    
-    print("Values inside polygon:", vals)
 
     return {
         "stats": {
