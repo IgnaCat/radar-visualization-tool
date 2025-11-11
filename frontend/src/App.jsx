@@ -21,6 +21,32 @@ import PseudoRHIDialog from "./components/PseudoRHIDialog";
 import WarningPanel from "./components/WarningPanel";
 import AreaStatsDialog from "./components/AreaStatsDialog";
 
+// Utilidad para combinar frames de múltiples radares por timestamp
+function mergeRadarFrames(results) {
+  // results: [{radar, outputs: [[LayerResult, ...], ...]}, ...]
+  // Salida: [{ timestamp, layers: [LayerResult, ...] } ...] sincronizado por tiempo
+  const frameMap = new Map(); // key: timestamp.toISOString() || 'null', value: [LayerResult, ...]
+
+  results.forEach((radarResult) => {
+    radarResult.outputs.forEach((layers, idx) => {
+      // Tomar timestamp del primer layer (todos los de un frame tienen el mismo)
+      const ts = layers[0]?.timestamp || null;
+      const key = ts || `null_${idx}_${radarResult.radar}`;
+      if (!frameMap.has(key)) frameMap.set(key, []);
+      frameMap.get(key).push(...layers);
+    });
+  });
+
+  // Ordenar por timestamp (nulls al final)
+  const sorted = Array.from(frameMap.entries()).sort((a, b) => {
+    if (a[0].startsWith("null")) return 1;
+    if (b[0].startsWith("null")) return -1;
+    return new Date(a[0]) - new Date(b[0]);
+  });
+  // Salida: array de arrays de LayerResult (cada frame puede tener varias capas de distintos radares)
+  return sorted.map(([key, layers]) => layers);
+}
+
 function buildComputeKey({
   files,
   product,
@@ -63,7 +89,7 @@ export default function App() {
   const [showPlayButton, setShowPlayButton] = useState(false); // animacion
   const [computeKey, setComputeKey] = useState("");
   const [warnings, setWarnings] = useState([]);
-  var currentOverlay = overlayData.outputs?.[currentIndex] || null;
+  // var currentOverlay = overlayData.outputs?.[currentIndex] || null;
 
   const [alert, setAlert] = useState({
     open: false,
@@ -195,6 +221,7 @@ export default function App() {
         filters,
         selectedVolumes,
       });
+      console.log("Respuesta de process:", processResp.data);
       if (
         !processResp.data ||
         !processResp.data.outputs ||
@@ -340,6 +367,20 @@ export default function App() {
     }
   };
 
+  // ADAPTACIÓN MULTI-RADAR
+  // Si la respuesta tiene results (multi-radar), combinamos los frames por timestamp
+  let mergedOutputs = [];
+  let animation = false;
+  let product = overlayData.product;
+  if (overlayData.results) {
+    mergedOutputs = mergeRadarFrames(overlayData.results);
+    animation = mergedOutputs.length > 1;
+  } else {
+    mergedOutputs = overlayData.outputs || [];
+    animation = overlayData.animation;
+  }
+  var currentOverlay = mergedOutputs[currentIndex] || null;
+
   return (
     <>
       <MapView
@@ -366,12 +407,12 @@ export default function App() {
       <UploadButton onFilesSelected={handleFilesSelected} />
 
       {/* Slider para múltiples imágenes */}
-      {overlayData?.outputs && overlayData?.outputs.length > 0 && (
+      {mergedOutputs.length > 0 && (
         <AnimationControls
-          overlayData={overlayData}
+          overlayData={{ outputs: mergedOutputs, animation }}
           currentIndex={currentIndex}
           setCurrentIndex={setCurrentIndex}
-          showPlayButton={showPlayButton}
+          showPlayButton={animation}
         />
       )}
 
