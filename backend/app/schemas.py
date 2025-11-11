@@ -47,9 +47,17 @@ class LayerResult(BaseModel):
     def _check_path(self, v: Optional[Path]) -> Optional[str]:
         return str(v) if v else None
 
-class ProcessResponse(BaseModel):
+
+# Nuevo modelo para agrupar resultados por radar
+class RadarProcessResult(BaseModel):
+    radar: str
     animation: bool
-    outputs: List[List[LayerResult]] # frames x layers
+    outputs: List[List[LayerResult]]  # frames x layers
+
+
+# Ahora outputs es una lista de RadarProcessResult
+class ProcessResponse(BaseModel):
+    results: List[RadarProcessResult]
     product: str
     warnings: Optional[List[str]] = []
 
