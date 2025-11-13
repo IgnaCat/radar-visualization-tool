@@ -10,6 +10,7 @@ import {
 import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
 import MapView from "./components/MapView";
+import ActiveLayerPicker from "./components/ActiveLayerPicker";
 import UploadButton from "./components/UploadButton";
 import FloatingMenu from "./components/FloatingMenu";
 import Alerts from "./components/Alerts";
@@ -22,30 +23,65 @@ import WarningPanel from "./components/WarningPanel";
 import AreaStatsDialog from "./components/AreaStatsDialog";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
-function mergeRadarFrames(results) {
-  // results: [{radar, outputs: [[LayerResult, ...], ...]}, ...]
-  // Salida: [{ timestamp, layers: [LayerResult, ...] } ...] sincronizado por tiempo
-  const frameMap = new Map(); // key: timestamp.toISOString() || 'null', value: [LayerResult, ...]
+function mergeRadarFrames(results, toleranceSec = 240) {
+  // results: [{ radar, outputs: [[LayerResult,...], ...] }, ...]
 
-  results.forEach((radarResult) => {
-    radarResult.outputs.forEach((layers, idx) => {
-      // Tomar timestamp del primer layer (todos los de un frame tienen el mismo)
-      const ts = layers[0]?.timestamp || null;
-      const key = ts || `null_${idx}_${radarResult.radar}`;
-      if (!frameMap.has(key)) frameMap.set(key, []);
-      frameMap.get(key).push(...layers);
-    });
+  // 1) aplanamos a una lista de {tsISO, radar, layers}
+  const shots = [];
+  for (const r of results || []) {
+    for (const layers of r.outputs || []) {
+      const rawTs = layers?.[0]?.timestamp ?? null; // todos los layers del frame comparten ts
+      const tsISO = rawTs
+        ? new Date(rawTs).toISOString() // normalizamos SIEMPRE a ISO
+        : null;
+      shots.push({ tsISO, radar: r.radar, layers });
+    }
+  }
+
+  // 2) agrupamos por "bucket temporal" con tolerancia
+  const buckets = []; // [{ center: Date, members: [layers,...] }]
+  const tolMs = toleranceSec * 1000;
+
+  const tryPutInBucket = (ts, layers) => {
+    if (!ts) {
+      buckets.push({ center: null, members: [layers] }); // sin timestamp: bucket propio
+      return;
+    }
+    const t = new Date(ts).getTime();
+    for (const b of buckets) {
+      if (b.center === null) continue;
+      const dt = Math.abs(b.center.getTime() - t);
+      if (dt <= tolMs) {
+        b.members.push(layers);
+        return;
+      }
+    }
+    // no encontró bucket compatible → crear uno nuevo
+    buckets.push({ center: new Date(t), members: [layers] });
+  };
+
+  for (const s of shots) {
+    tryPutInBucket(s.tsISO, s.layers);
+  }
+
+  // 3) ordenar buckets por tiempo (los null al final)
+  buckets.sort((a, b) => {
+    if (a.center === null && b.center === null) return 0;
+    if (a.center === null) return 1;
+    if (b.center === null) return -1;
+    return a.center - b.center;
   });
 
-  // Ordenar por timestamp (nulls al final)
-  const sorted = Array.from(frameMap.entries()).sort((a, b) => {
-    if (a[0].startsWith("null")) return 1;
-    if (b[0].startsWith("null")) return -1;
-    return new Date(a[0]) - new Date(b[0]);
-  });
-  // Salida: array de arrays de LayerResult (cada frame puede tener varias capas de distintos radares)
-  return sorted.map(([key, layers]) => layers);
+  // 4) salida: cada bucket → un “frame” con todas las capas mezcladas (multi-radar)
+  //    mantenemos el orden interno de cada frame por 'order' (ya viene en cada LayerResult)
+  return buckets.map((b) =>
+    b.members
+      .flat()
+      .slice()
+      .sort((L, R) => (L.order ?? 0) - (R.order ?? 0))
+  );
 }
+
 
 function buildComputeKey({
   files,
@@ -86,7 +122,7 @@ export default function App() {
   const [activeElevation, setActiveElevation] = useState(null);
   const [activeHeight, setActiveHeight] = useState(null);
   const allCogsRef = useRef(new Set());
-  const [showPlayButton, setShowPlayButton] = useState(false); // animacion
+  // animación controlada por variable 'animation' derivada de outputs
   const [computeKey, setComputeKey] = useState("");
   const [warnings, setWarnings] = useState([]);
   // var currentOverlay = overlayData.outputs?.[currentIndex] || null;
@@ -107,6 +143,8 @@ export default function App() {
   const [areaPolygon, setAreaPolygon] = useState(null);
   const [areaStatsOpen, setAreaStatsOpen] = useState(false);
   const drawnLayerRef = useRef(null); // referencia a la capa dibujada
+  // archivo seleccionado manualmente para herramientas (pixel/área/RHI)
+  const [activeToolFile, setActiveToolFile] = useState(null);
   var radarSite = overlayData?.metadata?.site || null;
 
   // Registrar cleanup en cierre de pestaña/ventana
@@ -238,9 +276,7 @@ export default function App() {
       setWarnings(processResp.data.warnings || []);
       setCurrentIndex(0);
       setComputeKey(nextKey);
-      setShowPlayButton(
-        processResp.data?.outputs && processResp.data.outputs.length > 1
-      );
+      // Animación se calcula dinámicamente más abajo
 
       // Guardar todos los cogs para el cleanup
       // const fromOutputs = cogFsPaths(processResp.data?.outputs || []);
@@ -335,7 +371,7 @@ export default function App() {
   const handleMapClickPixelStat = async (latlng) => {
     try {
       const payload = {
-        filepath: uploadedFiles[currentIndex],
+        filepath: activeToolFile || uploadedFiles[currentIndex],
         field: fieldsUsed?.[0] || "DBZH",
         product: overlayData?.product || "PPI",
         elevation: activeElevation,
@@ -369,9 +405,10 @@ export default function App() {
 
   // ADAPTACIÓN MULTI-RADAR
   // Si la respuesta tiene results (multi-radar), combinamos los frames por timestamp
+  // sino dejamos la respuesta vieja
   let mergedOutputs = [];
   let animation = false;
-  let product = overlayData.product;
+  // const product = overlayData.product;
   if (overlayData.results) {
     mergedOutputs = mergeRadarFrames(overlayData.results);
     animation = mergedOutputs.length > 1;
@@ -380,6 +417,15 @@ export default function App() {
     animation = overlayData.animation;
   }
   var currentOverlay = mergedOutputs[currentIndex] || null;
+
+  // Sincronizar archivo activo con las capas visibles del frame actual
+  useEffect(() => {
+    const sources = Array.isArray(currentOverlay)
+      ? currentOverlay.map((L) => L?.source_file).filter(Boolean)
+      : [];
+    if (sources.length === 0) return;
+    setActiveToolFile((prev) => (prev && sources.includes(prev) ? prev : sources[0]));
+  }, [currentOverlay]);
 
   return (
     <>
@@ -395,6 +441,12 @@ export default function App() {
         pixelStatMode={pixelStatMode}
         onPixelStatClick={handleMapClickPixelStat}
         pixelStatMarker={pixelStatMarker}
+      />
+      {/* Selector de capa activa para herramientas (cuando hay varias capas a la vez) */}
+      <ActiveLayerPicker
+        layers={Array.isArray(currentOverlay) ? currentOverlay : []}
+        value={activeToolFile}
+        onChange={setActiveToolFile}
       />
       <ColorLegend fields={fieldsUsed} />
       <FloatingMenu
@@ -434,7 +486,7 @@ export default function App() {
       <PseudoRHIDialog
         open={rhiOpen}
         onClose={() => setRhiOpen(false)}
-        filepath={uploadedFiles[currentIndex]}
+        filepath={activeToolFile || uploadedFiles[currentIndex]}
         radarSite={radarSite}
         fields_present={
           Array.from(
@@ -452,7 +504,7 @@ export default function App() {
         onClose={handleCloseAreaStats}
         requestFn={handleAreaStatsRequest}
         payload={{
-          filepath: uploadedFiles[currentIndex],
+          filepath: activeToolFile || uploadedFiles[currentIndex],
           field: fieldsUsed?.[0] || "DBZH",
           product: overlayData?.product || "PPI",
           elevation: activeElevation,
