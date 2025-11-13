@@ -185,6 +185,7 @@ def process_radar_to_cog(
     cog_path = Path(output_dir) / unique_cog_name
     file_uri = Path(cog_path).resolve().as_posix()
 
+    # Generamos el resumen de salida
     style = "&resampling=nearest&warp_resampling=nearest"
     summary = {
         "image_url": f"static/tmp/{unique_cog_name}",
@@ -280,11 +281,12 @@ def process_radar_to_cog(
     interp = 'nearest'
 
     # Verificamos si los filtros afectan la interpolación (y por ende la grilla)
-    # Basicamente, si hay filtros sobre campos QC (RHOHV/NCP/SNR) aplicamos GateFilter
+    # Basicamente, si hay filtros sobre campos QC (RHOHV) aplicamos GateFilter
+    # Los filtros visuales (sobre el mismo campo) se aplican post-grid
     needs_regrid = filters_affect_interpolation(filters, field_to_use)
     qc_sig = qc_signature(filters)
 
-    # Intentamos cachear la 2D colapsada post-grid
+    # Intentamos cachear la 2D colapsada
     cache_key = grid2d_cache_key(
         file_hash=file_hash,
         product_upper=product_upper,
@@ -309,6 +311,7 @@ def process_radar_to_cog(
         min_radius = max(800.0, 1.2 * grid_resolution)
         xy_factor = 0.02
 
+        # Creamos la grilla 3D
         grid = pyart.map.grid_from_radars(
             radar_to_use,
             grid_shape=(z_points, y_points, x_points),
@@ -343,13 +346,12 @@ def process_radar_to_cog(
         y = grid.y['data'].astype(float)  # (ny,)
         ny, nx = arr2d.shape
 
-        # pasos y origen (formato raster “arriba-izquierda”)
         dx = float(np.mean(np.diff(x))) if x.size > 1 else (x_grid_limits[1]-x_grid_limits[0]) / max(nx-1, 1)
         dy = float(np.mean(np.diff(y))) if y.size > 1 else (y_grid_limits[1]-y_grid_limits[0]) / max(ny-1, 1)
         xmin = float(x.min()) if x.size else x_grid_limits[0]
         ymax = float(y.max()) if y.size else y_grid_limits[1]
 
-        # construye la transformación q ubica la esquina superior-izquierda del píxel (0,0)
+        # Construye la transformación q ubica la esquina superior-izquierda del píxel (0,0)
         transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
 
         # CRS nativo del grid de Py-ART
@@ -363,7 +365,7 @@ def process_radar_to_cog(
         }
         GRID2D_CACHE[cache_key] = pkg_cached
 
-    # --- Si hay filtros “visuales” sobre el MISMO campo, aplicar máscara post-grid ---
+    # Si hay filtros “visuales” sobre el MISMO campo, aplicar máscara post-grid
     # Regla: cualquier filtro cuyo .field == field_to_use (mismo campo) lo aplicamos como máscara 2D
     masked = np.ma.array(pkg_cached["arr"], copy=True)
     dyn_mask = np.zeros(masked.shape, dtype=bool)
@@ -390,10 +392,10 @@ def process_radar_to_cog(
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
     tiff_path = Path(output_dir) / unique_tif_name
 
-    # Creamos un grid de "bolsillo” (sin reinterpolar)
-    # Reusamos la malla x/y de la cache: como no guardamos grid completo, derivamos dims del array
-    ny, nx = masked.shape
+    # Creamos un grid (ahora 2D) de "bolsillo” (sin reinterpolar)
+    # Reusamos la malla x/y de la cache: como no guardamos grid anterior completo, derivamos dims del array
     # Armamos un grid pyart mínimo para write_grid_geotiff, escribiendo el 2D como nivel 0
+    ny, nx = masked.shape
     grid_fake = pyart.core.Grid(
         time={'data': np.array([0])},
         fields={field_to_use: {'data': masked[np.newaxis, :, :], '_FillValue': -9999.0}},
@@ -419,7 +421,7 @@ def process_radar_to_cog(
         warp_to_mercator=True
     )
 
-    # Convertir a COG
+    # Convertir a COG (Cloud Optimized GeoTIFF)
     _ = convert_to_cog(tiff_path, cog_path)
 
      # Limpiar el GeoTIFF temporal (queda SOLO el COG)
