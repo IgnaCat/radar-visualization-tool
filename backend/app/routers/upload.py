@@ -35,6 +35,7 @@ async def upload(files: list[UploadFile] = File(...)):
     warnings: list[str] = []
     saved_files: list[dict] = []
     volumes: set[int] = set()
+    radars: set[str] = set()
 
     try:
         for file in files:
@@ -52,9 +53,11 @@ async def upload(files: list[UploadFile] = File(...)):
             if target.exists():
                 warnings.append(f"El archivo '{file.filename}' ya existe")
                 meta = extract_radar_metadata(str(target))
-                _, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
+                radar, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
                 if volume is not None:
                     volumes.add(volume)
+                if radar is not None:
+                    radars.add(radar)
                 saved_files.append({
                     "filepath": str(target),
                     "filename": file.filename,
@@ -106,7 +109,7 @@ async def upload(files: list[UploadFile] = File(...)):
                 "metadata": meta,
             })
 
-        return {"files": saved_files, "warnings": warnings, "volumes": list(volumes)}
+        return {"files": saved_files, "warnings": warnings, "volumes": list(volumes), "radars": list(radars)}
 
     except HTTPException as exc:
         # rollback de los que se alcanzaron a guardar

@@ -89,6 +89,7 @@ export default function ProductSelectorDialog({
   fields_present = ["DBZH"],
   elevations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
   volumes = [],
+  radars = [],
   onClose,
   onConfirm,
   initialProduct = "ppi",
@@ -112,6 +113,7 @@ export default function ProductSelectorDialog({
   const [product, setProduct] = useState(initialProduct);
   const [height, setHeight] = useState(initialCappiHeight);
   const [selectedVolumes, setSelectedVolumes] = useState(volumes);
+  const [selectedRadars, setSelectedRadars] = useState(radars);
 
   // Elevación: trabajemos con índices de elevación
   const initialElevationIndex = useMemo(() => {
@@ -136,6 +138,10 @@ export default function ProductSelectorDialog({
   useEffect(() => {
     setSelectedVolumes(volumes);
   }, [volumes]);
+
+  useEffect(() => {
+    setSelectedRadars(radars);
+  }, [radars]);
 
   // Variable activa (usamos para los filtros)
   const activeField = (
@@ -193,6 +199,7 @@ export default function ProductSelectorDialog({
       elevation: isPPI ? elevationIdx : undefined,
       filters: filtersOut,
       selectedVolumes,
+      selectedRadars,
     });
     onClose();
   };
@@ -204,6 +211,7 @@ export default function ProductSelectorDialog({
     setElevationIdx(initialElevationIndex);
     setFilters(structuredClone(initialFilters));
     setSelectedVolumes(volumes);
+    setSelectedRadars(radars);
     onClose();
   };
 
@@ -281,6 +289,51 @@ export default function ProductSelectorDialog({
                     }}
                   >
                     {`Volumen ${vol}`}
+                  </Button>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
+
+        {/* Selección de radares */}
+        {Array.isArray(radars) && radars.length > 0 && (
+          <Box mt={2} mb={2}>
+            <Typography variant="subtitle1" mb={2} gutterBottom>
+              Seleccionar radares
+            </Typography>
+            <Box display="flex" flexWrap="wrap" gap={1}>
+              {radars.map((site) => {
+                const isSelected = selectedRadars.includes(site);
+                return (
+                  <Button
+                    key={site}
+                    variant={isSelected ? "contained" : "outlined"}
+                    onClick={() => {
+                      setSelectedRadars((prev) =>
+                        prev.includes(site)
+                          ? prev.filter((s) => s !== site)
+                          : [...prev, site]
+                      );
+                    }}
+                    sx={{
+                      borderRadius: 999,
+                      backgroundColor: isSelected ? "#888" : "#eee",
+                      color: isSelected ? "#fff" : "#333",
+                      fontWeight: 500,
+                      textTransform: "none",
+                      boxShadow: isSelected ? 2 : 0,
+                      transition: "all 0.2s",
+                      "&:hover": {
+                        backgroundColor: isSelected ? "#555" : "#ccc",
+                        color: isSelected ? "#fff" : "#111",
+                      },
+                      minWidth: 90,
+                      px: 2,
+                      py: 1,
+                    }}
+                  >
+                    {String(site)}
                   </Button>
                 );
               })}
