@@ -82,7 +82,6 @@ function mergeRadarFrames(results, toleranceSec = 240) {
   );
 }
 
-
 function buildComputeKey({
   files,
   product,
@@ -110,6 +109,7 @@ export default function App() {
     metadata: {},
   });
   const [opacity, setOpacity] = useState([0.95]);
+  const [opacityByField, setOpacityByField] = useState({});
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
@@ -226,9 +226,19 @@ export default function App() {
       const filters = data.filters;
       const selectedVolumes = data.selectedVolumes;
       const enabledLayers = layers.filter((l) => l.enabled).map((l) => l.label);
-      const opacities = layers.filter((l) => l.enabled).map((l) => l.opacity);
+      const enabledLayerObjs = layers.filter((l) => l.enabled);
+      const opacities = enabledLayerObjs.map((l) => l.opacity);
+
+      // Build field-based opacity map so all radars for the same field share opacity
+      const opacityMap = Object.fromEntries(
+        enabledLayerObjs.map((l) => [
+          String(l.label || l.field).toUpperCase(),
+          Number(l.opacity ?? 1),
+        ])
+      );
 
       setOpacity(opacities);
+      setOpacityByField(opacityMap);
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
       setFiltersUsed(filters);
@@ -424,7 +434,9 @@ export default function App() {
       ? currentOverlay.map((L) => L?.source_file).filter(Boolean)
       : [];
     if (sources.length === 0) return;
-    setActiveToolFile((prev) => (prev && sources.includes(prev) ? prev : sources[0]));
+    setActiveToolFile((prev) =>
+      prev && sources.includes(prev) ? prev : sources[0]
+    );
   }, [currentOverlay]);
 
   return (
@@ -432,6 +444,7 @@ export default function App() {
       <MapView
         overlayData={currentOverlay}
         opacities={opacity}
+        opacityByField={opacityByField}
         pickPointMode={pickPointMode}
         radarSite={radarSite}
         pickedPoint={pickedPoint}

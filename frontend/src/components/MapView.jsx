@@ -90,7 +90,7 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
       // liberar maxBounds al cambiar de producto
       try {
         map.setMaxBounds(null);
-      } catch { }
+      } catch {}
     };
   }, [tilejsonUrl, map]);
 
@@ -126,6 +126,7 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
 export default function MapView({
   overlayData,
   opacities = [0.95],
+  opacityByField = {},
   pickPointMode = false,
   radarSite = null,
   pickedPoint = null,
@@ -155,14 +156,21 @@ export default function MapView({
 
       {/* Mostrar todas las capas del frame actual (pueden ser de distintos radares) */}
       {Array.isArray(overlayData) &&
-        overlayData.map((L, idx) => (
-          <COGTile
-            key={`${L.field || "layer"}|${L.tilejson_url}`}
-            tilejsonUrl={L.tilejson_url}
-            opacity={opacities[idx] ?? 1}
-            zIndex={baseZ + (n - 1 - idx) * 10}
-          />
-        ))}
+        overlayData.map((L, idx) => {
+          const keyField = String(L.field || L.label || "").toUpperCase();
+          const fieldOpacity =
+            typeof opacityByField[keyField] === "number"
+              ? opacityByField[keyField]
+              : opacities[idx] ?? 1;
+          return (
+            <COGTile
+              key={`${L.field || "layer"}|${L.tilejson_url}`}
+              tilejsonUrl={L.tilejson_url}
+              opacity={fieldOpacity}
+              zIndex={baseZ + (n - 1 - idx) * 10}
+            />
+          );
+        })}
       <MapPickOverlay
         enabled={pickPointMode}
         radarSite={radarSite}
