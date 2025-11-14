@@ -90,6 +90,7 @@ function buildComputeKey({
   height,
   filters,
   selectedVolumes,
+  selectedRadars,
 }) {
   return stableStringify({
     files,
@@ -99,6 +100,7 @@ function buildComputeKey({
     height,
     filters,
     selectedVolumes,
+    selectedRadars,
   });
 }
 
@@ -117,6 +119,7 @@ export default function App() {
   const [fieldsUsed, setFieldsUsed] = useState("DBZH");
   const [filesInfo, setFilesInfo] = useState([]);
   const [volumes, setVolumes] = useState([]); // lista de volúmenes cargados sin repetidos
+  const [selectedRadars, setSelectedRadars] = useState([]);
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const [filtersUsed, setFiltersUsed] = useState([]); // filtros aplicados
   const [activeElevation, setActiveElevation] = useState(null);
@@ -189,6 +192,10 @@ export default function App() {
         const merged = [...prev, ...uploadResp.data.volumes];
         return Array.from(new Set(merged));
       });
+      setSelectedRadars((prev) => {
+        const merged = [...prev, ...uploadResp.data.radars];
+        return Array.from(new Set(merged));
+      });
       setUploadedFiles((prev) => {
         const merged = [...prev, ...filepaths];
         // elimina duplicados preservando el orden
@@ -225,6 +232,7 @@ export default function App() {
       const elevation = data.elevation;
       const filters = data.filters;
       const selectedVolumes = data.selectedVolumes;
+      const selectedRadars = data.selectedRadars;
       const enabledLayers = layers.filter((l) => l.enabled).map((l) => l.label);
       const enabledLayerObjs = layers.filter((l) => l.enabled);
       const opacities = enabledLayerObjs.map((l) => l.opacity);
@@ -253,6 +261,7 @@ export default function App() {
         height,
         filters,
         selectedVolumes,
+        selectedRadars,
       });
 
       // Si solo cambió UI (opacidad/orden), no reproceses:
@@ -268,6 +277,7 @@ export default function App() {
         elevation,
         filters,
         selectedVolumes,
+        selectedRadars,
       });
       console.log("Respuesta de process:", processResp.data);
       if (
@@ -490,6 +500,7 @@ export default function App() {
           new Set(filesInfo.map((f) => f.metadata.elevations).flat())
         )}
         volumes={volumes}
+        radars={selectedRadars}
         initialLayers={savedLayers}
         onClose={() => setSelectorOpen(false)}
         onConfirm={handleProductChosen}

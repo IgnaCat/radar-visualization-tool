@@ -34,6 +34,7 @@ async def process_file(payload: ProcessRequest):
     elevation: int = payload.elevation
     filters: List[RangeFilter] = payload.filters
     selected_volumes: List[str] = getattr(payload, "selectedVolumes", None) or []
+    selected_radars: List[str] = getattr(payload, "selectedRadars", None) or []
     warnings: List[str] = []
 
     # Validar inputs
@@ -89,6 +90,20 @@ async def process_file(payload: ProcessRequest):
     else:
         print("No se seleccionaron volúmenes, procesando todos los archivos.")
         warnings.append("No se seleccionaron volúmenes, procesando todo.")
+
+    # Filtrar archivos por radares seleccionados (site)
+    if selected_radars:
+        fp2 = []
+        for f in filepaths:
+            try:
+                radar, _, _, _ = helpers.extract_metadata_from_filename(Path(f).name)
+            except Exception:
+                radar = None
+            if radar and radar in selected_radars:
+                fp2.append(f)
+            else:
+                warnings.append(f"{Path(f).name}: Radar '{radar}' no seleccionado, se omite.")
+        filepaths = fp2
 
     # Preparamos (filepath_abs, ts, vol, radar) por archivo
     items = []

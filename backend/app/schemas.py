@@ -24,6 +24,7 @@ class ProcessRequest(BaseModel):
     )
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
     selectedVolumes: Optional[List[str]]
+    selectedRadars: Optional[List[str]]
 
 class LayerResult(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL
