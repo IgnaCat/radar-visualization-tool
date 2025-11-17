@@ -5,6 +5,7 @@ import {
   useMap,
   CircleMarker,
   Tooltip,
+  Polyline,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "./MapPickOverlay";
@@ -136,11 +137,22 @@ export default function MapView({
   pixelStatMode = false,
   onPixelStatClick,
   pixelStatMarker = null,
+  lineOverlay = null,
+  onClearLineOverlay,
+  rhiEndpoints = null, // { start: {lat, lon}, end: {lat, lon} }
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
   // overlayData ahora puede ser un array de capas de distintos radares para el frame actual
   const n = overlayData?.length ?? 0;
+
+  // Si pickedPoint se limpia, avisar al padre para limpiar la línea
+  useEffect(() => {
+    if (!pickedPoint && typeof onClearLineOverlay === "function") {
+      onClearLineOverlay();
+    }
+  }, [pickedPoint]);
+
   return (
     <MapContainer
       center={center}
@@ -201,6 +213,31 @@ export default function MapView({
             </Tooltip>
           </CircleMarker>
         )}
+      {/* Marcadores persistentes para los puntos de RHI (inicio/fin) */}
+      {rhiEndpoints?.start &&
+        Number.isFinite(rhiEndpoints.start.lat) &&
+        Number.isFinite(rhiEndpoints.start.lon) && (
+          <CircleMarker
+            center={[rhiEndpoints.start.lat, rhiEndpoints.start.lon]}
+            radius={6}
+            pathOptions={{ color: "#00aaff", weight: 2, fillOpacity: 0.7 }}
+          />
+        )}
+      {rhiEndpoints?.end &&
+        Number.isFinite(rhiEndpoints.end.lat) &&
+        Number.isFinite(rhiEndpoints.end.lon) && (
+          <CircleMarker
+            center={[rhiEndpoints.end.lat, rhiEndpoints.end.lon]}
+            radius={6}
+            pathOptions={{ color: "#00aaff", weight: 2, fillOpacity: 0.7 }}
+          />
+        )}
+      {Array.isArray(lineOverlay) && lineOverlay.length === 2 && (
+        <Polyline
+          positions={lineOverlay}
+          pathOptions={{ color: "#00aaff", weight: 3, opacity: 0.9 }}
+        />
+      )}
     </MapContainer>
   );
 }

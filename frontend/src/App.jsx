@@ -142,6 +142,10 @@ export default function App() {
   const [rhiOpen, setRhiOpen] = useState(false);
   const [pickPointMode, setPickPointMode] = useState(false);
   const [pickedPoint, setPickedPoint] = useState(null); // { lat, lon } seleccionado
+  const [rhiLinePreview, setRhiLinePreview] = useState({
+    start: null,
+    end: null,
+  });
   const [areaDrawMode, setAreaDrawMode] = useState(false);
   const [areaPolygon, setAreaPolygon] = useState(null);
   const [areaStatsOpen, setAreaStatsOpen] = useState(false);
@@ -322,20 +326,41 @@ export default function App() {
   const handleOpenRHI = () => setRhiOpen(true);
 
   const handleRequestPickPoint = () => {
+    // Activar modo pick point en el mapa para el RHI
     setPickedPoint(null);
     setPickPointMode(true);
   };
   const handlePickPoint = (pt) => {
     setPickedPoint(pt);
     setPickPointMode(false); // se desactiva al elegir
+    // Si aún no hay punto inicial para el RHI, fijarlo para que el marcador persista
+    setRhiLinePreview((prev) => {
+      if (!prev?.start) {
+        return {
+          start: { lat: pt.lat, lon: pt.lng ?? pt.lon },
+          end: prev?.end || null,
+        };
+      }
+      return prev;
+    });
   };
-  const handleClearPickedPoint = () => setPickedPoint(null);
+  const handleClearPickedPoint = () => {
+    setPickedPoint(null);
+    setRhiLinePreview({ start: null, end: null });
+  };
+
+  // Callback para limpiar la línea cuando se limpian los puntos
+  const handleClearLineOverlay = () => {
+    setRhiLinePreview({ start: null, end: null });
+  };
 
   const handleGenerateRHI = async ({
     filepath,
     field,
     end_lat,
     end_lon,
+    start_lat,
+    start_lon,
     filters,
     // max_length_km,
     // elevation,
@@ -345,6 +370,8 @@ export default function App() {
       field,
       end_lat,
       end_lon,
+      start_lat,
+      start_lon,
       filters,
     });
     // devolvemos lo que el dialog espera
@@ -464,6 +491,16 @@ export default function App() {
         pixelStatMode={pixelStatMode}
         onPixelStatClick={handleMapClickPixelStat}
         pixelStatMarker={pixelStatMarker}
+        lineOverlay={
+          rhiLinePreview?.start && rhiLinePreview?.end
+            ? [
+                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+              ]
+            : null
+        }
+        onClearLineOverlay={handleClearLineOverlay}
+        rhiEndpoints={{ start: rhiLinePreview.start, end: rhiLinePreview.end }}
       />
       {/* Selector de capa activa para herramientas (cuando hay varias capas a la vez) */}
       <ActiveLayerPicker
@@ -521,6 +558,7 @@ export default function App() {
         pickedPoint={pickedPoint}
         onClearPickedPoint={handleClearPickedPoint}
         onGenerate={handleGenerateRHI}
+        onLinePreviewChange={setRhiLinePreview}
       />
 
       <AreaStatsDialog

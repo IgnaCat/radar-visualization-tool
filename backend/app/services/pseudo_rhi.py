@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 # matplotlib.rcParams['pcolormesh.shading'] = 'auto' # evita el error de pcolormesh
 from fastapi import HTTPException
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from geopy.distance import geodesic
 from rasterio.vrt import WarpedVRT
 from scipy.interpolate import RegularGridInterpolator
@@ -58,16 +58,16 @@ def calcule_radial_angle(radar_lat, radar_lon, punto_lat, punto_lon):
 
 
 def variable_radar_cross_section(
-        lat, 
-        lon, 
-        radar_lat,
-        radar_lon,
-        volumen_radar_data,
-        output_path,
-        range_max,
-        variable='DBZH',
-        cmap='viridis',
-        gf=None
+    start_lat,
+    start_lon,
+    end_lat,
+    end_lon,
+    volumen_radar_data,
+    output_path,
+    range_max: float,
+    variable='DBZH',
+    cmap='viridis',
+    gf=None,
 ):
     """
     Función para graficar datos radiales del radar en un perfil a un ángulo dado.
@@ -75,14 +75,21 @@ def variable_radar_cross_section(
     También grafica el perfil de elevación del terreno.
 
     Parámetros:
+    - start_lat: Latitud del punto inicial del perfil.
+    - start_lon: Longitud del punto inicial del perfil.
+    - end_lat: Latitud del punto final del perfil.
+    - end_lon: Longitud del punto final del perfil.
     - volumen_radar_data: Datos del radar en formato Py-ART.
-    - radial_angle: Ángulo del radial para visualizar (de 0 a 360 grados).
+    - output_path: Ruta donde se guardará la imagen generada.
+    - range_max: Distancia máxima a graficar (en km).
     - variable: Variable a graficar (por defecto 'DBZH').
+    - cmap: Colormap a utilizar (por defecto 'viridis').
+    - gf: GateFilter para enmascarar datos (opcional).
     """
     ######################################################################
     tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
 
-    radial_angle = calcule_radial_angle(radar_lat, radar_lon, lat, lon)
+    radial_angle = calcule_radial_angle(start_lat, start_lon, end_lat, end_lon)
 
     # Distancia máxima según el radar (en km)
     radar_range_km = round(volumen_radar_data.ngates * volumen_radar_data.range['meters_between_gates'] / 1000)
@@ -96,7 +103,7 @@ def variable_radar_cross_section(
     lon_points = np.empty(num_points, dtype=np.float64)
     for i in range(num_points):
         d_km = (i * step_m) / 1000.0
-        p = geodesic(kilometers=d_km).destination((radar_lat, radar_lon), radial_angle)
+        p = geodesic(kilometers=d_km).destination((start_lat, start_lon), radial_angle)
         lat_points[i], lon_points[i] = p.latitude, p.longitude
 
     # Muestreo del DEM (Digital Elevation Model) solo en esos puntos y en float32 con NaN
@@ -132,7 +139,9 @@ def variable_radar_cross_section(
     perfil_elevacion_km = (perfil_elevacion - offset) / 1000.0
 
     # Distancias al radar para eje X del perfil
-    distances = [geodesic((radar_lat, radar_lon), (lat_points[i], lon_points[i])).km for i in range(len(lat_points))]
+    distances = np.array([
+        geodesic((start_lat, start_lon), (lat_points[i], lon_points[i])).km for i in range(len(lat_points))
+    ], dtype=np.float64)
 
     # Empezamos con la parte del pseudo corte
     # Hacemos una copia profunda del objeto volumen_radar_data para no modificar el original
@@ -162,13 +171,13 @@ def variable_radar_cross_section(
     # Grafico el perfil de elevación del terreno
     ax2.plot(distances, perfil_elevacion_km, label=None, color='black', linewidth=2)
 
-    # Marcar el punto de interés con un asterisco
-    distancia_interes = geodesic((radar_lat, radar_lon), (lat, lon)).km
+    # Marcar el punto de interés con un asterisco (punto final)
+    distancia_interes = geodesic((start_lat, start_lon), (end_lat, end_lon)).km
 
     # Interpolar la elevación del punto interés directamente del DEM
     with rasterio.open(tif_path) as src:
         with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
-            val = next(vrt.sample([(lon, lat)]))[0]
+            val = next(vrt.sample([(end_lon, end_lat)]))[0]
             elevacion_interes = np.float32(np.nan if (vrt.nodata is not None and val == vrt.nodata) else val)
     if np.isfinite(elevacion_interes):
         elevacion_interes_value = (elevacion_interes - offset) / 1000.0
@@ -203,13 +212,19 @@ def generate_pseudo_rhi_png(
     end_lat: float,
     max_length_km: float,
     elevation: int = 0,
-    filters : List[RangeFilter] = [],
-    output_dir: str = "app/storage/tmp"
+    filters: List[RangeFilter] = [],
+    output_dir: str = "app/storage/tmp",
+    start_lon: Optional[float] = None,
+    start_lat: Optional[float] = None,
 ):
     
     file_hash = md5_file(filepath)[:12]
     filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
-    points = f"{end_lon}_{end_lat}"
+    points = (
+        f"{start_lon}_{start_lat}__{end_lon}_{end_lat}"
+        if (start_lon is not None and start_lat is not None)
+        else f"{end_lon}_{end_lat}"
+    )
     unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
@@ -224,9 +239,14 @@ def generate_pseudo_rhi_png(
     site_lon, site_lat, site_alt = get_radar_site(radar)
     range_max_km = safe_range_max_m(radar) / 1000.0
 
+    # Validar puntos dentro del rango máximo
     if _km_between(site_lon, site_lat, end_lon, end_lat) > range_max_km:
         print(f"El punto está fuera del alcance ({range_max_km:.1f} km).")
         raise HTTPException(status_code=400, detail=f"El punto está fuera del alcance ({range_max_km:.1f} km).")
+    if start_lon is not None and start_lat is not None:
+        dstart = _km_between(site_lon, site_lat, float(start_lon), float(start_lat))
+        if dstart > range_max_km:
+            raise HTTPException(status_code=400, detail=f"El punto de inicio está fuera del alcance ({range_max_km:.1f} km).")
 
     # Filtros (se aplican por GateFilter para enmascarar fuera de rango)
     gf = build_gatefilter(radar, field_name, filters, is_rhi=True)
@@ -234,18 +254,19 @@ def generate_pseudo_rhi_png(
     # Colormap + vmin/vmax
     cmap, vmin, vmax, _ = colormap_for(field)
 
-    #Graficar perfil radial
+    # Graficar perfil radial
+    # Si no hay punto inicial, usar el del radar
     variable_radar_cross_section(
+        site_lat,
+        site_lon,
         end_lat, 
         end_lon,
-        site_lat, 
-        site_lon, 
         radar,
         out_path,
         range_max=range_max_km,
         variable=field_name,
         cmap=cmap,
-        gf=gf
+        gf=gf,
     )
 
 
@@ -254,6 +275,11 @@ def generate_pseudo_rhi_png(
         "metadata": {
             "radar_site": {"lon": site_lon, "lat": site_lat, "alt_m": site_alt},
             "field": field.upper(),
-            "point": {"lon": end_lon, "lat": end_lat},
+            "start_point": (
+                {"lon": start_lon, "lat": start_lat}
+                if (start_lon is not None and start_lat is not None)
+                else {"lon": site_lon, "lat": site_lat}
+            ),
+            "end_point": {"lon": end_lon, "lat": end_lat},
         }
     }

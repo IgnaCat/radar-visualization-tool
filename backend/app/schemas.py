@@ -72,6 +72,8 @@ class PseudoRHIRequest(BaseModel):
     field: str = Field(..., description="Campo a visualizar, ej. DBZH")
     end_lon: float       # Coordenadas punto de interés
     end_lat: float
+    start_lon: Optional[float] = None   # Coordenadas opcionales de inicio
+    start_lat: Optional[float] = None
     max_length_km: float = 240.0
     elevation: Optional[int] = Field(
         default=0, ge=0, le=12,

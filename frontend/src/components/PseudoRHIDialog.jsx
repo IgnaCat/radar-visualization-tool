@@ -40,26 +40,58 @@ export default function PseudoRHIDialog({
   pickedPoint, // { lat, lon } desde el mapa
   onClearPickedPoint, // limpiar selección si hace falta
   onGenerate, // fn async que llama API (generatePseudoRHI)
+  onLinePreviewChange, // opcional: ( { start: {lat,lon} | null, end: {lat,lon} | null } ) => void
 }) {
   const [field, setField] = useState(fields_present[0] || "DBZH");
-  const [lat, setLat] = useState("");
-  const [lon, setLon] = useState("");
+  const [startLat, setStartLat] = useState("");
+  const [startLon, setStartLon] = useState("");
+  const [endLat, setEndLat] = useState("");
+  const [endLon, setEndLon] = useState("");
   const [loading, setLoading] = useState(false);
   const [resultImg, setResultImg] = useState(null);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState([]);
+  const [pickTarget, setPickTarget] = useState(null); // 'start' | 'end' | null
 
   // sync coords desde el picker
   useEffect(() => {
-    if (pickedPoint) {
-      setLat(pickedPoint.lat.toFixed(6));
-      setLon(pickedPoint.lon.toFixed(6));
+    if (pickedPoint && pickTarget) {
+      const lat = pickedPoint.lat.toFixed(6);
+      const lon = pickedPoint.lon.toFixed(6);
+      if (pickTarget === "start") {
+        setStartLat(lat);
+        setStartLon(lon);
+      } else if (pickTarget === "end") {
+        setEndLat(lat);
+        setEndLon(lon);
+      }
+      setPickTarget(null);
     }
-  }, [pickedPoint]);
+  }, [pickedPoint, pickTarget]);
 
-  const handlePick = () => {
+  useEffect(() => {
+    onLinePreviewChange?.({
+      start:
+        startLat !== "" && startLon !== ""
+          ? { lat: Number(startLat), lon: Number(startLon) }
+          : null,
+      end:
+        endLat !== "" && endLon !== ""
+          ? { lat: Number(endLat), lon: Number(endLon) }
+          : null,
+    });
+  }, [startLat, startLon, endLat, endLon]);
+
+  const handlePickStart = () => {
     setResultImg(null);
     setError("");
+    setPickTarget("start");
+    onRequestPickPoint?.();
+  };
+  const handlePickEnd = () => {
+    setResultImg(null);
+    setError("");
+    setPickTarget("end");
     onRequestPickPoint?.();
   };
 
@@ -70,10 +102,19 @@ export default function PseudoRHIDialog({
       setError("Seleccione un archivo primero");
       return;
     }
-    const end_lat = Number(lat);
-    const end_lon = Number(lon);
-    if (!Number.isFinite(end_lat) || !Number.isFinite(end_lon)) {
-      setError("Lat/Lon inválidos");
+    const sLat = Number(startLat);
+    const sLon = Number(startLon);
+    const eLat = Number(endLat);
+    const eLon = Number(endLon);
+    if (!Number.isFinite(eLat) || !Number.isFinite(eLon)) {
+      setError("Lat/Lon de destino inválidos");
+      return;
+    }
+    // start es opcional, si no se informa usamos el centro del radar (comportamiento anterior)
+    if ((startLat === "" || startLon === "") && radarSite) {
+      // no forzamos al usuario a completar start si hay radarSite
+    } else if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) {
+      setError("Lat/Lon de inicio inválidos");
       return;
     }
     try {
@@ -81,8 +122,10 @@ export default function PseudoRHIDialog({
       const resp = await onGenerate({
         filepath,
         field,
-        end_lat,
-        end_lon,
+        start_lat: startLat === "" || startLon === "" ? undefined : sLat,
+        start_lon: startLat === "" || startLon === "" ? undefined : sLon,
+        end_lat: eLat,
+        end_lon: eLon,
         filters,
       });
       setResultImg(resp?.[0].image_url || null);
@@ -128,40 +171,60 @@ export default function PseudoRHIDialog({
           Seleccioná un punto destino en el mapa
         </Typography>
 
-        <Box
-          display="grid"
-          gridTemplateColumns="1fr 1fr 1fr auto"
-          gap={2}
-          mt={2}
-        >
-          <TextField
-            select
-            size="small"
-            label="Campo"
-            value={field}
-            onChange={(e) => setField(e.target.value)}
-          >
-            {fields_present.map((f) => (
-              <MenuItem key={f} value={f}>
-                {f}
-              </MenuItem>
-            ))}
-          </TextField>
-          <TextField
-            size="small"
-            label="Latitud"
-            value={lat}
-            onChange={(e) => setLat(e.target.value)}
-          />
-          <TextField
-            size="small"
-            label="Longitud"
-            value={lon}
-            onChange={(e) => setLon(e.target.value)}
-          />
-          <Button variant="outlined" onClick={handlePick}>
-            Seleccionar en mapa
-          </Button>
+        <Box display="grid" gridTemplateColumns="1fr" gap={2} mt={2}>
+          <Box display="grid" gridTemplateColumns="1fr" gap={1}>
+            <TextField
+              select
+              size="small"
+              label="Campo"
+              value={field}
+              onChange={(e) => setField(e.target.value)}
+            >
+              {fields_present.map((f) => (
+                <MenuItem key={f} value={f}>
+                  {f}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Box>
+
+          <Typography variant="subtitle2">Punto de inicio</Typography>
+          <Box display="grid" gridTemplateColumns="1fr 1fr auto" gap={2}>
+            <TextField
+              size="small"
+              label="Latitud inicio"
+              value={startLat}
+              onChange={(e) => setStartLat(e.target.value)}
+            />
+            <TextField
+              size="small"
+              label="Longitud inicio"
+              value={startLon}
+              onChange={(e) => setStartLon(e.target.value)}
+            />
+            <Button variant="outlined" onClick={handlePickStart}>
+              Elegir en mapa
+            </Button>
+          </Box>
+
+          <Typography variant="subtitle2">Punto de fin</Typography>
+          <Box display="grid" gridTemplateColumns="1fr 1fr auto" gap={2}>
+            <TextField
+              size="small"
+              label="Latitud fin"
+              value={endLat}
+              onChange={(e) => setEndLat(e.target.value)}
+            />
+            <TextField
+              size="small"
+              label="Longitud fin"
+              value={endLon}
+              onChange={(e) => setEndLon(e.target.value)}
+            />
+            <Button variant="outlined" onClick={handlePickEnd}>
+              Elegir en mapa
+            </Button>
+          </Box>
         </Box>
 
         {radarSite && (
