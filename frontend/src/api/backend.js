@@ -48,6 +48,8 @@ export async function generatePseudoRHI({
   field,
   end_lon,
   end_lat,
+  start_lon,
+  start_lat,
   max_length_km = 240,
   elevation = 0,
   filters = [],
@@ -59,6 +61,11 @@ export async function generatePseudoRHI({
     field,
     end_lon,
     end_lat,
+    ...(start_lon != null &&
+      start_lat != null && {
+        start_lon,
+        start_lat,
+      }),
     max_length_km,
     elevation,
     filters,

@@ -20,6 +20,8 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
     field: str = payload.field
     end_lon: float = payload.end_lon
     end_lat: float = payload.end_lat
+    start_lon: float = payload.start_lon
+    start_lat: float = payload.start_lat
     max_length_km: float = payload.max_length_km
     elevation: int = payload.elevation
     filters: List[RangeFilter] = payload.filters
@@ -55,7 +57,6 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
     
     # Procesar y generar PNG
     try:
-
         # Limpieza de temporales (en threadpool para no bloquear)
         await run_in_threadpool(helpers.cleanup_tmp)
 
@@ -69,7 +70,7 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 helpers.extract_metadata_from_filename, filepath
             )
 
-            # Ejecutar el procesamiento bloqueante para generar COG
+            # Ejecutar el procesamiento bloqueante para generar PNG
             result_dict = await run_in_threadpool(
                 generate_pseudo_rhi_png,
                 filepath=filepath,
@@ -78,10 +79,10 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 end_lat=end_lat,
                 max_length_km=max_length_km,
                 elevation=elevation,
-                filters=filters
+                filters=filters,
+                start_lon=start_lon,
+                start_lat=start_lat,
             )
-
-            processed.append(result_dict)
             result_dict["timestamp"] = timestamp
             processed.append(PseudoRHIResponse(**result_dict))
 
