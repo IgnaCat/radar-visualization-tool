@@ -65,6 +65,13 @@ async def process_file(payload: ProcessRequest):
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     filtered_filepaths = []
 
+    # Límite duro: máximo 3 radares en simultáneo
+    if selected_radars and len(selected_radars) > 3:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se pueden seleccionar más de 3 radares a la vez."
+        )
+
     # Verificar que los archivos existan
     for file in filepaths:
         filepath = os.path.join(UPLOAD_DIR, file)

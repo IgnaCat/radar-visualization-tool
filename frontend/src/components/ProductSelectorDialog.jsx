@@ -101,6 +101,7 @@ export default function ProductSelectorDialog({
     other: { enabled: false, min: 0, max: 1.0 },
   },
 }) {
+  const MAX_RADARS = 3;
   const derivedLayers = useMemo(
     () =>
       initialLayers.length > 0
@@ -140,7 +141,8 @@ export default function ProductSelectorDialog({
   }, [volumes]);
 
   useEffect(() => {
-    setSelectedRadars(radars);
+    // Cap default selection to MAX_RADARS to avoid overloading UI/backend
+    setSelectedRadars(Array.isArray(radars) ? radars.slice(0, MAX_RADARS) : []);
   }, [radars]);
 
   // Variable activa (usamos para los filtros)
@@ -305,16 +307,19 @@ export default function ProductSelectorDialog({
             <Box display="flex" flexWrap="wrap" gap={1}>
               {radars.map((site) => {
                 const isSelected = selectedRadars.includes(site);
+                const atMax = !isSelected && selectedRadars.length >= MAX_RADARS;
                 return (
                   <Button
                     key={site}
                     variant={isSelected ? "contained" : "outlined"}
+                    disabled={atMax}
                     onClick={() => {
-                      setSelectedRadars((prev) =>
-                        prev.includes(site)
-                          ? prev.filter((s) => s !== site)
-                          : [...prev, site]
-                      );
+                      setSelectedRadars((prev) => {
+                        const already = prev.includes(site);
+                        if (already) return prev.filter((s) => s !== site);
+                        if (prev.length >= MAX_RADARS) return prev; // ignore if at limit
+                        return [...prev, site];
+                      });
                     }}
                     sx={{
                       borderRadius: 999,
@@ -338,6 +343,9 @@ export default function ProductSelectorDialog({
                 );
               })}
             </Box>
+            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 0.5 }}>
+              Máximo {MAX_RADARS} radares a la vez.
+            </Typography>
           </Box>
         )}
 
