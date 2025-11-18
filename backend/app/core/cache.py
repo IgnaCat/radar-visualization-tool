@@ -19,3 +19,15 @@ def _nbytes_pkg(pkg) -> int:
     return n
 
 GRID2D_CACHE = LRUCache(maxsize=200 * 1024 * 1024, getsizeof=_nbytes_pkg)
+
+# ---- 3D Grid Cache (for vertical transects) ----
+def _nbytes_pkg3d(pkg) -> int:
+    # pkg = {"arr3d": MaskedArray(nz,ny,nx), "z": arr, "y": arr, "x": arr, "crs": str}
+    n = 0
+    a3 = pkg.get("arr3d")
+    if a3 is not None:
+        n += _nbytes_arr(a3)
+    # axes are small; ignore
+    return n
+
+GRID3D_CACHE = LRUCache(maxsize=600 * 1024 * 1024, getsizeof=_nbytes_pkg3d)

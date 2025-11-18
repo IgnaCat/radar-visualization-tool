@@ -227,6 +227,22 @@ def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
     }
     return "g2d_" + _hash_of(payload)
 
+
+def grid3d_cache_key(*, file_hash: str, field_to_use: str,
+                     volume: str | None, qc_sig, grid_res_xy: float,
+                     grid_res_z: float, z_top_m: float) -> str:
+    payload = {
+        "v": 1,
+        "file": file_hash,
+        "field": str(field_to_use).upper(),
+        "vol": str(volume) if volume is not None else None,
+        "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple)) else qc_sig,
+        "gxy": float(grid_res_xy),
+        "gz": float(grid_res_z),
+        "ztop": float(z_top_m),
+    }
+    return "g3d_" + _hash_of(payload)
+
 def normalize_proj_dict(grid, grid_origin):
     """
     Convierte el dict de proyección de Py-ART a algo que pyproj entienda.
