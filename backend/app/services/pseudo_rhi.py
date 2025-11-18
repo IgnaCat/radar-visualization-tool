@@ -14,11 +14,13 @@ from scipy.interpolate import RegularGridInterpolator
 from rasterio.enums import Resampling
 from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
+from ..core.cache import GRID3D_CACHE
 
 from ..schemas import RangeFilter
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
-    safe_range_max_m, get_radar_site, md5_file, limit_line_to_range
+    safe_range_max_m, get_radar_site, md5_file, limit_line_to_range,
+    normalize_proj_dict, grid3d_cache_key, qc_signature,
 )
 
 def calcule_radial_angle(radar_lat, radar_lon, punto_lat, punto_lon):
@@ -254,20 +256,53 @@ def generate_pseudo_rhi_png(
     # Colormap + vmin/vmax
     cmap, vmin, vmax, _ = colormap_for(field)
 
-    # Graficar perfil radial
-    # Si no hay punto inicial, usar el del radar
-    variable_radar_cross_section(
-        site_lat,
-        site_lon,
-        end_lat, 
-        end_lon,
-        radar,
-        out_path,
-        range_max=range_max_km,
-        variable=field_name,
-        cmap=cmap,
-        gf=gf,
-    )
+    # Branch: si hay un punto inicial distinto del radar, generar transecto entre dos puntos
+    if start_lon is not None and start_lat is not None:
+        same_origin = (abs(float(start_lon) - site_lon) < 1e-6) and (abs(float(start_lat) - site_lat) < 1e-6)
+        if not same_origin:
+            _generate_segment_transect_png(
+                radar=radar,
+                field_name=field_name,
+                file_hash=file_hash,
+                start_lon=float(start_lon),
+                start_lat=float(start_lat),
+                end_lon=float(end_lon),
+                end_lat=float(end_lat),
+                max_length_km=float(max_length_km),
+                cmap=cmap,
+                vmin=vmin,
+                vmax=vmax,
+                output_path=out_path,
+                filters=filters,
+            )
+        else:
+            # Caso clásico: pseudo-RHI radial desde el radar
+            variable_radar_cross_section(
+                site_lat,
+                site_lon,
+                end_lat, 
+                end_lon,
+                radar,
+                out_path,
+                range_max=range_max_km,
+                variable=field_name,
+                cmap=cmap,
+                gf=gf,
+            )
+    else:
+        # Caso clásico: pseudo-RHI radial desde el radar
+        variable_radar_cross_section(
+            site_lat,
+            site_lon,
+            end_lat, 
+            end_lon,
+            radar,
+            out_path,
+            range_max=range_max_km,
+            variable=field_name,
+            cmap=cmap,
+            gf=gf,
+        )
 
 
     return {
@@ -283,3 +318,176 @@ def generate_pseudo_rhi_png(
             "end_point": {"lon": end_lon, "lat": end_lat},
         }
     }
+
+
+def _generate_segment_transect_png(
+    *,
+    radar: pyart.core.Radar,
+    field_name: str,
+    file_hash: str,
+    start_lon: float,
+    start_lat: float,
+    end_lon: float,
+    end_lat: float,
+    max_length_km: float,
+    cmap,
+    vmin: Optional[float],
+    vmax: Optional[float],
+    output_path: Path,
+    filters: List[RangeFilter] = [],
+):
+    """
+    Genera una "cortina" vertical entre dos puntos arbitrarios dentro del alcance del radar:
+    eje X = distancia a lo largo del segmento start→end, eje Y = altura, colores = campo del radar.
+
+    Implementación: crea una grilla 3D con pyart.map.grid_from_radars y re-muestrea
+    a lo largo del plano definido por el segmento, usando RegularGridInterpolator.
+    """
+    # 1) Preparar grilla 3D (reusar cache si existe)
+    site_lon, site_lat, _ = get_radar_site(radar)
+    rng_max_m = safe_range_max_m(radar)
+    z_top_m = 20000.0  # 20 km razonable para la mayoría de productos
+
+    # Resolución: balance entre detalle y performance
+    grid_res_xy = 1000.0  # 1.0 km
+    grid_res_z = 300.0    # 300 m
+
+    nx = int(rng_max_m / grid_res_xy)
+    ny = int(rng_max_m / grid_res_xy)
+    nz = int(z_top_m / grid_res_z) + 1
+
+    nx = max(nx, 100)
+    ny = max(ny, 100)
+    nz = max(nz, 40)
+
+    # Cache key (3D)
+    sig = qc_signature(filters)
+    key3d = grid3d_cache_key(
+        file_hash=file_hash,
+        field_to_use=field_name,
+        volume=None,
+        qc_sig=sig,
+        grid_res_xy=grid_res_xy,
+        grid_res_z=grid_res_z,
+        z_top_m=z_top_m,
+    )
+
+    pkg3d = GRID3D_CACHE.get(key3d)
+    if pkg3d is None:
+        gf = build_gatefilter(radar, field_name, filters, is_rhi=True)
+        grid = pyart.map.grid_from_radars(
+            radar,
+            grid_shape=(nz, ny, nx),
+            grid_limits=((0.0, z_top_m), (-rng_max_m, rng_max_m), (-rng_max_m, rng_max_m)),
+            grid_origin=(site_lat, site_lon),
+            weighting_function="nearest",
+            gatefilters=gf,
+            roi_func="dist",
+            z_factor=0.0,
+            xy_factor=0.02,
+            min_radius=max(800.0, 1.2 * grid_res_xy),
+        )
+        arr3d = np.ma.array(grid.fields[field_name]["data"], copy=False)
+        z = np.asarray(grid.z["data"], dtype=np.float32)
+        y = np.asarray(grid.y["data"], dtype=np.float32)
+        x = np.asarray(grid.x["data"], dtype=np.float32)
+        import pyproj
+        proj_dict = normalize_proj_dict(grid, (site_lat, site_lon))
+        crs_wkt = pyproj.CRS.from_dict(proj_dict).to_wkt()
+        pkg3d = {"arr3d": arr3d, "z": z, "y": y, "x": x, "crs": crs_wkt}
+        GRID3D_CACHE[key3d] = pkg3d
+    else:
+        arr3d = pkg3d["arr3d"]
+        z = pkg3d["z"]
+        y = pkg3d["y"]
+        x = pkg3d["x"]
+        crs_wkt = pkg3d.get("crs")
+
+    # 2) Construir la polilínea start→end limitada por max_length_km
+    end_lon_eff, end_lat_eff, length_km = limit_line_to_range(
+        start_lon, start_lat, end_lon, end_lat, max_length_km
+    )
+    # muestreo cada ~150 m
+    step_m = 150.0
+    n_pts = max(2, int((length_km * 1000.0) // step_m) + 1)
+    lons = np.empty(n_pts, dtype=np.float64)
+    lats = np.empty(n_pts, dtype=np.float64)
+    from pyproj import Geod
+    _geod = Geod(ellps="WGS84")
+    az12, _, dist_m = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
+    for i in range(n_pts):
+        d = i * step_m
+        lon_i, lat_i, _ = _geod.fwd(start_lon, start_lat, az12, d)
+        lons[i], lats[i] = lon_i, lat_i
+
+    # 3) Transformar a CRS de la grilla (x,y en metros)
+    import pyproj
+    crs = pyproj.CRS.from_wkt(crs_wkt) if 'crs_wkt' in locals() and crs_wkt else pyproj.CRS.from_epsg(4326)
+    tf = pyproj.Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    xs, ys = tf.transform(lons, lats)
+
+    # 4) Interpolador 3D (z,y,x). Usamos nearest para respetar máscaras/mejores bordes
+    data = np.asarray(arr3d.filled(np.nan), dtype=np.float32)
+    rgi = RegularGridInterpolator(
+        (z.astype(np.float32), y.astype(np.float32), x.astype(np.float32)),
+        data,
+        method="nearest",
+        bounds_error=False,
+        fill_value=np.nan,
+    )
+
+    # Construimos consultas para toda la "cortina": ZxN
+    Z = z.astype(np.float32)
+    N = xs.size
+    ZZ, NN = np.meshgrid(Z, np.arange(N), indexing="ij")  # (nz, N)
+    pts = np.column_stack((ZZ.ravel(), ys[NN].ravel(), xs[NN].ravel()))
+    vals = rgi(pts).reshape(ZZ.shape)
+
+    # 5) Perfil de terreno a lo largo de la línea (opcional, como en radial)
+    tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
+    ground_km = None
+    try:
+        with rasterio.open(tif_path) as src:
+            with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
+                coords = list(zip(lons, lats))
+                elev = np.fromiter((v[0] for v in vrt.sample(coords)), dtype=np.float32, count=len(coords))
+                nodata = vrt.nodata
+                if nodata is not None:
+                    elev[elev == nodata] = np.nan
+                offset = 439.0423493233697
+                ground_km = (elev - offset) / 1000.0
+    except Exception:
+        ground_km = None
+
+    # Distancias acumuladas para eje X (km)
+    dkm = np.zeros(N, dtype=np.float64)
+    for i in range(1, N):
+        _, _, dd = _geod.inv(lons[i-1], lats[i-1], lons[i], lats[i])
+        dkm[i] = dkm[i-1] + dd / 1000.0
+
+    # 6) Graficar
+    fig = plt.figure(figsize=[15, 5.5])
+    ax = plt.subplot(1, 1, 1)
+
+    # imshow con extent (x: km, y: km)
+    im = ax.imshow(
+        vals,
+        origin="lower",
+        aspect="auto",
+        extent=[0, float(dkm[-1]), float(Z[0]/1000.0), float(Z[-1]/1000.0)],
+        cmap=cmap,
+        vmin=float(vmin) if np.isfinite(vmin) else None,
+        vmax=float(vmax) if np.isfinite(vmax) else None,
+    )
+    if ground_km is not None:
+        ax.plot(dkm, ground_km, color="black", linewidth=2)
+
+    ax.set_xlabel("Distancia (km)")
+    ax.set_ylabel("Altura (km)")
+    ax.grid(True, alpha=0.3)
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    cbar.ax.set_ylabel(VARIABLE_UNITS.get(field_name, ""))
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close()
