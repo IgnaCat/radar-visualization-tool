@@ -97,10 +97,12 @@ async def upload(files: list[UploadFile] = File(...)):
             # Extraer radar metadata (modular)
             meta = extract_radar_metadata(str(target))
 
-            # Extraer volumen del nombre de archivo
-            _, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
+            # Extraer volumen/radar del nombre de archivo
+            radar, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
             if volume is not None:
                 volumes.add(volume)
+            if radar is not None:
+                radars.add(radar)
 
             saved_files.append({
                 "filepath": str(target),
@@ -115,8 +117,9 @@ async def upload(files: list[UploadFile] = File(...)):
         # rollback de los que se alcanzaron a guardar
         for p in saved_files:
             try:
-                if Path(p["filepath"]).exists():
-                    os.remove(p)
+                fp = p.get("filepath")
+                if fp and Path(fp).exists():
+                    os.remove(fp)
             except Exception:
                 pass
         raise exc

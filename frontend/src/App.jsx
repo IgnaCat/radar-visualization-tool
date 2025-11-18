@@ -119,7 +119,7 @@ export default function App() {
   const [fieldsUsed, setFieldsUsed] = useState("DBZH");
   const [filesInfo, setFilesInfo] = useState([]);
   const [volumes, setVolumes] = useState([]); // lista de volúmenes cargados sin repetidos
-  const [selectedRadars, setSelectedRadars] = useState([]);
+  const [availableRadars, setAvailableRadars] = useState([]); // todos los radares presentes en archivos subidos
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
   const [filtersUsed, setFiltersUsed] = useState([]); // filtros aplicados
   const [activeElevation, setActiveElevation] = useState(null);
@@ -196,7 +196,9 @@ export default function App() {
         const merged = [...prev, ...uploadResp.data.volumes];
         return Array.from(new Set(merged));
       });
-      setSelectedRadars((prev) => {
+      console.log("Radares disponibles:", uploadResp.data.radars);
+      console.log(uploadResp.data)
+      setAvailableRadars((prev) => {
         const merged = [...prev, ...uploadResp.data.radars];
         return Array.from(new Set(merged));
       });
@@ -494,9 +496,9 @@ export default function App() {
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-              ]
+              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+            ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
@@ -537,7 +539,7 @@ export default function App() {
           new Set(filesInfo.map((f) => f.metadata.elevations).flat())
         )}
         volumes={volumes}
-        radars={selectedRadars}
+        radars={availableRadars}
         initialLayers={savedLayers}
         onClose={() => setSelectorOpen(false)}
         onConfirm={handleProductChosen}
