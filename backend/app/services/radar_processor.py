@@ -24,7 +24,8 @@ from .radar_common import (
     filters_affect_interpolation, 
     qc_signature, 
     grid2d_cache_key,
-    normalize_proj_dict
+    normalize_proj_dict,
+    safe_range_max_m,
 )
 
 
@@ -255,9 +256,7 @@ def process_radar_to_cog(
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
-    r = radar_to_use.range["data"]    # distancia al centro de cada gate
-    arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)    #puede tener valores enmascarados como inválidos
-    range_max_m = float(arr[-1]) if (arr.size > 0 and np.isfinite(arr[-1])) else 240e3
+    range_max_m = safe_range_max_m(radar)
 
     if product_upper == "CAPPI":
         z_top_m = cappi_height + 2000  # +2 km de margen
@@ -274,7 +273,6 @@ def process_radar_to_cog(
     # Calculamos la cantidad de puntos en cada dimensión
     grid_resolution = 300 if volume == '03' else 1000
     z_points = int(np.ceil(z_grid_limits[1] / grid_resolution)) + 1
-    z_points = max(z_points, 2)
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
 

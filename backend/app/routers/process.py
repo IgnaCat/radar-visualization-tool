@@ -217,7 +217,6 @@ async def process_file(payload: ProcessRequest):
         if not radar_results:
             all_warnings.append("No se generaron imágenes de salida.")
 
-        print("Procesamiento completado exitosamente. Radars: " + str(list(results_by_radar.keys())))
         return ProcessResponse(
             results=radar_results,
             product=product,
