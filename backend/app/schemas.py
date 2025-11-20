@@ -74,7 +74,8 @@ class PseudoRHIRequest(BaseModel):
     end_lat: float
     start_lon: Optional[float] = None   # Coordenadas opcionales de inicio
     start_lat: Optional[float] = None
-    max_length_km: float = 240.0
+    max_length_km: Optional[float] = Field(default=240.0, description="Longitud máxima del gráfico en km (0.5 - 300). Default 240 km")
+    max_height_km: Optional[float] = Field(default=20.0, ge=0.5, le=30.0, description="Altura máxima del gráfico en km (0.5 - 30). Default 20 km")
     elevation: Optional[int] = Field(
         default=0, ge=0, le=12,
         description="Ángulo de elevación en grados (0-12). Default 0"

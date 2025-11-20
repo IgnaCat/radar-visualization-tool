@@ -70,6 +70,8 @@ def variable_radar_cross_section(
     variable='DBZH',
     cmap='viridis',
     gf=None,
+    plot_max_length_km: Optional[float] = None,
+    plot_max_height_km: Optional[float] = None,
 ):
     """
     Función para graficar datos radiales del radar en un perfil a un ángulo dado.
@@ -168,7 +170,11 @@ def variable_radar_cross_section(
 
     # Graficar la variable especificada
     display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True, gatefilter=gf)
-    display.set_limits(xlim=[0, range_max], ylim=[-0.5, 30])
+    # Limites solicitados por el usuario (con fallback)
+    x_max = min(range_max, plot_max_length_km) if plot_max_length_km else range_max
+    y_max = plot_max_height_km if plot_max_height_km else 30
+    y_max = max(0.5, min(y_max, 30))  # clamp razonable
+    display.set_limits(xlim=[0, x_max], ylim=[-0.5, y_max])
 
     # Grafico el perfil de elevación del terreno
     ax2.plot(distances, perfil_elevacion_km, label=None, color='black', linewidth=2)
@@ -213,6 +219,7 @@ def generate_pseudo_rhi_png(
     end_lon: float,
     end_lat: float,
     max_length_km: float,
+    max_height_km: float = 20.0,
     elevation: int = 0,
     filters: List[RangeFilter] = [],
     output_dir: str = "app/storage/tmp",
@@ -227,7 +234,7 @@ def generate_pseudo_rhi_png(
         if (start_lon is not None and start_lat is not None)
         else f"{end_lon}_{end_lat}"
     )
-    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{file_hash}.png"
+    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
     if out_path.exists():
@@ -240,6 +247,9 @@ def generate_pseudo_rhi_png(
     field_name, _ = resolve_field(radar, field)
     site_lon, site_lat, site_alt = get_radar_site(radar)
     range_max_km = safe_range_max_m(radar) / 1000.0
+    # Ajustar límites a capacidades físicas
+    max_length_km = max(0.5, min(max_length_km, range_max_km))
+    max_height_km = max(0.5, min(max_height_km, 30.0))
 
     # Validar puntos dentro del rango máximo
     if _km_between(site_lon, site_lat, end_lon, end_lat) > range_max_km:
@@ -258,7 +268,15 @@ def generate_pseudo_rhi_png(
 
     # Branch: si hay un punto inicial distinto del radar, generar transecto entre dos puntos
     if start_lon is not None and start_lat is not None:
-        same_origin = (abs(float(start_lon) - site_lon) < 1e-6) and (abs(float(start_lat) - site_lat) < 1e-6)
+        # Compare if origin point using geodesic distance (meters)
+        # Allow a tolerance to account for front-end selection imprecision (100 m).
+        try:
+            start_lat_f = float(start_lat)
+            start_lon_f = float(start_lon)
+        except Exception:
+            start_lat_f = float(start_lat)
+            start_lon_f = float(start_lon)
+        same_origin = geodesic((start_lat_f, start_lon_f), (site_lat, site_lon)).meters <= 1000.0
         if not same_origin:
             _generate_segment_transect_png(
                 radar=radar,
@@ -274,6 +292,7 @@ def generate_pseudo_rhi_png(
                 vmax=vmax,
                 output_path=out_path,
                 filters=filters,
+                max_height_km=max_height_km,
             )
         else:
             # Caso clásico: pseudo-RHI radial desde el radar
@@ -288,6 +307,8 @@ def generate_pseudo_rhi_png(
                 variable=field_name,
                 cmap=cmap,
                 gf=gf,
+                plot_max_length_km=max_length_km,
+                plot_max_height_km=max_height_km,
             )
     else:
         # Caso clásico: pseudo-RHI radial desde el radar
@@ -302,6 +323,8 @@ def generate_pseudo_rhi_png(
             variable=field_name,
             cmap=cmap,
             gf=gf,
+            plot_max_length_km=max_length_km,
+            plot_max_height_km=max_height_km,
         )
 
 
@@ -316,6 +339,8 @@ def generate_pseudo_rhi_png(
                 else {"lon": site_lon, "lat": site_lat}
             ),
             "end_point": {"lon": end_lon, "lat": end_lat},
+            "max_length_km": max_length_km,
+            "max_height_km": max_height_km,
         }
     }
 
@@ -335,6 +360,7 @@ def _generate_segment_transect_png(
     vmax: Optional[float],
     output_path: Path,
     filters: List[RangeFilter] = [],
+    max_height_km: float = 20.0,
 ):
     """
     Genera una "cortina" vertical entre dos puntos arbitrarios dentro del alcance del radar:
@@ -346,7 +372,7 @@ def _generate_segment_transect_png(
     # 1) Preparar grilla 3D (reusar cache si existe)
     site_lon, site_lat, _ = get_radar_site(radar)
     rng_max_m = safe_range_max_m(radar)
-    z_top_m = 20000.0  # 20 km razonable para la mayoría de productos
+    z_top_m = max(2000.0, float(max_height_km) * 1000.0)  # limitar grilla a altura solicitada (mín 2 km)
 
     # Resolución: balance entre detalle y performance
     grid_res_xy = 1000.0  # 1.0 km
@@ -470,6 +496,12 @@ def _generate_segment_transect_png(
     ax = plt.subplot(1, 1, 1)
 
     # imshow con extent (x: km, y: km)
+    # Recortar según altura solicitada
+    if Z[-1] / 1000.0 > max_height_km:
+        clip_idx = np.searchsorted(Z, max_height_km * 1000.0, side="right")
+        Z = Z[:clip_idx]
+        vals = vals[:clip_idx, :]
+
     im = ax.imshow(
         vals,
         origin="lower",

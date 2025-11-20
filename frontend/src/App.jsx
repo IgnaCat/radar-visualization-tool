@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSnackbar } from "notistack";
 import {
   uploadFile,
@@ -152,7 +152,21 @@ export default function App() {
   const drawnLayerRef = useRef(null); // referencia a la capa dibujada
   // archivo seleccionado manualmente para herramientas (pixel/área/RHI)
   const [activeToolFile, setActiveToolFile] = useState(null);
-  var radarSite = overlayData?.metadata?.site || null;
+  // Derivar sitio del radar a partir del archivo activo (como activeToolFile)
+  const radarSite = useMemo(() => {
+    if (!activeToolFile) return null;
+    // Buscar metadata del archivo activo
+    const fi = filesInfo.find((f) => f.filepath === activeToolFile);
+    const md = fi?.metadata;
+    if (!md) return null;
+    const site = md.radar_site || md.site; // soportar ambos nombres
+    if (!site || site.lat == null || site.lon == null) return null;
+    return {
+      lat: Number(site.lat),
+      lon: Number(site.lon),
+      alt_m: site.alt_m ?? site.alt ?? null,
+    };
+  }, [activeToolFile, filesInfo]);
 
   // Registrar cleanup en cierre de pestaña/ventana
   useEffect(() => {
@@ -196,8 +210,6 @@ export default function App() {
         const merged = [...prev, ...uploadResp.data.volumes];
         return Array.from(new Set(merged));
       });
-      console.log("Radares disponibles:", uploadResp.data.radars);
-      console.log(uploadResp.data)
       setAvailableRadars((prev) => {
         const merged = [...prev, ...uploadResp.data.radars];
         return Array.from(new Set(merged));
@@ -285,7 +297,6 @@ export default function App() {
         selectedVolumes,
         selectedRadars,
       });
-      console.log("Respuesta de process:", processResp.data);
       if (
         !processResp.data ||
         !processResp.data.outputs ||
@@ -364,6 +375,8 @@ export default function App() {
     start_lat,
     start_lon,
     filters,
+    max_length_km,
+    max_height_km,
     // max_length_km,
     // elevation,
   }) => {
@@ -375,6 +388,8 @@ export default function App() {
       start_lat,
       start_lon,
       filters,
+      max_length_km,
+      max_height_km,
     });
     // devolvemos lo que el dialog espera
     return resp.data;

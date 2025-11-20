@@ -23,6 +23,7 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
     start_lon: float = payload.start_lon
     start_lat: float = payload.start_lat
     max_length_km: float = payload.max_length_km
+    max_height_km: float = payload.max_height_km
     elevation: int = payload.elevation
     filters: List[RangeFilter] = payload.filters
 
@@ -36,6 +37,11 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="La longitud máxima debe estar entre 0 y 240 km."
+        )
+    if max_height_km < 0.5 or max_height_km > 30:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La altura máxima debe estar entre 0.5 y 30 km."
         )
     
     if elevation < 0 or elevation > 12:
@@ -78,6 +84,7 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 end_lon=end_lon,
                 end_lat=end_lat,
                 max_length_km=max_length_km,
+                max_height_km=max_height_km,
                 elevation=elevation,
                 filters=filters,
                 start_lon=start_lon,
