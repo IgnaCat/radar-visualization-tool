@@ -60,6 +60,8 @@ export default function PseudoRHIDialog({
   const [pickTarget, setPickTarget] = useState(null); // 'start' | 'end' | null
   const [autoFlowActive, setAutoFlowActive] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [maxLengthKm, setMaxLengthKm] = useState(240);
+  const [maxHeightKm, setMaxHeightKm] = useState(20);
 
   const handlePickStart = () => {
     setResultImg(null);
@@ -161,6 +163,8 @@ export default function PseudoRHIDialog({
         end_lat: eLat,
         end_lon: eLon,
         filters,
+        max_length_km: Number(maxLengthKm),
+        max_height_km: Number(maxHeightKm),
       });
       setResultImg(resp?.[0].image_url || null);
     } catch (e) {
@@ -307,6 +311,32 @@ export default function PseudoRHIDialog({
                 onFiltersChange={setFilters}
                 showVariableFilterDefault={true}
               />
+              <Box mt={2} display="grid" gridTemplateColumns="1fr 1fr" gap={2}>
+                <TextField
+                  size="small"
+                  label="Longitud máx (km)"
+                  type="number"
+                  value={maxLengthKm}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (!Number.isFinite(v)) return;
+                    setMaxLengthKm(Math.min(500, Math.max(1, v)));
+                  }}
+                  helperText="Rango horizontal del corte"
+                />
+                <TextField
+                  size="small"
+                  label="Altura máx (km)"
+                  type="number"
+                  value={maxHeightKm}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    if (!Number.isFinite(v)) return;
+                    setMaxHeightKm(Math.min(30, Math.max(0.5, v)));
+                  }}
+                  helperText="Altura vertical del corte"
+                />
+              </Box>
             </Box>
           </Collapse>
         </Box>
