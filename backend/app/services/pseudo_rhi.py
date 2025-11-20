@@ -65,6 +65,7 @@ def variable_radar_cross_section(
     end_lat,
     end_lon,
     volumen_radar_data,
+    field_name,
     output_path,
     range_max: float,
     variable='DBZH',
@@ -84,6 +85,7 @@ def variable_radar_cross_section(
     - end_lat: Latitud del punto final del perfil.
     - end_lon: Longitud del punto final del perfil.
     - volumen_radar_data: Datos del radar en formato Py-ART.
+    - field_name: Nombre del campo a graficar.
     - output_path: Ruta donde se guardará la imagen generada.
     - range_max: Distancia máxima a graficar (en km).
     - variable: Variable a graficar (por defecto 'DBZH').
@@ -160,6 +162,10 @@ def variable_radar_cross_section(
     # Obtenemos unidades de la variable
     units = VARIABLE_UNITS.get(variable, '')
 
+    data = radar_data_copy_3.fields[field_name]["data"]
+    mask = gf.gate_excluded
+    radar_data_copy_3.fields[field_name]["data"] = np.ma.masked_array(data, mask)
+
     # Se realiza gráfico del cross section
     xsect = pyart.util.cross_section_ppi(radar_data_copy_3, [radial_angle])
     display = pyart.graph.RadarDisplay(xsect)  # Crear el display de Py-ART
@@ -169,7 +175,7 @@ def variable_radar_cross_section(
     ax2 = plt.subplot(1, 1, 1)
 
     # Graficar la variable especificada
-    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True, gatefilter=gf)
+    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True)
     # Limites solicitados por el usuario (con fallback)
     x_max = min(range_max, plot_max_length_km) if plot_max_length_km else range_max
     y_max = plot_max_height_km if plot_max_height_km else 30
@@ -302,6 +308,7 @@ def generate_pseudo_rhi_png(
                 end_lat, 
                 end_lon,
                 radar,
+                field_name,
                 out_path,
                 range_max=range_max_km,
                 variable=field_name,
@@ -318,6 +325,7 @@ def generate_pseudo_rhi_png(
             end_lat, 
             end_lon,
             radar,
+            field_name,
             out_path,
             range_max=range_max_km,
             variable=field_name,
