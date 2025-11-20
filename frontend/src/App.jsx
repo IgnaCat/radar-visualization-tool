@@ -561,6 +561,8 @@ export default function App() {
         onClearPickedPoint={handleClearPickedPoint}
         onGenerate={handleGenerateRHI}
         onLinePreviewChange={setRhiLinePreview}
+        onAutoClose={() => setRhiOpen(false)}
+        onAutoReopen={() => setRhiOpen(true)}
       />
 
       <AreaStatsDialog

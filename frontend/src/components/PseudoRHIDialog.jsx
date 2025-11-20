@@ -11,7 +11,11 @@ import {
   Typography,
   Divider,
   Paper,
+  IconButton,
+  Collapse,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import Draggable from "react-draggable";
 import RadarFilterControls from "./RadarFilterControls";
 
@@ -33,14 +37,16 @@ function PaperComponent(props) {
 export default function PseudoRHIDialog({
   open,
   onClose,
-  filepath, // string del archivo subido
-  radarSite, // { lat, lon }
+  filepath,
+  radarSite,
   fields_present = FIELD_OPTIONS,
-  onRequestPickPoint, // fn -> activa pick mode en el mapa
-  pickedPoint, // { lat, lon } desde el mapa
-  onClearPickedPoint, // limpiar selección si hace falta
-  onGenerate, // fn async que llama API (generatePseudoRHI)
-  onLinePreviewChange, // opcional: ( { start: {lat,lon} | null, end: {lat,lon} | null } ) => void
+  onRequestPickPoint,
+  pickedPoint,
+  onClearPickedPoint,
+  onGenerate,
+  onLinePreviewChange,
+  onAutoClose,
+  onAutoReopen,
 }) {
   const [field, setField] = useState(fields_present[0] || "DBZH");
   const [startLat, setStartLat] = useState("");
@@ -52,8 +58,27 @@ export default function PseudoRHIDialog({
   const [error, setError] = useState("");
   const [filters, setFilters] = useState([]);
   const [pickTarget, setPickTarget] = useState(null); // 'start' | 'end' | null
+  const [autoFlowActive, setAutoFlowActive] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // sync coords desde el picker
+  const handlePickStart = () => {
+    setResultImg(null);
+    setError("");
+    setPickTarget("start");
+    setAutoFlowActive(true);
+    onRequestPickPoint?.();
+    onAutoClose?.();
+  };
+
+  const handlePickEnd = () => {
+    setResultImg(null);
+    setError("");
+    setPickTarget("end");
+    onRequestPickPoint?.();
+    onAutoClose?.();
+  };
+
+  // Map click handling: automatic chaining start -> end
   useEffect(() => {
     if (pickedPoint && pickTarget) {
       const lat = pickedPoint.lat.toFixed(6);
@@ -61,14 +86,37 @@ export default function PseudoRHIDialog({
       if (pickTarget === "start") {
         setStartLat(lat);
         setStartLon(lon);
-      } else if (pickTarget === "end") {
+        setPickTarget("end");
+        onRequestPickPoint?.();
+        return;
+      }
+      if (pickTarget === "end") {
         setEndLat(lat);
         setEndLon(lon);
+        setPickTarget(null);
       }
-      setPickTarget(null);
     }
-  }, [pickedPoint, pickTarget]);
+  }, [pickedPoint, pickTarget, onRequestPickPoint]);
 
+  // Auto reopen when both points chosen
+  useEffect(() => {
+    // Solo reabrir si el diálogo está cerrado (open === false) y el flujo automático sigue activo
+    if (
+      !open &&
+      autoFlowActive &&
+      pickTarget === null &&
+      startLat !== "" &&
+      startLon !== "" &&
+      endLat !== "" &&
+      endLon !== ""
+    ) {
+      onAutoReopen?.();
+      // Evitar re-aperturas repetidas
+      setAutoFlowActive(false);
+    }
+  }, [open, autoFlowActive, pickTarget, startLat, startLon, endLat, endLon, onAutoReopen]);
+
+  // Update preview line
   useEffect(() => {
     onLinePreviewChange?.({
       start:
@@ -80,20 +128,7 @@ export default function PseudoRHIDialog({
           ? { lat: Number(endLat), lon: Number(endLon) }
           : null,
     });
-  }, [startLat, startLon, endLat, endLon]);
-
-  const handlePickStart = () => {
-    setResultImg(null);
-    setError("");
-    setPickTarget("start");
-    onRequestPickPoint?.();
-  };
-  const handlePickEnd = () => {
-    setResultImg(null);
-    setError("");
-    setPickTarget("end");
-    onRequestPickPoint?.();
-  };
+  }, [startLat, startLon, endLat, endLon, onLinePreviewChange]);
 
   const handleGenerate = async () => {
     setResultImg(null);
@@ -110,9 +145,8 @@ export default function PseudoRHIDialog({
       setError("Lat/Lon de destino inválidos");
       return;
     }
-    // start es opcional, si no se informa usamos el centro del radar (comportamiento anterior)
     if ((startLat === "" || startLon === "") && radarSite) {
-      // no forzamos al usuario a completar start si hay radarSite
+      // usar centro del radar como inicio implícito
     } else if (!Number.isFinite(sLat) || !Number.isFinite(sLon)) {
       setError("Lat/Lon de inicio inválidos");
       return;
@@ -137,9 +171,11 @@ export default function PseudoRHIDialog({
   };
 
   const handleClose = () => {
-    // setResultImg(null);
     setError("");
     onClearPickedPoint?.();
+    // Cancelar cualquier flujo automático pendiente
+    setAutoFlowActive(false);
+    setPickTarget(null);
     onClose?.();
   };
 
@@ -168,7 +204,7 @@ export default function PseudoRHIDialog({
       </DialogTitle>
       <DialogContent id="draggable-dialog-title" dividers>
         <Typography variant="body2" gutterBottom>
-          Seleccioná un punto destino en el mapa
+          Seleccioná los puntos en el mapa
         </Typography>
 
         <Box display="grid" gridTemplateColumns="1fr" gap={2} mt={2}>
@@ -195,17 +231,28 @@ export default function PseudoRHIDialog({
               label="Latitud inicio"
               value={startLat}
               onChange={(e) => setStartLat(e.target.value)}
+              disabled={pickTarget === "end"}
             />
             <TextField
               size="small"
               label="Longitud inicio"
               value={startLon}
               onChange={(e) => setStartLon(e.target.value)}
+              disabled={pickTarget === "end"}
             />
-            <Button variant="outlined" onClick={handlePickStart}>
+            <Button
+              variant="outlined"
+              onClick={handlePickStart}
+              disabled={pickTarget === "end"}
+            >
               Elegir en mapa
             </Button>
           </Box>
+          {pickTarget === "end" && startLat !== "" && startLon !== "" && (
+            <Typography variant="caption" sx={{ opacity: 0.7 }}>
+              Seleccioná ahora el punto de fin en el mapa…
+            </Typography>
+          )}
 
           <Typography variant="subtitle2">Punto de fin</Typography>
           <Box display="grid" gridTemplateColumns="1fr 1fr auto" gap={2}>
@@ -214,14 +261,20 @@ export default function PseudoRHIDialog({
               label="Latitud fin"
               value={endLat}
               onChange={(e) => setEndLat(e.target.value)}
+              disabled={pickTarget === "start"}
             />
             <TextField
               size="small"
               label="Longitud fin"
               value={endLon}
               onChange={(e) => setEndLon(e.target.value)}
+              disabled={pickTarget === "start"}
             />
-            <Button variant="outlined" onClick={handlePickEnd}>
+            <Button
+              variant="outlined"
+              onClick={handlePickEnd}
+              disabled={pickTarget === "start"}
+            >
               Elegir en mapa
             </Button>
           </Box>
@@ -234,11 +287,29 @@ export default function PseudoRHIDialog({
           </Typography>
         )}
 
-        <RadarFilterControls
-          selectedField={field}
-          onFiltersChange={setFilters}
-          showVariableFilterDefault={true}
-        />
+        <Box mt={3}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <IconButton
+              size="small"
+              onClick={() => setShowFilters((v) => !v)}
+              aria-label={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
+            >
+              {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+            <Typography variant="subtitle2" sx={{ userSelect: "none" }}>
+              Filtros
+            </Typography>
+          </Box>
+          <Collapse in={showFilters} timeout="auto" unmountOnExit>
+            <Box mt={1}>
+              <RadarFilterControls
+                selectedField={field}
+                onFiltersChange={setFilters}
+                showVariableFilterDefault={true}
+              />
+            </Box>
+          </Collapse>
+        </Box>
 
         {error && (
           <Typography color="error" mt={2}>
