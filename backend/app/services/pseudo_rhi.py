@@ -167,7 +167,6 @@ def variable_radar_cross_section(
 
     # Se realiza gráfico del cross section
     xsect = pyart.util.cross_section_ppi(radar_data_copy_3, [radial_angle])
-    display = pyart.graph.RadarDisplay(xsect)  # Crear el display de Py-ART
 
     # Crear la figura y el subplot
     fig = plt.figure(figsize=[15, 5.5])
