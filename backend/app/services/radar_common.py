@@ -157,7 +157,7 @@ def build_gatefilter(
             fmin = getattr(f, "min", None)
             fmax = getattr(f, "max", None)
             if fmin is not None:
-                    if fmin <= 0.3:
+                    if fmin <= 0.3 and fld in AFFECTS_INTERP_FIELDS:
                         continue
                     else:
                         gf.exclude_below(fld, float(fmin))
