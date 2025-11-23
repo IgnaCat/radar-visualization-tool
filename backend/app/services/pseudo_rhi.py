@@ -4,7 +4,6 @@ import copy
 import numpy as np
 import rasterio
 from matplotlib import pyplot as plt
-# matplotlib.rcParams['pcolormesh.shading'] = 'auto' # evita el error de pcolormesh
 from fastapi import HTTPException
 from pathlib import Path
 from typing import List, Optional
@@ -174,13 +173,24 @@ def variable_radar_cross_section(
     fig = plt.figure(figsize=[15, 5.5])
     ax2 = plt.subplot(1, 1, 1)
 
-    # Graficar la variable especificada
-    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True)
+    # Graficar la variable especificada usando pcolormesh directamente
+    # para evitar errores de dimensión con shading='flat' en matplotlib
+    x = xsect.range['data'] / 1000.0  # Convertir a km
+    y = xsect.z['data'] / 1000.0      # Convertir a km
+    data_plot = xsect.fields[variable]['data'][0]
+    
+    mesh = ax2.pcolormesh(x, y, data_plot, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto')
+    
+    # Agregar colorbar
+    cbar = plt.colorbar(mesh, ax=ax2)
+    cbar.set_label(units, fontsize=12)
+    
     # Limites solicitados por el usuario (con fallback)
     x_max = min(range_max, plot_max_length_km) if plot_max_length_km else range_max
     y_max = plot_max_height_km if plot_max_height_km else 30
     y_max = max(0.5, min(y_max, 30))  # clamp razonable
-    display.set_limits(xlim=[0, x_max], ylim=[-0.5, y_max])
+    ax2.set_xlim([0, x_max])
+    ax2.set_ylim([-0.5, y_max])
 
     # Grafico el perfil de elevación del terreno
     ax2.plot(distances, perfil_elevacion_km, label=None, color='black', linewidth=2)
