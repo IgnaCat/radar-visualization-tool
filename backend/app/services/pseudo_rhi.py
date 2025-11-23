@@ -152,14 +152,14 @@ def variable_radar_cross_section(
     # Hacemos una copia profunda del objeto volumen_radar_data para no modificar el original
     radar_data_copy_3 = copy.deepcopy(volumen_radar_data)
     # Datos de la variable seleccionada del volumen de radar
-    data = radar_data_copy_3.fields[variable]['data']
+    data = radar_data_copy_3.fields[field_name]['data']
 
     # Determinamos los valores mínimos y máximos dinámicamente
     vmin = data.min()
     vmax = data.max()
 
     # Obtenemos unidades de la variable
-    units = VARIABLE_UNITS.get(variable, '')
+    units = VARIABLE_UNITS.get(field_name, '')
 
     data = radar_data_copy_3.fields[field_name]["data"]
     mask = gf.gate_excluded
@@ -175,9 +175,9 @@ def variable_radar_cross_section(
 
     # Graficar la variable especificada usando pcolormesh directamente
     # para evitar errores de dimensión con shading='flat' en matplotlib
-    x = xsect.range['data'] / 1000.0  # Convertir a km
-    y = xsect.z['data'] / 1000.0      # Convertir a km
-    data_plot = xsect.fields[variable]['data'][0]
+    x = xsect.range['data'] / 1000.0  # Convertir a km (1D array)
+    y = xsect.z['data'] / 1000.0      # Convertir a km (1D array)
+    data_plot = xsect.fields[field_name]['data'][0]  # 2D array (altura x rango)
     
     mesh = ax2.pcolormesh(x, y, data_plot, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto')
     
