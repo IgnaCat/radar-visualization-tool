@@ -4,7 +4,8 @@ import copy
 import numpy as np
 import rasterio
 from matplotlib import pyplot as plt
-# matplotlib.rcParams['pcolormesh.shading'] = 'auto' # evita el error de pcolormesh
+import matplotlib as mpl
+mpl.use("Agg")  # Use Agg backend for non-GUI environments
 from fastapi import HTTPException
 from pathlib import Path
 from typing import List, Optional
@@ -65,12 +66,11 @@ def variable_radar_cross_section(
     end_lat,
     end_lon,
     volumen_radar_data,
-    field_name,
     output_path,
     range_max: float,
     variable='DBZH',
     cmap='viridis',
-    gf=None,
+    filters: List[RangeFilter] = [],
     plot_max_length_km: Optional[float] = None,
     plot_max_height_km: Optional[float] = None,
 ):
@@ -152,8 +152,11 @@ def variable_radar_cross_section(
     # Empezamos con la parte del pseudo corte
     # Hacemos una copia profunda del objeto volumen_radar_data para no modificar el original
     radar_data_copy_3 = copy.deepcopy(volumen_radar_data)
-    # Datos de la variable seleccionada del volumen de radar
+
+    # Obtener y validar datos de la variable seleccionada del volumen de radar
     data = radar_data_copy_3.fields[variable]['data']
+    if np.ma.is_masked(data):
+        data = data.filled(np.nan)
 
     # Determinamos los valores mínimos y máximos dinámicamente
     vmin = data.min()
@@ -162,20 +165,22 @@ def variable_radar_cross_section(
     # Obtenemos unidades de la variable
     units = VARIABLE_UNITS.get(variable, '')
 
-    data = radar_data_copy_3.fields[field_name]["data"]
-    mask = gf.gate_excluded
-    radar_data_copy_3.fields[field_name]["data"] = np.ma.masked_array(data, mask)
-
     # Se realiza gráfico del cross section
     xsect = pyart.util.cross_section_ppi(radar_data_copy_3, [radial_angle])
     display = pyart.graph.RadarDisplay(xsect)  # Crear el display de Py-ART
+
+    # GateFilter PARA EL XSECT
+    try:
+        gf_xsect = build_gatefilter(xsect, variable, filters, is_rhi=True)
+    except Exception:
+        gf_xsect = None
 
     # Crear la figura y el subplot
     fig = plt.figure(figsize=[15, 5.5])
     ax2 = plt.subplot(1, 1, 1)
 
     # Graficar la variable especificada
-    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True)
+    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True, gatefilter=gf_xsect)
     # Limites solicitados por el usuario (con fallback)
     x_max = min(range_max, plot_max_length_km) if plot_max_length_km else range_max
     y_max = plot_max_height_km if plot_max_height_km else 30
@@ -308,12 +313,11 @@ def generate_pseudo_rhi_png(
                 end_lat, 
                 end_lon,
                 radar,
-                field_name,
                 out_path,
                 range_max=range_max_km,
                 variable=field_name,
                 cmap=cmap,
-                gf=gf,
+                filters=filters,
                 plot_max_length_km=max_length_km,
                 plot_max_height_km=max_height_km,
             )
@@ -325,12 +329,11 @@ def generate_pseudo_rhi_png(
             end_lat, 
             end_lon,
             radar,
-            field_name,
             out_path,
             range_max=range_max_km,
             variable=field_name,
             cmap=cmap,
-            gf=gf,
+            filters=filters,
             plot_max_length_km=max_length_km,
             plot_max_height_km=max_height_km,
         )
