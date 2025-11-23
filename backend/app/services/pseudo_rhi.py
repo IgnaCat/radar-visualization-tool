@@ -161,7 +161,7 @@ def variable_radar_cross_section(
     # Obtenemos unidades de la variable
     units = VARIABLE_UNITS.get(field_name, '')
 
-    data = radar_data_copy_3.fields[field_name]["data"]
+    # Aplicar máscara del gatefilter
     mask = gf.gate_excluded
     radar_data_copy_3.fields[field_name]["data"] = np.ma.masked_array(data, mask)
 
