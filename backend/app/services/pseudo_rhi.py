@@ -4,7 +4,6 @@ import copy
 import numpy as np
 import rasterio
 from matplotlib import pyplot as plt
-# matplotlib.rcParams['pcolormesh.shading'] = 'auto' # evita el error de pcolormesh
 from fastapi import HTTPException
 from pathlib import Path
 from typing import List, Optional
@@ -153,34 +152,44 @@ def variable_radar_cross_section(
     # Hacemos una copia profunda del objeto volumen_radar_data para no modificar el original
     radar_data_copy_3 = copy.deepcopy(volumen_radar_data)
     # Datos de la variable seleccionada del volumen de radar
-    data = radar_data_copy_3.fields[variable]['data']
+    data = radar_data_copy_3.fields[field_name]['data']
 
     # Determinamos los valores mínimos y máximos dinámicamente
     vmin = data.min()
     vmax = data.max()
 
     # Obtenemos unidades de la variable
-    units = VARIABLE_UNITS.get(variable, '')
+    units = VARIABLE_UNITS.get(field_name, '')
 
-    data = radar_data_copy_3.fields[field_name]["data"]
+    # Aplicar máscara del gatefilter
     mask = gf.gate_excluded
     radar_data_copy_3.fields[field_name]["data"] = np.ma.masked_array(data, mask)
 
     # Se realiza gráfico del cross section
     xsect = pyart.util.cross_section_ppi(radar_data_copy_3, [radial_angle])
-    display = pyart.graph.RadarDisplay(xsect)  # Crear el display de Py-ART
 
     # Crear la figura y el subplot
     fig = plt.figure(figsize=[15, 5.5])
     ax2 = plt.subplot(1, 1, 1)
 
-    # Graficar la variable especificada
-    display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True)
+    # Graficar la variable especificada usando pcolormesh directamente
+    # para evitar errores de dimensión con shading='flat' en matplotlib
+    x = xsect.range['data'] / 1000.0  # Convertir a km (1D array)
+    y = xsect.z['data'] / 1000.0      # Convertir a km (1D array)
+    data_plot = xsect.fields[field_name]['data'][0]  # 2D array (altura x rango)
+    
+    mesh = ax2.pcolormesh(x, y, data_plot, cmap=cmap, vmin=vmin, vmax=vmax, shading='auto')
+    
+    # Agregar colorbar
+    cbar = plt.colorbar(mesh, ax=ax2)
+    cbar.set_label(units, fontsize=12)
+    
     # Limites solicitados por el usuario (con fallback)
     x_max = min(range_max, plot_max_length_km) if plot_max_length_km else range_max
     y_max = plot_max_height_km if plot_max_height_km else 30
     y_max = max(0.5, min(y_max, 30))  # clamp razonable
-    display.set_limits(xlim=[0, x_max], ylim=[-0.5, y_max])
+    ax2.set_xlim([0, x_max])
+    ax2.set_ylim([-0.5, y_max])
 
     # Grafico el perfil de elevación del terreno
     ax2.plot(distances, perfil_elevacion_km, label=None, color='black', linewidth=2)
