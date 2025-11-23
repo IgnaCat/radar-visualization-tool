@@ -4,8 +4,6 @@ import copy
 import numpy as np
 import rasterio
 from matplotlib import pyplot as plt
-import matplotlib as mpl
-mpl.use("Agg")  # Use Agg backend for non-GUI environments
 from fastapi import HTTPException
 from pathlib import Path
 from typing import List, Optional
@@ -155,8 +153,6 @@ def variable_radar_cross_section(
 
     # Obtener y validar datos de la variable seleccionada del volumen de radar
     data = radar_data_copy_3.fields[variable]['data']
-    if np.ma.is_masked(data):
-        data = data.filled(np.nan)
 
     # Determinamos los valores mínimos y máximos dinámicamente
     vmin = data.min()
@@ -170,10 +166,7 @@ def variable_radar_cross_section(
     display = pyart.graph.RadarDisplay(xsect)  # Crear el display de Py-ART
 
     # GateFilter PARA EL XSECT
-    try:
-        gf_xsect = build_gatefilter(xsect, variable, filters, is_rhi=True)
-    except Exception:
-        gf_xsect = None
+    gf_xsect = build_gatefilter(xsect, variable, filters, is_rhi=True)
 
     # Crear la figura y el subplot
     fig = plt.figure(figsize=[15, 5.5])
