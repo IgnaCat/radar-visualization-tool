@@ -14,20 +14,21 @@ from rasterio.warp import Resampling
 from urllib.parse import quote
 from ..core.config import settings
 from ..core.cache import GRID2D_CACHE
+from ..core.constants import AFFECTS_INTERP_FIELDS
 from affine import Affine
 
 from .radar_common import (
-    md5_file, 
-    resolve_field, 
-    build_gatefilter, 
-    colormap_for, 
-    filters_affect_interpolation, 
-    qc_signature, 
+    md5_file,
+    resolve_field,
+    build_gatefilter,
+    colormap_for,
+    filters_affect_interpolation,
+    qc_signature,
     grid2d_cache_key,
     normalize_proj_dict,
     safe_range_max_m,
+    collapse_field_3d_to_2d
 )
-
 
 
 def convert_to_cog(src_path, cog_path):
@@ -278,11 +279,18 @@ def process_radar_to_cog(
 
     interp = 'nearest'
 
-    # Verificamos si los filtros afectan la interpolación (y por ende la grilla)
-    # Basicamente, si hay filtros sobre campos QC (RHOHV) aplicamos GateFilter
-    # Los filtros visuales (sobre el mismo campo) se aplican post-grid
-    needs_regrid = filters_affect_interpolation(filters, field_to_use)
-    qc_sig = qc_signature(filters)
+    # Separar filtros QC vs otros (todos se aplicarán post-grid como máscaras 2D)
+    # Ya no forzamos regridding por filtros: la grilla se genera UNA sola vez
+    qc_filters = []
+    visual_filters = []  # incluye los que actúan sobre el campo principal
+    for f in (filters or []):
+        ffield = str(getattr(f, "field", "") or "").upper()
+        if ffield in AFFECTS_INTERP_FIELDS:
+            qc_filters.append(f)
+        else:
+            visual_filters.append(f)
+
+    # No usamos needs_regrid ni qc_sig (el cache ignora filtros para regridding)
 
     # Intentamos cachear la 2D colapsada
     cache_key = grid2d_cache_key(
@@ -293,28 +301,34 @@ def process_radar_to_cog(
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
         volume=volume,
         interp=interp,
-        qc_sig=qc_sig if needs_regrid else tuple(),  # si no afecta, usamos firma vacía
+        qc_sig=tuple(),  # no dependemos de filtros para cache
     )
 
     pkg_cached = GRID2D_CACHE.get(cache_key)
 
     if pkg_cached is None:
-        # Aplicar filtros no visuales (ej., sobre RHOHV)
-        gf = build_gatefilter(radar_to_use, field_to_use, filters) if needs_regrid else None
+        # Ya no aplicamos GateFilter basado en filtros; construimos la grilla limpia
+        gf = None  # build_gatefilter(radar_to_use, field_to_use, []) podría usarse si quisieras algún gating fijo
         grid_origin = (
             float(radar_to_use.latitude['data'][0]),
             float(radar_to_use.longitude['data'][0]),
         )
-
         min_radius = max(800.0, 1.2 * grid_resolution)
         xy_factor = 0.02
 
-        # Creamos la grilla 3D
+        # Campos a incluir en la grilla: principal + todos los QC disponibles definidos en AFFECTS_INTERP_FIELDS
+        fields_for_grid = {field_to_use}
+        for qc_name in AFFECTS_INTERP_FIELDS:
+            if qc_name in radar_to_use.fields:
+                fields_for_grid.add(qc_name)
+        fields_for_grid = list(fields_for_grid)
+
         grid = pyart.map.grid_from_radars(
             radar_to_use,
             grid_shape=(z_points, y_points, x_points),
             grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
             grid_origin=grid_origin,
+            fields=fields_for_grid,
             weighting_function='nearest',
             gatefilters=gf,
             roi_func="dist",
@@ -324,40 +338,53 @@ def process_radar_to_cog(
         )
         grid.to_xarray()
 
-        # Pasamos de grilla 3D a 2D
+        # Guardamos niveles z completos antes de colapsar el campo principal (lo usaremos para QC)
+        z_levels_full = grid.z['data'].copy()
+
         collapse_grid_to_2d(
             grid,
             field=field_to_use,
             product=product.lower(),
             elevation_deg=elev_deg,
             target_height_m=cappi_height,
-            vmin=vmin
+            vmin=vmin,
         )
-
-        # Tomamos el 2D colapsado y lo cacheamos
         arr2d = grid.fields[field_to_use]['data'][0, :, :]
-        # Garantizamos float32/máscara
         arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
 
-        # ejes x/y del grid (en la proyección nativa del grid)
-        x = grid.x['data'].astype(float)  # (nx,)
-        y = grid.y['data'].astype(float)  # (ny,)
-        ny, nx = arr2d.shape
+        # Colapsar QC a 2D usando la versión no destructiva y los niveles originales
+        qc_2d = {}
+        for qf in fields_for_grid:
+            if qf == field_to_use:
+                continue
+            if qf not in grid.fields:
+                continue
+            data3d_q = grid.fields[qf]['data']
+            # data3d_q puede seguir en 3D aunque ya colapsamos el principal (porque collapse_grid_to_2d sólo afecta ese campo)
+            q2d = collapse_field_3d_to_2d(
+                data3d_q,
+                product=product.lower(),
+                x_coords=grid.x['data'],
+                y_coords=grid.y['data'],
+                z_levels=z_levels_full,
+                elevation_deg=elev_deg,
+                target_height_m=cappi_height,
+            )
+            qc_2d[qf] = q2d
 
+        x = grid.x['data'].astype(float)
+        y = grid.y['data'].astype(float)
+        ny, nx = arr2d.shape
         dx = float(np.mean(np.diff(x))) if x.size > 1 else (x_grid_limits[1]-x_grid_limits[0]) / max(nx-1, 1)
         dy = float(np.mean(np.diff(y))) if y.size > 1 else (y_grid_limits[1]-y_grid_limits[0]) / max(ny-1, 1)
         xmin = float(x.min()) if x.size else x_grid_limits[0]
         ymax = float(y.max()) if y.size else y_grid_limits[1]
-
-        # Construye la transformación q ubica la esquina superior-izquierda del píxel (0,0)
         transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
-
-        # CRS nativo del grid de Py-ART
         proj_dict_norm = normalize_proj_dict(grid, grid_origin)
         crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
-
         pkg_cached = {
             "arr": arr2d,
+            "qc": qc_2d,
             "crs": crs_wkt,
             "transform": transform,
         }
@@ -368,7 +395,7 @@ def process_radar_to_cog(
     masked = np.ma.array(pkg_cached["arr"], copy=True)
     dyn_mask = np.zeros(masked.shape, dtype=bool)
 
-    for f in (filters or []):
+    for f in (visual_filters or []):
         ffield = getattr(f, "field", None)
         if not ffield:
             continue
@@ -384,6 +411,23 @@ def process_radar_to_cog(
                 dyn_mask |= (masked > float(fmax))
 
     masked.mask = np.ma.getmaskarray(masked) | dyn_mask
+
+    # Aplicar filtros QC post-grid (sin regridding)
+    if qc_filters:
+        qc_dict = pkg_cached.get("qc", {}) or {}
+        for f in qc_filters:
+            qf = str(getattr(f, "field", "") or "").upper()
+            q2d = qc_dict.get(qf)
+            if q2d is None:
+                continue
+            qmask = np.zeros(masked.shape, dtype=bool)
+            fmin = getattr(f, "min", None)
+            fmax = getattr(f, "max", None)
+            if fmin is not None:
+                qmask |= (q2d < float(fmin))
+            if fmax is not None:
+                qmask |= (q2d > float(fmax))
+            masked.mask = np.ma.getmaskarray(masked) | qmask
 
     # Crear path único para el GeoTIFF temporal (antes de convertir a Cloud Optimized GeoTIFF)
     os.makedirs(output_dir, exist_ok=True)
