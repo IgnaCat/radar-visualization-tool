@@ -274,6 +274,35 @@ def normalize_proj_dict(grid, grid_origin):
     proj.pop("type", None)
     return proj
 
+def collapse_field_3d_to_2d(data3d, product, *,
+                            x_coords=None, y_coords=None, z_levels=None,
+                            elevation_deg=None, target_height_m=None):
+    """Versión no destructiva para colapsar un solo campo 3D a 2D.
+    No modifica el objeto Grid, sólo recibe los arrays necesarios.
+    """
+    if data3d.ndim == 2:
+        arr2d = data3d
+    else:
+        if product == "ppi":
+            assert elevation_deg is not None and x_coords is not None and y_coords is not None and z_levels is not None
+            X, Y = np.meshgrid(x_coords, y_coords, indexing='xy')
+            r = np.sqrt(X**2 + Y**2)
+            Re = 8.49e6
+            z_target = r * np.sin(np.deg2rad(elevation_deg)) + (r**2) / (2.0 * Re)
+            iz = np.abs(z_target[..., None] - z_levels[None, None, :]).argmin(axis=2)
+            yy = np.arange(len(y_coords))[:, None]
+            xx = np.arange(len(x_coords))[None, :]
+            arr2d = data3d[iz, yy, xx]
+        elif product == "cappi":
+            assert target_height_m is not None and z_levels is not None
+            iz = np.abs(z_levels - float(target_height_m)).argmin()
+            arr2d = data3d[iz, :, :]
+        elif product == "colmax":
+            arr2d = data3d.max(axis=0)
+        else:
+            raise ValueError("Producto inválido")
+    return np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
+
 
 
 # ------------------------------
