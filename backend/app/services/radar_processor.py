@@ -272,7 +272,7 @@ def process_radar_to_cog(
     x_grid_limits = (-range_max_m, range_max_m)
 
     # Calculamos la cantidad de puntos en cada dimensión
-    grid_resolution = 300 if volume == '03' else 1000
+    grid_resolution = 300 if volume == '03' else 1200
     z_points = int(np.ceil(z_grid_limits[1] / grid_resolution)) + 1
     y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
     x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
@@ -313,8 +313,15 @@ def process_radar_to_cog(
             float(radar_to_use.latitude['data'][0]),
             float(radar_to_use.longitude['data'][0]),
         )
+
+        # ROI constante basado en resolución y rango máximo
+        # Experimentando con diferentes roi
         min_radius = max(800.0, 1.2 * grid_resolution)
         xy_factor = 0.02
+        constant_roi = max(
+            grid_resolution * 1.5,  # Mínimo 1.5x resolución
+            800 + (range_max_m / 100000) * 400  # Crece con rango: 800m @ 0km → 1760m @ 240km
+        )
 
         # Campos a incluir en la grilla: principal + todos los QC disponibles definidos en AFFECTS_INTERP_FIELDS
         fields_for_grid = {field_to_use}
@@ -327,14 +334,13 @@ def process_radar_to_cog(
             radar_to_use,
             grid_shape=(z_points, y_points, x_points),
             grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
+            gridding_algo="map_gates_to_grid",
             grid_origin=grid_origin,
             fields=fields_for_grid,
             weighting_function='nearest',
             gatefilters=gf,
-            roi_func="dist",
-            z_factor=0.0,
-            xy_factor=xy_factor,
-            min_radius=min_radius,
+            roi_func="constant",
+            constant_roi=constant_roi,
         )
         grid.to_xarray()
 
@@ -353,6 +359,7 @@ def process_radar_to_cog(
         arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
 
         # Colapsar QC a 2D usando la versión no destructiva y los niveles originales
+        # (refactor pendiente: esto podría hacerse dentro de collapse_grid_to_2d)
         qc_2d = {}
         for qf in fields_for_grid:
             if qf == field_to_use:
@@ -468,6 +475,7 @@ def process_radar_to_cog(
     # ACTUALIZAR CACHE: Leer el GeoTIFF warped que acaba de generar PyART
     # y extraer los valores numéricos para cachearlos (no RGB, sino los valores pre-colormap)
     # Pero PyART genera RGB, así que necesitamos generar un GeoTIFF con valores numéricos también
+    # (refactor pendiente de pyart para no generar dos geotiff)
     temp_numeric_tif = Path(output_dir) / f"numeric_{uuid.uuid4().hex}.tif"
     pyart.io.write_grid_geotiff(
         grid=grid_fake,
