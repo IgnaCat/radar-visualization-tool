@@ -382,6 +382,13 @@ def process_radar_to_cog(
         transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
         proj_dict_norm = normalize_proj_dict(grid, grid_origin)
         crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
+
+        # Flip arrays to match GeoTIFF/raster convention (row 0 = north)
+        # PyART grids have y[0] at south, but the transform assumes row 0 is at ymax (north)
+        arr2d = arr2d[::-1, :]
+        for qf in qc_2d:
+            qc_2d[qf] = qc_2d[qf][::-1, :]
+
         pkg_cached = {
             "arr": arr2d,
             "qc": qc_2d,
@@ -438,9 +445,14 @@ def process_radar_to_cog(
     # Reusamos la malla x/y de la cache: como no guardamos grid anterior completo, derivamos dims del array
     # Armamos un grid pyart mínimo para write_grid_geotiff, escribiendo el 2D como nivel 0
     ny, nx = masked.shape
+    # Flip masked back to pyart convention (row 0 = south) because pyart's
+    # write_grid_geotiff will flip it internally with data[::-1, :].
+    # The cached array is already flipped (row 0 = north), so we undo that
+    # here to avoid double-flipping.
+    masked_for_geotiff = masked[::-1, :]
     grid_fake = pyart.core.Grid(
         time={'data': np.array([0])},
-        fields={field_to_use: {'data': masked[np.newaxis, :, :], '_FillValue': -9999.0}},
+        fields={field_to_use: {'data': masked_for_geotiff[np.newaxis, :, :], '_FillValue': -9999.0}},
         metadata={'instrument_name': 'RADAR'},
         origin_latitude={'data': radar_to_use.latitude['data']},
         origin_longitude={'data': radar_to_use.longitude['data']},
