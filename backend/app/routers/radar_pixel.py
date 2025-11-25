@@ -104,21 +104,86 @@ def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     tf = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
     xg, yg = tf.transform(p.lon, p.lat)
 
-    # coords -> (col,row)
-    row, col = rowcol(transform, xg, yg, op=round)
-
-    # transformar a WGS84 (lon/lat)
-    xc, yc = xy(transform, row, col, offset="center")
-    to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-    lonc, latc = to_wgs84.transform(xc, yc)
-
+    # coords continuas (fraccionarias) en pixel space
+    col_f, row_f = ~transform * (xg, yg)  # inverso de transform: (xg, yg) -> (col, row) float
+    
     ny, nx = arr.shape
-    if row < 0 or row >= ny or col < 0 or col >= nx:
-        return RadarPixelResponse(value=None, masked=True, row=row, col=col, message="Fuera de limites")
-
+    
+    # Verificar límites básicos
+    if row_f < 0 or row_f >= ny - 1 or col_f < 0 or col_f >= nx - 1:
+        # Fuera de límites o en borde (no hay 4 vecinos para bilinear)
+        row_int = int(round(row_f))
+        col_int = int(round(col_f))
+        if row_int < 0 or row_int >= ny or col_int < 0 or col_int >= nx:
+            return RadarPixelResponse(value=None, masked=True, row=row_int, col=col_int, message="Fuera de limites")
+        m = np.ma.getmaskarray(arr)
+        if m[row_int, col_int]:
+            return RadarPixelResponse(value=None, masked=True, row=row_int, col=col_int, message="masked")
+        val = float(arr[row_int, col_int])
+        # Coordenada del centro del pixel para respuesta
+        xc, yc = xy(transform, row_int, col_int, offset="center")
+        to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
+        lonc, latc = to_wgs84.transform(xc, yc)
+        return RadarPixelResponse(value=round(val, 2), masked=False, row=row_int, col=col_int, lat=latc, lon=lonc)
+    
+    # Interpolación bilinear: encontrar los 4 píxeles vecinos
+    r0 = int(np.floor(row_f))
+    c0 = int(np.floor(col_f))
+    r1 = r0 + 1
+    c1 = c0 + 1
+    
+    # Pesos
+    dr = row_f - r0
+    dc = col_f - c0
+    
     m = np.ma.getmaskarray(arr)
-    if m[row, col]:
-        return RadarPixelResponse(value=None, masked=True, row=row, col=col, message="masked")
-
-    val = float(arr[row, col])
-    return RadarPixelResponse(value=round(val, 2), masked=False, row=row, col=col, lat=latc, lon=lonc)
+    
+    # Extraer valores y máscaras de los 4 vecinos
+    v00 = arr[r0, c0] if not m[r0, c0] else np.nan
+    v01 = arr[r0, c1] if not m[r0, c1] else np.nan
+    v10 = arr[r1, c0] if not m[r1, c0] else np.nan
+    v11 = arr[r1, c1] if not m[r1, c1] else np.nan
+    
+    # Si todos masked -> retornar masked
+    if np.isnan([v00, v01, v10, v11]).all():
+        row_int = int(round(row_f))
+        col_int = int(round(col_f))
+        return RadarPixelResponse(value=None, masked=True, row=row_int, col=col_int, message="masked (todos vecinos)")
+    
+    # Interpolación bilinear (ignora NaN promediando los válidos con sus pesos)
+    # Normalizar pesos solo con celdas válidas
+    w00 = (1 - dr) * (1 - dc)
+    w01 = (1 - dr) * dc
+    w10 = dr * (1 - dc)
+    w11 = dr * dc
+    
+    total_weight = 0.0
+    val_interp = 0.0
+    
+    if not np.isnan(v00):
+        val_interp += w00 * v00
+        total_weight += w00
+    if not np.isnan(v01):
+        val_interp += w01 * v01
+        total_weight += w01
+    if not np.isnan(v10):
+        val_interp += w10 * v10
+        total_weight += w10
+    if not np.isnan(v11):
+        val_interp += w11 * v11
+        total_weight += w11
+    
+    if total_weight > 0:
+        val_interp /= total_weight
+    else:
+        # Todos NaN (ya chequeado arriba, pero por si acaso)
+        row_int = int(round(row_f))
+        col_int = int(round(col_f))
+        return RadarPixelResponse(value=None, masked=True, row=row_int, col=col_int, message="masked")
+    
+    # Devolver coordenadas del punto interpolado (podemos devolver las del pixel más cercano o las exactas)
+    # Usaremos las exactas (lat/lon del usuario)
+    row_int = int(round(row_f))
+    col_int = int(round(col_f))
+    
+    return RadarPixelResponse(value=round(val_interp, 2), masked=False, row=row_int, col=col_int, lat=p.lat, lon=p.lon)
