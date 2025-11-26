@@ -2,8 +2,8 @@ import pyproj
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
-from shapely.geometry import shape, box
-from rasterio.warp import transform_geom
+from shapely.geometry import shape, box, mapping
+from shapely.ops import transform as shp_transform
 from rasterio.features import geometry_mask
 from typing import Optional, List
 from ..core.cache import GRID2D_CACHE
@@ -115,10 +115,12 @@ def stats_from_cache(cache_key: str, polygon_gj_4326: dict):
     crs = pyproj.CRS.from_wkt(pkg["crs"])
     transform = pkg["transform"]
 
-    # reproyectar polígono: 4326 → CRS del grid
+    # reproyectar polígono: 4326 → crs del grid
     geom4326 = _extract_geometry(polygon_gj_4326)
-    gj_dst = transform_geom("EPSG:4326", crs.to_string(), geom4326, precision=6)
-    geom = shape(gj_dst)
+    g_src = shape(geom4326)
+    tf = pyproj.Transformer.from_crs("EPSG:4326", crs, always_xy=True)
+    g_dst = shp_transform(lambda x, y, z=None: tf.transform(x, y), g_src)
+    gj_dst = mapping(g_dst)
 
     # límites del raster (en coordenadas del grid)
     ny, nx = arr.shape
@@ -126,7 +128,7 @@ def stats_from_cache(cache_key: str, polygon_gj_4326: dict):
     xmax, ymin = transform * (nx, ny)
 
     # si el polígono no interseca el raster → sin cobertura
-    if not geom.intersects(box(xmin, ymin, xmax, ymax)):
+    if not g_dst.intersects(box(xmin, ymin, xmax, ymax)):
         return {"noCoverage": True, "reason": "Afuera de limites"}
 
     # máscara del polígono sobre la grilla
