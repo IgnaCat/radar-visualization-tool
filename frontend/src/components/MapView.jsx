@@ -91,7 +91,7 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
       // liberar maxBounds al cambiar de producto
       try {
         map.setMaxBounds(null);
-      } catch { }
+      } catch {}
     };
   }, [tilejsonUrl, map]);
 
@@ -243,7 +243,12 @@ export default function MapView({
         <CircleMarker
           center={[radarSite.lat, radarSite.lon]}
           radius={7}
-          pathOptions={{ color: "#ff9800", weight: 3, fillOpacity: 0.9, fillColor: "#ff9800" }}
+          pathOptions={{
+            color: "#ff9800",
+            weight: 3,
+            fillOpacity: 0.9,
+            fillColor: "#ff9800",
+          }}
         >
           <Tooltip direction="top" offset={[0, -6]} permanent>
             Origen radar

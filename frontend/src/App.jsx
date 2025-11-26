@@ -445,7 +445,7 @@ export default function App() {
         lon: latlng.lng,
       };
       const resp = await generatePixelStat(payload);
-      const v = resp.data?.value;
+      const v = resp.data?.value.toFixed(2);
       if (resp.data.masked || v == null) {
         enqueueSnackbar("Sin dato (masked / fuera de cobertura)", {
           variant: "warning",
@@ -511,9 +511,9 @@ export default function App() {
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-            ]
+                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+              ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
