@@ -518,6 +518,7 @@ export default function App() {
         }
         onClearLineOverlay={handleClearLineOverlay}
         rhiEndpoints={{ start: rhiLinePreview.start, end: rhiLinePreview.end }}
+        activeToolFile={activeToolFile}
       />
       {/* Selector de capa activa para herramientas (cuando hay varias capas a la vez) */}
       <ActiveLayerPicker

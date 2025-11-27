@@ -410,6 +410,7 @@ def _generate_segment_transect_png(
             grid_shape=(nz, ny, nx),
             grid_limits=((0.0, z_top_m), (-rng_max_m, rng_max_m), (-rng_max_m, rng_max_m)),
             grid_origin=(site_lat, site_lon),
+            gridding_algo="map_gates_to_grid",
             weighting_function="nearest",
             gatefilters=gf,
             roi_func="dist",
