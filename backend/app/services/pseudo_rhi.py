@@ -203,8 +203,8 @@ def variable_radar_cross_section(
              horizontalalignment='right', verticalalignment='top',
              transform=ax2.transAxes, fontsize=12, bbox=dict(facecolor='white', alpha=0.7))
 
-    plt.xlabel('Distancia al radar (km)', fontsize=14)
-    plt.ylabel(f'Altura (km) - {units}', fontsize=14)
+    plt.xlabel('Distancia (km)', fontsize=14)
+    plt.ylabel(f'Altura (km)', fontsize=14)
     plt.grid()
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
@@ -358,123 +358,160 @@ def _generate_segment_transect_png(
     start_lat: float,
     end_lon: float,
     end_lat: float,
-    max_length_km: float,
+    max_length_km: Optional[float] = None,
     cmap,
     vmin: Optional[float],
     vmax: Optional[float],
     output_path: Path,
     filters: List[RangeFilter] = [],
-    max_height_km: float = 20.0,
+    max_height_km: Optional[float] = None,
 ):
     """
-    Genera una "cortina" vertical entre dos puntos arbitrarios dentro del alcance del radar:
-    eje X = distancia a lo largo del segmento start→end, eje Y = altura, colores = campo del radar.
-
-    Implementación: crea una grilla 3D con pyart.map.grid_from_radars y re-muestrea
-    a lo largo del plano definido por el segmento, usando RegularGridInterpolator.
+    Genera transecto vertical entre dos puntos usando cross-sections radiales nativos
+    del radar (evita regridding 3D que degrada calidad y performance).
+    
+    Similar a variable_radar_cross_section pero para segmentos arbitrarios.
     """
-    # 1) Preparar grilla 3D (reusar cache si existe)
+    from scipy.interpolate import interp1d
+    from pyproj import Geod
+    
     site_lon, site_lat, _ = get_radar_site(radar)
-    rng_max_m = safe_range_max_m(radar)
-    z_top_m = max(2000.0, float(max_height_km) * 1000.0)  # limitar grilla a altura solicitada (mín 2 km)
-
-    # Resolución: balance entre detalle y performance
-    grid_res_xy = 1000.0  # 1.0 km
-    grid_res_z = 300.0    # 300 m
-
-    nx = int(rng_max_m / grid_res_xy)
-    ny = int(rng_max_m / grid_res_xy)
-    nz = int(z_top_m / grid_res_z) + 1
-
-    nx = max(nx, 100)
-    ny = max(ny, 100)
-    nz = max(nz, 40)
-
-    # Cache key (3D)
-    sig = qc_signature(filters)
-    key3d = grid3d_cache_key(
-        file_hash=file_hash,
-        field_to_use=field_name,
-        volume=None,
-        qc_sig=sig,
-        grid_res_xy=grid_res_xy,
-        grid_res_z=grid_res_z,
-        z_top_m=z_top_m,
-    )
-
-    pkg3d = GRID3D_CACHE.get(key3d)
-    if pkg3d is None:
-        gf = build_gatefilter(radar, field_name, filters, is_rhi=True)
-        grid = pyart.map.grid_from_radars(
-            radar,
-            grid_shape=(nz, ny, nx),
-            grid_limits=((0.0, z_top_m), (-rng_max_m, rng_max_m), (-rng_max_m, rng_max_m)),
-            grid_origin=(site_lat, site_lon),
-            gridding_algo="map_gates_to_grid",
-            weighting_function="nearest",
-            gatefilters=gf,
-            roi_func="dist",
-            z_factor=0.0,
-            xy_factor=0.02,
-            min_radius=max(800.0, 1.2 * grid_res_xy),
-        )
-        arr3d = np.ma.array(grid.fields[field_name]["data"], copy=False)
-        z = np.asarray(grid.z["data"], dtype=np.float32)
-        y = np.asarray(grid.y["data"], dtype=np.float32)
-        x = np.asarray(grid.x["data"], dtype=np.float32)
-        import pyproj
-        proj_dict = normalize_proj_dict(grid, (site_lat, site_lon))
-        crs_wkt = pyproj.CRS.from_dict(proj_dict).to_wkt()
-        pkg3d = {"arr3d": arr3d, "z": z, "y": y, "x": x, "crs": crs_wkt}
-        GRID3D_CACHE[key3d] = pkg3d
-    else:
-        arr3d = pkg3d["arr3d"]
-        z = pkg3d["z"]
-        y = pkg3d["y"]
-        x = pkg3d["x"]
-        crs_wkt = pkg3d.get("crs")
-
-    # 2) Construir la polilínea start→end limitada por max_length_km
+    _geod = Geod(ellps="WGS84")
+    
+    # 1) Construir polilínea start→end limitada por max_length_km
     end_lon_eff, end_lat_eff, length_km = limit_line_to_range(
         start_lon, start_lat, end_lon, end_lat, max_length_km
     )
-    # muestreo cada ~150 m
+    
     step_m = 150.0
     n_pts = max(2, int((length_km * 1000.0) // step_m) + 1)
     lons = np.empty(n_pts, dtype=np.float64)
     lats = np.empty(n_pts, dtype=np.float64)
-    from pyproj import Geod
-    _geod = Geod(ellps="WGS84")
+    
     az12, _, dist_m = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
     for i in range(n_pts):
         d = i * step_m
         lon_i, lat_i, _ = _geod.fwd(start_lon, start_lat, az12, d)
         lons[i], lats[i] = lon_i, lat_i
-
-    # 3) Transformar a CRS de la grilla (x,y en metros)
-    import pyproj
-    crs = pyproj.CRS.from_wkt(crs_wkt) if 'crs_wkt' in locals() and crs_wkt else pyproj.CRS.from_epsg(4326)
-    tf = pyproj.Transformer.from_crs("EPSG:4326", crs, always_xy=True)
-    xs, ys = tf.transform(lons, lats)
-
-    # 4) Interpolador 3D (z,y,x). Usamos nearest para respetar máscaras/mejores bordes
-    data = np.asarray(arr3d.filled(np.nan), dtype=np.float32)
-    rgi = RegularGridInterpolator(
-        (z.astype(np.float32), y.astype(np.float32), x.astype(np.float32)),
-        data,
-        method="nearest",
-        bounds_error=False,
-        fill_value=np.nan,
-    )
-
-    # Construimos consultas para toda la "cortina": ZxN
-    Z = z.astype(np.float32)
-    N = xs.size
-    ZZ, NN = np.meshgrid(Z, np.arange(N), indexing="ij")  # (nz, N)
-    pts = np.column_stack((ZZ.ravel(), ys[NN].ravel(), xs[NN].ravel()))
-    vals = rgi(pts).reshape(ZZ.shape)
-
-    # 5) Perfil de terreno a lo largo de la línea (opcional, como en radial)
+    
+    # 2) Calcular azimut y distancia desde el radar a cada punto
+    azimuths = np.array([calcule_radial_angle(site_lat, site_lon, lat, lon) 
+                        for lat, lon in zip(lats, lons)])
+    distances_km = np.array([_km_between(site_lon, site_lat, lon, lat) 
+                            for lat, lon in zip(lats, lons)])
+    
+    # 3) Extraer cross-sections nativos para azimuts únicos (agrupados cada ~1°)
+    unique_az = np.unique(np.round(azimuths).astype(int))
+    xsect_cache = {}
+    
+    for az in unique_az:
+        try:
+            xsect = pyart.util.cross_section_ppi(radar, [float(az)])
+        except Exception:
+            continue
+            
+        # Aplicar filtros sobre el cross-section
+        gf_xsect = build_gatefilter(xsect, field_name, filters, is_rhi=True)
+        
+        # Extraer datos (puede ser 1D o 2D dependiendo de cross_section_ppi)
+        data_field = xsect.fields[field_name]["data"]
+        if data_field.ndim == 1:
+            data2d = np.ma.array(data_field)
+            if gf_xsect is not None and gf_xsect.gate_excluded.size == data2d.size:
+                mask = gf_xsect.gate_excluded
+                data2d.mask = np.ma.getmaskarray(data2d) | mask
+            gates_alt = xsect.gate_altitude["data"]
+        else:
+            data2d = np.ma.array(data_field[0, :])
+            if gf_xsect is not None and gf_xsect.gate_excluded.shape[1] == data2d.size:
+                mask = gf_xsect.gate_excluded[0, :]
+                data2d.mask = np.ma.getmaskarray(data2d) | mask
+            gates_alt = xsect.gate_altitude["data"][0, :]
+        
+        # Coordenadas (distancia en km, altura en km)
+        rng = xsect.range["data"] / 1000.0  # km
+        gates_alt_km = gates_alt / 1000.0  # km sobre nivel del mar
+        
+        xsect_cache[az] = {
+            "data": data2d,
+            "range": rng,
+            "altitude": gates_alt_km,
+        }
+    
+    if not xsect_cache:
+        # Fallback: sin cross-sections, crear imagen vacía
+        fig = plt.figure(figsize=[15, 5.5])
+        ax = plt.subplot(1, 1, 1)
+        ax.text(0.5, 0.5, "Sin cobertura de radar", ha="center", va="center", fontsize=16)
+        ax.set_xlabel("Distancia (km)")
+        ax.set_ylabel("Altura (km)")
+        plt.tight_layout()
+        plt.savefig(output_path, dpi=150, bbox_inches="tight")
+        plt.close()
+        return
+    
+    # 4) Interpolar valores en la polilínea usando cross-sections más cercanos
+    # Determinar altura máxima real de los datos
+    max_data_height = 0.0
+    for xs_data in xsect_cache.values():
+        alt_km = xs_data["altitude"]
+        if len(alt_km) > 0:
+            max_data_height = max(max_data_height, np.nanmax(alt_km))
+    
+    # Ajustar altura efectiva: mínimo entre la solicitada y la altura real + margen
+    effective_max_height = min(max_height_km, max_data_height + 1.0) if max_data_height > 0 else max_height_km
+    effective_max_height = max(effective_max_height, 5.0)  # mínimo 5 km
+    
+    nz = 200  # resolución vertical
+    z_levels = np.linspace(0, effective_max_height, nz)
+    vals = np.full((nz, n_pts), np.nan, dtype=np.float32)
+    
+    for i, (az, dist_km) in enumerate(zip(azimuths, distances_km)):
+        az_nearest = int(np.round(az))
+        if az_nearest not in xsect_cache:
+            # Buscar azimut más cercano disponible
+            available_az = list(xsect_cache.keys())
+            if not available_az:
+                continue
+            az_nearest = min(available_az, key=lambda a: abs(a - az))
+        
+        xs_data = xsect_cache[az_nearest]
+        rng = xs_data["range"]
+        alt_km = xs_data["altitude"]
+        data = xs_data["data"]
+        
+        # data es 1D: un valor por cada gate/rango
+        # alt_km también es 1D con la misma forma
+        # Encontrar valor en el rango más cercano al punto actual
+        idx_rng = np.argmin(np.abs(rng - dist_km))
+        if idx_rng >= len(data):
+            continue
+        
+        # Para cross-section, data y alt tienen la misma estructura 1D
+        # Necesitamos interpolar verticalmente usando los gates a diferentes alturas
+        # pero en el mismo azimut
+        # Como tenemos un solo perfil radial, usamos todos los gates
+        profile = data
+        alt_profile = alt_km
+        
+        # Interpolar a z_levels uniformes
+        valid = ~np.ma.getmaskarray(profile)
+        if valid.sum() < 2:
+            continue
+        
+        try:
+            f_interp = interp1d(
+                alt_profile[valid], 
+                profile[valid], 
+                kind="linear", 
+                bounds_error=False, 
+                fill_value=np.nan
+            )
+            vals[:, i] = f_interp(z_levels)
+        except Exception:
+            continue
+    
+    # 5) Perfil de terreno a lo largo de la línea
     tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
     ground_km = None
     try:
@@ -489,42 +526,37 @@ def _generate_segment_transect_png(
                 ground_km = (elev - offset) / 1000.0
     except Exception:
         ground_km = None
-
+    
     # Distancias acumuladas para eje X (km)
-    dkm = np.zeros(N, dtype=np.float64)
-    for i in range(1, N):
+    dkm = np.zeros(n_pts, dtype=np.float64)
+    for i in range(1, n_pts):
         _, _, dd = _geod.inv(lons[i-1], lats[i-1], lons[i], lats[i])
         dkm[i] = dkm[i-1] + dd / 1000.0
-
+    
     # 6) Graficar
     fig = plt.figure(figsize=[15, 5.5])
     ax = plt.subplot(1, 1, 1)
-
-    # imshow con extent (x: km, y: km)
-    # Recortar según altura solicitada
-    if Z[-1] / 1000.0 > max_height_km:
-        clip_idx = np.searchsorted(Z, max_height_km * 1000.0, side="right")
-        Z = Z[:clip_idx]
-        vals = vals[:clip_idx, :]
-
+    
     im = ax.imshow(
         vals,
         origin="lower",
         aspect="auto",
-        extent=[0, float(dkm[-1]), float(Z[0]/1000.0), float(Z[-1]/1000.0)],
+        extent=[0, float(dkm[-1]), 0, effective_max_height],
         cmap=cmap,
         vmin=float(vmin) if np.isfinite(vmin) else None,
         vmax=float(vmax) if np.isfinite(vmax) else None,
     )
+    
     if ground_km is not None:
         ax.plot(dkm, ground_km, color="black", linewidth=2)
-
-    ax.set_xlabel("Distancia (km)")
-    ax.set_ylabel("Altura (km)")
+    
+    ax.set_xlabel("Distancia (km)", fontsize=14)
+    ax.set_ylabel("Altura (km)", fontsize=14)
+    ax.set_ylim(0, effective_max_height)  # Limitar eje Y a altura real
     ax.grid(True, alpha=0.3)
     cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.ax.set_ylabel(VARIABLE_UNITS.get(field_name, ""))
-
+    cbar.ax.set_ylabel(VARIABLE_UNITS.get(field_name, ""), fontsize=12)
+    
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()

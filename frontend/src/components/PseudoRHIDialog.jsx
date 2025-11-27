@@ -116,7 +116,16 @@ export default function PseudoRHIDialog({
       // Evitar re-aperturas repetidas
       setAutoFlowActive(false);
     }
-  }, [open, autoFlowActive, pickTarget, startLat, startLon, endLat, endLon, onAutoReopen]);
+  }, [
+    open,
+    autoFlowActive,
+    pickTarget,
+    startLat,
+    startLon,
+    endLat,
+    endLon,
+    onAutoReopen,
+  ]);
 
   // Update preview line
   useEffect(() => {
@@ -314,7 +323,7 @@ export default function PseudoRHIDialog({
               <Box mt={2} display="grid" gridTemplateColumns="1fr 1fr" gap={2}>
                 <TextField
                   size="small"
-                  label="Longitud máx (km)"
+                  label="Distancia máx (km)"
                   type="number"
                   value={maxLengthKm}
                   onChange={(e) => {
