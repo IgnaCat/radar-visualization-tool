@@ -140,6 +140,7 @@ export default function MapView({
   lineOverlay = null,
   onClearLineOverlay,
   rhiEndpoints = null, // { start: {lat, lon}, end: {lat, lon} }
+  activeToolFile = null, // radar seleccionado para herramientas
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -174,12 +175,19 @@ export default function MapView({
             typeof opacityByField[keyField] === "number"
               ? opacityByField[keyField]
               : opacities[idx] ?? 1;
+          
+          // Las capas del radar seleccionado se muestran arriba (mayor zIndex)
+          const isActiveRadar = activeToolFile && L.source_file === activeToolFile;
+          const zIndex = isActiveRadar 
+            ? baseZ + 1000 + idx * 10  // radar activo: zIndex muy alto
+            : baseZ + (n - 1 - idx) * 10;  // otros radares: zIndex normal invertido
+          
           return (
             <COGTile
               key={`${L.field || "layer"}|${L.tilejson_url}`}
               tilejsonUrl={L.tilejson_url}
               opacity={fieldOpacity}
-              zIndex={baseZ + (n - 1 - idx) * 10}
+              zIndex={zIndex}
             />
           );
         })}
