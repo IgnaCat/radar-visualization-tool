@@ -390,12 +390,15 @@ def process_radar_to_cog(
         proj_dict_norm = normalize_proj_dict(grid, grid_origin)
         crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
         
-        # Guardar temporalmente en CRS local (lo vamos a warp después usando PyART)
+        # Guardar en CRS local (se agregará versión warped después del primer warp de PyART)
         pkg_cached = {
             "arr": arr2d,
             "qc": qc_2d,
             "crs": crs_wkt,
             "transform": transform,
+            "arr_warped": None,  # Se llenará después del primer warp
+            "crs_warped": None,
+            "transform_warped": None,
         }
         GRID2D_CACHE[cache_key] = pkg_cached
 
@@ -472,37 +475,36 @@ def process_radar_to_cog(
         warp_to_mercator=True
     )
     
-    # ACTUALIZAR CACHE: Leer el GeoTIFF warped que acaba de generar PyART
-    # y extraer los valores numéricos para cachearlos (no RGB, sino los valores pre-colormap)
-    # Pero PyART genera RGB, así que necesitamos generar un GeoTIFF con valores numéricos también
-    # (refactor pendiente de pyart para no generar dos geotiff)
-    temp_numeric_tif = Path(output_dir) / f"numeric_{uuid.uuid4().hex}.tif"
-    pyart.io.write_grid_geotiff(
-        grid=grid_fake,
-        filename=str(temp_numeric_tif),
-        field=field_to_use,
-        level=0,
-        rgb=False,  # Sin colormap, valores numéricos
-        warp_to_mercator=True
-    )
-    
-    # Leer el GeoTIFF numérico warped para actualizar el cache
-    with rasterio.open(temp_numeric_tif) as src_numeric:
-        arr_warped = src_numeric.read(1, masked=True)
-        transform_warped = src_numeric.transform
-        crs_warped = src_numeric.crs.to_wkt()
+    # ACTUALIZAR CACHE: Si es la primera vez, guardar versión warped para stats
+    # (solo se hace una vez por cache_key, no en cada cambio de filtros)
+    if pkg_cached.get("arr_warped") is None:
+        temp_numeric_tif = Path(output_dir) / f"numeric_{uuid.uuid4().hex}.tif"
+        pyart.io.write_grid_geotiff(
+            grid=grid_fake,
+            filename=str(temp_numeric_tif),
+            field=field_to_use,
+            level=0,
+            rgb=False,  # Sin colormap, valores numéricos
+            warp_to_mercator=True
+        )
         
-        # Actualizar cache con la versión warped de PyART
-        pkg_cached["arr"] = arr_warped.astype(np.float32)
-        pkg_cached["transform"] = transform_warped
-        pkg_cached["crs"] = crs_warped
-        GRID2D_CACHE[cache_key] = pkg_cached
-    
-    # Limpiar GeoTIFF numérico temporal
-    try:
-        temp_numeric_tif.unlink()
-    except OSError:
-        pass
+        # Leer el GeoTIFF numérico warped para stats
+        with rasterio.open(temp_numeric_tif) as src_numeric:
+            arr_warped = src_numeric.read(1, masked=True)
+            transform_warped = src_numeric.transform
+            crs_warped = src_numeric.crs.to_wkt()
+            
+            # Agregar versión warped al cache (mantiene arr local para GeoTIFFs)
+            pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
+            pkg_cached["transform_warped"] = transform_warped
+            pkg_cached["crs_warped"] = crs_warped
+            GRID2D_CACHE[cache_key] = pkg_cached
+        
+        # Limpiar GeoTIFF numérico temporal
+        try:
+            temp_numeric_tif.unlink()
+        except OSError:
+            pass
 
     # Convertir a COG (Cloud Optimized GeoTIFF)
     _ = convert_to_cog(tiff_path, cog_path)
