@@ -95,10 +95,12 @@ def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     
     if not (-90 <= float(p.lat) <= 90 and -180 <= float(p.lon) <= 180):
         raise HTTPException(status_code=400, detail="Coordenadas no WGS84 (use lat∈[-90,90], lon∈[-180,180])")
-
-    arr = pkg["arr"]                 # np.ma.MaskedArray (ny, nx)
-    crs = pyproj.CRS.from_wkt(pkg["crs"])
-    transform: Affine = pkg["transform"]
+    
+    # Usar versión warped si está disponible (optimizado para stats desde WGS84)
+    arr = pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
+    crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
+    transform = pkg["transform_warped"] if pkg.get("transform_warped") is not None else pkg["transform"]
+    crs = pyproj.CRS.from_wkt(crs_wkt)
 
     # 4326 -> CRS del grid (siempre_xy=True porque pasamos (lon,lat))
     tf = Transformer.from_crs("EPSG:4326", crs, always_xy=True)

@@ -111,9 +111,11 @@ def stats_from_cache(cache_key: str, polygon_gj_4326: dict):
     if pkg is None:
         return {"noCoverage": True, "reason": "No cacheado"}
 
-    arr = pkg["arr"]  # np.ma.MaskedArray (ny, nx)
-    crs = pyproj.CRS.from_wkt(pkg["crs"])
-    transform = pkg["transform"]
+    # Usar versión warped si está disponible (optimizado para stats desde WGS84)
+    arr = pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
+    crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
+    transform = pkg["transform_warped"] if pkg.get("transform_warped") is not None else pkg["transform"]
+    crs = pyproj.CRS.from_wkt(crs_wkt)
 
     # reproyectar polígono: 4326 → crs del grid
     geom4326 = _extract_geometry(polygon_gj_4326)
