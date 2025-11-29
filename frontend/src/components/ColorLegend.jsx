@@ -190,8 +190,8 @@ export default function ColorLegend({
                 key={`${key}-${item.value}`}
                 title={item.label}
                 style={{
-                  width: 26,
-                  height: 26,
+                  width: 23,
+                  height: 23,
                   borderRadius: "50%",
                   backgroundColor: item.color,
                   cursor: "pointer",
@@ -200,7 +200,7 @@ export default function ColorLegend({
                   justifyContent: "center",
                   fontWeight: "bold",
                   color: textColor,
-                  fontSize: 16,
+                  fontSize: 15,
                 }}
               >
                 {item.value}
@@ -216,13 +216,13 @@ export default function ColorLegend({
     <div
       style={{
         position: "absolute",
-        left: 40,
+        left: 0,
         bottom: 10,
         zIndex: 1000,
         display: "flex",
         flexDirection: "row",
         alignItems: "flex-start",
-        gap: 16,
+        gap: 15,
         padding: 4,
         ...style,
       }}

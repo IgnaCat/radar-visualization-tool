@@ -13,6 +13,10 @@ import MapView from "./components/MapView";
 import ActiveLayerPicker from "./components/ActiveLayerPicker";
 import UploadButton from "./components/UploadButton";
 import FloatingMenu from "./components/FloatingMenu";
+import HeaderCard from "./components/HeaderCard";
+import VerticalToolbar from "./components/VerticalToolbar";
+import ZoomControls from "./components/ZoomControls";
+import BaseMapSelector from "./components/BaseMapSelector";
 import Alerts from "./components/Alerts";
 import ColorLegend from "./components/ColorLegend";
 import Loader from "./components/Loader";
@@ -129,6 +133,7 @@ export default function App() {
   const [computeKey, setComputeKey] = useState("");
   const [warnings, setWarnings] = useState([]);
   // var currentOverlay = overlayData.outputs?.[currentIndex] || null;
+  const [mapInstance, setMapInstance] = useState(null); // Referencia al mapa Leaflet
 
   const [alert, setAlert] = useState({
     open: false,
@@ -152,6 +157,14 @@ export default function App() {
   const drawnLayerRef = useRef(null); // referencia a la capa dibujada
   // archivo seleccionado manualmente para herramientas (pixel/área/RHI)
   const [activeToolFile, setActiveToolFile] = useState(null);
+  // Estado para el selector de mapas base
+  const [mapSelectorOpen, setMapSelectorOpen] = useState(false);
+  const [selectedBaseMap, setSelectedBaseMap] = useState({
+    id: "osm",
+    name: "Argenmap",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  });
   // Derivar sitio del radar a partir del archivo activo (como activeToolFile)
   const radarSite = useMemo(() => {
     if (!activeToolFile) return null;
@@ -432,6 +445,14 @@ export default function App() {
     });
   };
 
+  const handleToggleMapSelector = () => {
+    setMapSelectorOpen((prev) => !prev);
+  };
+
+  const handleSelectBaseMap = (map) => {
+    setSelectedBaseMap(map);
+  };
+
   const handleMapClickPixelStat = async (latlng) => {
     try {
       const payload = {
@@ -519,22 +540,45 @@ export default function App() {
         onClearLineOverlay={handleClearLineOverlay}
         rhiEndpoints={{ start: rhiLinePreview.start, end: rhiLinePreview.end }}
         activeToolFile={activeToolFile}
+        onMapReady={setMapInstance}
+        baseMapUrl={selectedBaseMap.url}
+        baseMapAttribution={selectedBaseMap.attribution}
       />
-      {/* Selector de capa activa para herramientas (cuando hay varias capas a la vez) */}
+
+      {/* Nuevo diseño estilo IGN */}
+      <HeaderCard
+        onUploadClick={handleFileUpload}
+        logoSrc="/assets/lrsr_logo.png"
+      />
+      <VerticalToolbar
+        onChangeProductClick={() => setSelectorOpen(true)}
+        onPseudoRhiClick={handleOpenRHI}
+        onAreaStatsClick={handleOpenAreaStatsMode}
+        onPixelStatToggle={handleTogglePixelStat}
+        onMapSelectorToggle={handleToggleMapSelector}
+        pixelStatActive={pixelStatMode}
+        mapSelectorActive={mapSelectorOpen}
+      />
+      <BaseMapSelector
+        open={mapSelectorOpen}
+        onClose={() => setMapSelectorOpen(false)}
+        selectedMap={selectedBaseMap}
+        onSelectMap={handleSelectBaseMap}
+      />
+      <ZoomControls map={mapInstance} />
+
+      {/* Componentes originales mantenidos */}
       <ActiveLayerPicker
         layers={Array.isArray(currentOverlay) ? currentOverlay : []}
         value={activeToolFile}
         onChange={setActiveToolFile}
       />
       <ColorLegend fields={fieldsUsed} />
-      <FloatingMenu
-        onUploadClick={handleFileUpload}
-        onChangeProductClick={() => setSelectorOpen(true)}
-        onPseudoRhiClick={handleOpenRHI}
-        onAreaStatsClick={handleOpenAreaStatsMode}
-        onPixelStatToggle={handleTogglePixelStat}
-      />
-      <UploadButton onFilesSelected={handleFilesSelected} />
+
+      {/* UploadButton oculto - funcionalidad movida a HeaderCard */}
+      <div style={{ display: "none" }}>
+        <UploadButton onFilesSelected={handleFilesSelected} />
+      </div>
 
       {/* Slider para múltiples imágenes */}
       {mergedOutputs.length > 0 && (
