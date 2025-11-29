@@ -141,6 +141,9 @@ export default function MapView({
   onClearLineOverlay,
   rhiEndpoints = null, // { start: {lat, lon}, end: {lat, lon} }
   activeToolFile = null, // radar seleccionado para herramientas
+  onMapReady, // Callback para recibir la instancia del mapa
+  baseMapUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", // URL del mapa base
+  baseMapAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -154,6 +157,17 @@ export default function MapView({
     }
   }, [pickedPoint]);
 
+  // Componente interno para acceder a la instancia del mapa
+  function MapReadyHandler() {
+    const map = useMap();
+    useEffect(() => {
+      if (onMapReady && map) {
+        onMapReady(map);
+      }
+    }, [map]);
+    return null;
+  }
+
   return (
     <MapContainer
       center={center}
@@ -165,7 +179,12 @@ export default function MapView({
       zoomAnimation={true}
       markerZoomAnimation={true}
     >
-      <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+      <MapReadyHandler />
+      <TileLayer
+        key={baseMapUrl}
+        url={baseMapUrl}
+        attribution={baseMapAttribution}
+      />
 
       {/* Mostrar todas las capas del frame actual (pueden ser de distintos radares) */}
       {Array.isArray(overlayData) &&
@@ -175,13 +194,14 @@ export default function MapView({
             typeof opacityByField[keyField] === "number"
               ? opacityByField[keyField]
               : opacities[idx] ?? 1;
-          
+
           // Las capas del radar seleccionado se muestran arriba (mayor zIndex)
-          const isActiveRadar = activeToolFile && L.source_file === activeToolFile;
-          const zIndex = isActiveRadar 
-            ? baseZ + 1000 + idx * 10  // radar activo: zIndex muy alto
-            : baseZ + (n - 1 - idx) * 10;  // otros radares: zIndex normal invertido
-          
+          const isActiveRadar =
+            activeToolFile && L.source_file === activeToolFile;
+          const zIndex = isActiveRadar
+            ? baseZ + 1000 + idx * 10 // radar activo: zIndex muy alto
+            : baseZ + (n - 1 - idx) * 10; // otros radares: zIndex normal invertido
+
           return (
             <COGTile
               key={`${L.field || "layer"}|${L.tilejson_url}`}
