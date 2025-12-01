@@ -149,3 +149,24 @@ class RadarPixelResponse(BaseModel):
     message: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+
+class Coordinate(BaseModel):
+    lat: float = Field(..., description="Latitud en grados")
+    lon: float = Field(..., description="Longitud en grados")
+
+class ElevationProfileRequest(BaseModel):
+    coordinates: List[Coordinate] = Field(..., min_items=2, description="Lista de coordenadas que forman la línea")
+    interpolate: Optional[bool] = Field(default=True, description="Interpolar puntos adicionales")
+    points_per_km: Optional[int] = Field(default=10, ge=1, le=100, description="Puntos por kilómetro al interpolar")
+
+class ProfilePoint(BaseModel):
+    distance: float = Field(..., description="Distancia acumulada en km")
+    elevation: Optional[float] = Field(..., description="Elevación en metros")
+    lat: float
+    lon: float
+
+class ElevationProfileResponse(BaseModel):
+    profile: List[ProfilePoint] = Field(..., description="Lista de puntos del perfil")
+    # total_distance: float = Field(..., description="Distancia total en km")
+    # min_elevation: float = Field(..., description="Elevación mínima en m")
+    # max_elevation: float = Field(..., description="Elevación máxima en m")
