@@ -64,9 +64,9 @@ export async function generatePseudoRHI({
     end_lat,
     ...(start_lon != null &&
       start_lat != null && {
-      start_lon,
-      start_lat,
-    }),
+        start_lon,
+        start_lat,
+      }),
     max_length_km: max_length_km,
     max_height_km: max_height_km,
     elevation,
@@ -108,5 +108,17 @@ export async function generatePixelStat(payload) {
     ...(filters && { filters }),
     lat,
     lon,
+  });
+}
+
+export async function generateElevationProfile({
+  coordinates,
+  interpolate = true,
+  points_per_km = 10,
+}) {
+  return api.post("/stats/elevation_profile", {
+    coordinates,
+    interpolate,
+    points_per_km,
   });
 }

@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from titiler.core.factory import TilerFactory
 
 from .core.config import settings
-from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel
+from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -31,6 +31,7 @@ app.include_router(cleanup.router)
 app.include_router(pseudo_rhi.router)
 app.include_router(radar_stats.router)
 app.include_router(radar_pixel.router)
+app.include_router(elevation_profile.router)
 
 @app.get("/health")
 def health():

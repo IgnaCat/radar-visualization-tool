@@ -10,6 +10,7 @@ import {
 import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "./MapPickOverlay";
 import AreaDrawOverlay from "./AreaDrawOverlay";
+import LineDrawOverlay from "./LineDrawOverlay";
 import UsePixelStatClick from "./UsePixelStatClick";
 
 function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
@@ -144,6 +145,12 @@ export default function MapView({
   onMapReady, // Callback para recibir la instancia del mapa
   baseMapUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", // URL del mapa base
   baseMapAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  // Props para perfil de elevación
+  lineDrawMode = false,
+  drawnLineCoords = [],
+  onLineComplete,
+  onLinePointsChange,
+  highlightedPoint = null,
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -222,6 +229,12 @@ export default function MapView({
         onComplete={onAreaComplete}
         modes={{ polygon: true, rectangle: true }}
       />
+      <LineDrawOverlay
+        enabled={lineDrawMode}
+        points={drawnLineCoords}
+        onComplete={onLineComplete}
+        onPointsChange={onLinePointsChange}
+      />
       <UsePixelStatClick
         enabled={pixelStatMode}
         onPixelStatClick={onPixelStatClick}
@@ -283,6 +296,25 @@ export default function MapView({
           </Tooltip>
         </CircleMarker>
       )}
+      {/* Punto resaltado al hacer hover en el gráfico de elevación */}
+      {highlightedPoint &&
+        Number.isFinite(highlightedPoint.lat) &&
+        Number.isFinite(highlightedPoint.lon) && (
+          <CircleMarker
+            center={[highlightedPoint.lat, highlightedPoint.lon]}
+            radius={8}
+            pathOptions={{
+              color: "#ff0000",
+              weight: 3,
+              fillOpacity: 0.9,
+              fillColor: "#ff0000",
+            }}
+          >
+            <Tooltip direction="top" offset={[0, -8]} permanent>
+              Punto actual
+            </Tooltip>
+          </CircleMarker>
+        )}
     </MapContainer>
   );
 }

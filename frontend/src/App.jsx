@@ -6,6 +6,7 @@ import {
   generatePseudoRHI,
   generateAreaStats,
   generatePixelStat,
+  generateElevationProfile,
 } from "./api/backend";
 import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
@@ -25,6 +26,7 @@ import ProductSelectorDialog from "./components/ProductSelectorDialog";
 import PseudoRHIDialog from "./components/PseudoRHIDialog";
 import WarningPanel from "./components/WarningPanel";
 import AreaStatsDialog from "./components/AreaStatsDialog";
+import ElevationProfileDialog from "./components/ElevationProfileDialog";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
 function mergeRadarFrames(results, toleranceSec = 240) {
@@ -159,11 +161,18 @@ export default function App() {
   const [activeToolFile, setActiveToolFile] = useState(null);
   // Estado para el selector de mapas base
   const [mapSelectorOpen, setMapSelectorOpen] = useState(false);
+  // Estado para el perfil de elevación
+  const [elevationProfileOpen, setElevationProfileOpen] = useState(false);
+  const [lineDrawMode, setLineDrawMode] = useState(false);
+  const [drawnLineCoords, setDrawnLineCoords] = useState([]);
+  const [lineDrawingFinished, setLineDrawingFinished] = useState(false);
+  const [highlightedPoint, setHighlightedPoint] = useState(null);
   const [selectedBaseMap, setSelectedBaseMap] = useState({
     id: "osm",
     name: "Argenmap",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    attribution:
+      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   });
   // Derivar sitio del radar a partir del archivo activo (como activeToolFile)
   const radarSite = useMemo(() => {
@@ -453,6 +462,50 @@ export default function App() {
     setSelectedBaseMap(map);
   };
 
+  // Handlers para perfil de elevación
+  const handleOpenElevationProfile = () => {
+    setElevationProfileOpen(true);
+    setLineDrawingFinished(false);
+  };
+
+  const handleRequestLineDrawing = () => {
+    setLineDrawMode(true);
+    setDrawnLineCoords([]);
+    setLineDrawingFinished(false);
+  };
+
+  const handleLineComplete = (coordinates) => {
+    // El usuario hizo click en el cuadrado blanco - dibujo completo
+    setDrawnLineCoords(coordinates);
+    setLineDrawingFinished(true); // Señal para generar el perfil
+  };
+
+  const handleClearLineDrawing = () => {
+    setDrawnLineCoords([]);
+    setHighlightedPoint(null);
+    setLineDrawMode(false);
+    setLineDrawingFinished(false);
+  };
+
+  const handleHighlightPoint = (lat, lon) => {
+    if (lat !== null && lon !== null) {
+      setHighlightedPoint({ lat, lon });
+    } else {
+      setHighlightedPoint(null);
+    }
+  };
+
+  const handleGenerateElevationProfile = async (coordinates) => {
+    return await generateElevationProfile({ coordinates });
+  };
+
+  // Callback para indicar que el perfil fue generado
+  const handleProfileGenerated = () => {
+    // NO desactivamos lineDrawMode para que el dibujo permanezca visible
+    setLineDrawingFinished(false); // Reset de la señal
+    // NO limpiamos drawnLineCoords para que persistan en el mapa
+  };
+
   const handleMapClickPixelStat = async (latlng) => {
     try {
       const payload = {
@@ -543,6 +596,11 @@ export default function App() {
         onMapReady={setMapInstance}
         baseMapUrl={selectedBaseMap.url}
         baseMapAttribution={selectedBaseMap.attribution}
+        lineDrawMode={lineDrawMode}
+        drawnLineCoords={drawnLineCoords}
+        onLineComplete={handleLineComplete}
+        onLinePointsChange={setDrawnLineCoords}
+        highlightedPoint={highlightedPoint}
       />
 
       {/* Nuevo diseño estilo IGN */}
@@ -556,6 +614,7 @@ export default function App() {
         onAreaStatsClick={handleOpenAreaStatsMode}
         onPixelStatToggle={handleTogglePixelStat}
         onMapSelectorToggle={handleToggleMapSelector}
+        onElevationProfileClick={handleOpenElevationProfile}
         pixelStatActive={pixelStatMode}
         mapSelectorActive={mapSelectorOpen}
       />
@@ -638,6 +697,21 @@ export default function App() {
           filters: filtersUsed,
           polygon: areaPolygon,
         }}
+      />
+
+      <ElevationProfileDialog
+        open={elevationProfileOpen}
+        onClose={() => {
+          setElevationProfileOpen(false);
+          handleClearLineDrawing();
+        }}
+        onRequestDraw={handleRequestLineDrawing}
+        drawnCoordinates={drawnLineCoords}
+        drawingFinished={lineDrawingFinished}
+        onGenerate={handleGenerateElevationProfile}
+        onClearDrawing={handleClearLineDrawing}
+        onHighlightPoint={handleHighlightPoint}
+        onProfileGenerated={handleProfileGenerated}
       />
 
       <Alerts

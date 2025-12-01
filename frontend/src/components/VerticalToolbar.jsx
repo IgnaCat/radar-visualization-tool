@@ -13,6 +13,7 @@ export default function VerticalToolbar({
   onAreaStatsClick,
   onPixelStatToggle,
   onMapSelectorToggle,
+  onElevationProfileClick,
   pixelStatActive = false,
   mapSelectorActive = false,
 }) {
@@ -55,8 +56,8 @@ export default function VerticalToolbar({
     },
     {
       icon: <TimelineIcon />,
-      tooltip: "Gráficos",
-      action: () => console.log("Gráficos - por implementar"),
+      tooltip: "Perfil de elevación",
+      action: onElevationProfileClick,
       active: false,
     },
   ];
