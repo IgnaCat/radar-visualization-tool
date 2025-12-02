@@ -10,12 +10,15 @@ import {
 } from "./api/backend";
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
+import { useMapActions } from "./hooks/useMapActions";
+import "./print.css";
 import MapView from "./components/MapView";
 import ActiveLayerPicker from "./components/ActiveLayerPicker";
 import UploadButton from "./components/UploadButton";
 import FloatingMenu from "./components/FloatingMenu";
 import HeaderCard from "./components/HeaderCard";
 import VerticalToolbar from "./components/VerticalToolbar";
+import MapToolbar from "./components/MapToolbar";
 import ZoomControls from "./components/ZoomControls";
 import BaseMapSelector from "./components/BaseMapSelector";
 import Alerts from "./components/Alerts";
@@ -189,6 +192,9 @@ export default function App() {
       alt_m: site.alt_m ?? site.alt ?? null,
     };
   }, [activeToolFile, filesInfo]);
+
+  // Hook para acciones del mapa (screenshot, print, fullscreen)
+  const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } = useMapActions();
 
   // Registrar cleanup en cierre de pestaña/ventana
   useEffect(() => {
@@ -559,7 +565,7 @@ export default function App() {
   }, [currentOverlay]);
 
   return (
-    <>
+    <div id="map-container" style={{ height: "100vh", width: "100%" }}>
       <MapView
         overlayData={currentOverlay}
         opacities={opacity}
@@ -608,6 +614,12 @@ export default function App() {
         onElevationProfileClick={handleOpenElevationProfile}
         pixelStatActive={pixelStatMode}
         mapSelectorActive={mapSelectorOpen}
+      />
+      <MapToolbar
+        onScreenshot={() => handleScreenshot("map-container")}
+        onPrint={handlePrint}
+        onFullscreen={handleFullscreen}
+        isFullscreen={isFullscreen}
       />
       <BaseMapSelector
         open={mapSelectorOpen}
@@ -713,6 +725,6 @@ export default function App() {
       />
       <WarningPanel warnings={warnings} />
       <Loader open={loading} />
-    </>
+    </div>
   );
 }
