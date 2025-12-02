@@ -113,11 +113,14 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500, hasInitializedViewRef }) 
       bounds={llb}
       minNativeZoom={nativeZooms.min}
       maxNativeZoom={nativeZooms.max}
-      // suaviza animaciones y evita “fantasmas”
-      updateWhenZooming={true}
-      reuseTiles={false}
-      keepBuffer={1}
       zIndex={zIndex}
+      // Optimizaciones de carga de tiles
+      updateWhenIdle={false}      // Actualiza mientras mueves el mapa
+      updateWhenZooming={false}   // No actualiza durante zoom animado (reduce requests)
+      updateInterval={200}        // Espera 200ms entre actualizaciones (agrupa requests)
+      keepBuffer={2}              // Mantiene 2 tiles de buffer fuera del viewport
+      tileSize={256}              // Tamaño estándar de tiles
+      reuseTiles={true}           // Reutiliza tiles ya cargadas
       // tile transparente en caso de error puntual
       errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
       eventHandlers={{
