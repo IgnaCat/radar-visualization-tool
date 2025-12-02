@@ -13,13 +13,12 @@ import AreaDrawOverlay from "./AreaDrawOverlay";
 import LineDrawOverlay from "./LineDrawOverlay";
 import UsePixelStatClick from "./UsePixelStatClick";
 
-function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
+function COGTile({ tilejsonUrl, opacity, zIndex = 500, hasInitializedViewRef }) {
   const map = useMap();
   const [template, setTemplate] = useState(null);
   const [llb, setLLB] = useState(null);
   const [nativeZooms, setNativeZooms] = useState({ min: 0, max: 22 });
   const abortRef = useRef(null);
-  const didCenter = useRef(false);
 
   useEffect(() => {
     if (!tilejsonUrl) return;
@@ -61,14 +60,16 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
 
         // bounds / center
         if (Array.isArray(tj.bounds) && tj.bounds.length === 4) {
+          // Solo centrar el mapa la primera vez que se carga una capa
           if (
             Array.isArray(tj.center) &&
             tj.center.length === 3 &&
-            !didCenter.current
+            hasInitializedViewRef &&
+            !hasInitializedViewRef.current
           ) {
             const [lon, lat, z] = tj.center;
             map.setView([lat, lon], z);
-            didCenter.current = true;
+            hasInitializedViewRef.current = true;
           }
           const [w, s, e, n] = tj.bounds;
           const bounds = [
@@ -92,7 +93,9 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500 }) {
       // liberar maxBounds al cambiar de producto
       try {
         map.setMaxBounds(null);
-      } catch {}
+      } catch {
+        console.warn("Error al limpiar maxBounds");
+      }
     };
   }, [tilejsonUrl, map]);
 
@@ -157,6 +160,9 @@ export default function MapView({
   // overlayData ahora puede ser un array de capas de distintos radares para el frame actual
   const n = overlayData?.length ?? 0;
 
+  // Ref compartido para controlar si ya se inicializó la vista del mapa
+  const hasInitializedViewRef = useRef(false);
+
   // Si pickedPoint se limpia, avisar al padre para limpiar la línea
   useEffect(() => {
     if (!pickedPoint && typeof onClearLineOverlay === "function") {
@@ -215,12 +221,12 @@ export default function MapView({
               tilejsonUrl={L.tilejson_url}
               opacity={fieldOpacity}
               zIndex={zIndex}
+              hasInitializedViewRef={hasInitializedViewRef}
             />
           );
         })}
       <MapPickOverlay
         enabled={pickPointMode}
-        radarSite={radarSite}
         pickedPoint={pickedPoint}
         onPick={onPickPoint}
       />
