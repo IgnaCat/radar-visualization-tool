@@ -76,6 +76,7 @@ export default function PseudoRHIDialog({
     setResultImg(null);
     setError("");
     setPickTarget("end");
+    setAutoFlowActive(true);
     onRequestPickPoint?.();
     onAutoClose?.();
   };
@@ -100,15 +101,17 @@ export default function PseudoRHIDialog({
     }
   }, [pickedPoint, pickTarget, onRequestPickPoint]);
 
-  // Auto reopen when both points chosen
+  // Auto reopen when points are chosen
   useEffect(() => {
-    // Solo reabrir si el diálogo está cerrado (open === false) y el flujo automático sigue activo
+    // Reabrir cuando:
+    // 1. El diálogo está cerrado
+    // 2. El flujo automático está activo
+    // 3. Ya no estamos en modo de selección (pickTarget === null)
+    // 4. Hay al menos un punto final seleccionado
     if (
       !open &&
       autoFlowActive &&
       pickTarget === null &&
-      startLat !== "" &&
-      startLon !== "" &&
       endLat !== "" &&
       endLon !== ""
     ) {
@@ -120,8 +123,6 @@ export default function PseudoRHIDialog({
     open,
     autoFlowActive,
     pickTarget,
-    startLat,
-    startLon,
     endLat,
     endLon,
     onAutoReopen,
@@ -129,17 +130,25 @@ export default function PseudoRHIDialog({
 
   // Update preview line
   useEffect(() => {
+    // Prioridad: usar punto de inicio explícito si existe
+    // Fallback al origen del radar SOLO si no hay inicio explícito y no estamos en flujo de selección activo
+    const hasExplicitStart = startLat !== "" && startLon !== "";
+    const hasEnd = endLat !== "" && endLon !== "";
+
+    let startPoint = null;
+    if (hasExplicitStart) {
+      startPoint = { lat: Number(startLat), lon: Number(startLon) };
+    } else if (hasEnd && radarSite && !pickTarget) {
+      // Si ya se eligió el fin pero no hay inicio explícito y no estamos en medio de elegir puntos,
+      // usar el origen del radar como inicio implícito
+      startPoint = { lat: radarSite.lat, lon: radarSite.lon };
+    }
+
     onLinePreviewChange?.({
-      start:
-        startLat !== "" && startLon !== ""
-          ? { lat: Number(startLat), lon: Number(startLon) }
-          : null,
-      end:
-        endLat !== "" && endLon !== ""
-          ? { lat: Number(endLat), lon: Number(endLon) }
-          : null,
+      start: startPoint,
+      end: hasEnd ? { lat: Number(endLat), lon: Number(endLon) } : null,
     });
-  }, [startLat, startLon, endLat, endLon, onLinePreviewChange]);
+  }, [startLat, startLon, endLat, endLon, radarSite, pickTarget, onLinePreviewChange]);
 
   const handleGenerate = async () => {
     setResultImg(null);
@@ -197,7 +206,7 @@ export default function PseudoRHIDialog({
       open={open}
       onClose={handleClose}
       fullWidth
-      maxWidth="md"
+      maxWidth="sm"
       hideBackdrop
       disableEnforceFocus
       disableAutoFocus

@@ -8,7 +8,7 @@ import {
   generatePixelStat,
   generateElevationProfile,
 } from "./api/backend";
-import { registerCleanupAxios, cogFsPaths } from "./api/registerCleanupAxios";
+import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
 import MapView from "./components/MapView";
 import ActiveLayerPicker from "./components/ActiveLayerPicker";
@@ -368,16 +368,7 @@ export default function App() {
   const handlePickPoint = (pt) => {
     setPickedPoint(pt);
     setPickPointMode(false); // se desactiva al elegir
-    // Si aún no hay punto inicial para el RHI, fijarlo para que el marcador persista
-    setRhiLinePreview((prev) => {
-      if (!prev?.start) {
-        return {
-          start: { lat: pt.lat, lon: pt.lng ?? pt.lon },
-          end: prev?.end || null,
-        };
-      }
-      return prev;
-    });
+    // No modificar rhiLinePreview aquí - lo maneja PseudoRHIDialog vía onLinePreviewChange
   };
   const handleClearPickedPoint = () => {
     setPickedPoint(null);
@@ -585,9 +576,9 @@ export default function App() {
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-              ]
+              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+            ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
