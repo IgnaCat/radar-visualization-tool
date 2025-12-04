@@ -6,6 +6,7 @@ import ImageSearchIcon from "@mui/icons-material/ImageSearch";
 import LayersIcon from "@mui/icons-material/Layers";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import MapIcon from "@mui/icons-material/Map";
+import PaletteIcon from "@mui/icons-material/Palette";
 
 export default function VerticalToolbar({
   onChangeProductClick,
@@ -13,9 +14,11 @@ export default function VerticalToolbar({
   onAreaStatsClick,
   onPixelStatToggle,
   onMapSelectorToggle,
+  onPaletteSelectorToggle,
   onElevationProfileClick,
   pixelStatActive = false,
   mapSelectorActive = false,
+  paletteSelectorActive = false,
 }) {
   const tools = [
     {
@@ -35,6 +38,12 @@ export default function VerticalToolbar({
       tooltip: "Mapas base",
       action: onMapSelectorToggle,
       active: mapSelectorActive,
+    },
+    {
+      icon: <PaletteIcon />,
+      tooltip: "Paletas de colores",
+      action: onPaletteSelectorToggle,
+      active: paletteSelectorActive,
     },
     {
       icon: <ContentCutIcon />,
@@ -108,8 +117,8 @@ export default function VerticalToolbar({
               {tool.icon}
             </IconButton>
           </Tooltip>
-          {/* Divider opcional después del 3er elemento */}
-          {index === 2 && (
+          {/* Divider opcional después del 4to elemento (después de paletas) */}
+          {index === 3 && (
             <Box
               sx={{
                 height: "1px",
