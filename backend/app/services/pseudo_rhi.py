@@ -229,6 +229,7 @@ def generate_pseudo_rhi_png(
     output_dir: str = "app/storage/tmp",
     start_lon: Optional[float] = None,
     start_lat: Optional[float] = None,
+    colormap_overrides: Optional[dict] = None,
 ):
     
     file_hash = md5_file(filepath)[:12]
@@ -268,8 +269,9 @@ def generate_pseudo_rhi_png(
     # Filtros (se aplican por GateFilter para enmascarar fuera de rango)
     gf = build_gatefilter(radar, field_name, filters, is_rhi=True)
 
-    # Colormap + vmin/vmax
-    cmap, vmin, vmax, _ = colormap_for(field)
+    # Colormap + vmin/vmax con posible override
+    cmap_override = (colormap_overrides or {}).get(field, None)
+    cmap, vmin, vmax, _ = colormap_for(field, override_cmap=cmap_override)
 
     # Branch: si hay un punto inicial distinto del radar, generar transecto entre dos puntos
     if start_lon is not None and start_lat is not None:

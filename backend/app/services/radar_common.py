@@ -72,16 +72,26 @@ def resolve_field(radar: pyart.core.Radar, requested: str) -> Tuple[str, str]:
             return cand, key
     raise KeyError(f"No se encontró alias disponible para '{requested}' en el archivo.")
 
-def colormap_for(field_key: str):
+def colormap_for(field_key: str, override_cmap: Optional[str] = None):
     """
     Devuelve defaults (cmap, vmin, vmax, cmap_key) según FIELD_RENDER.
+    Si override_cmap se provee, lo usa en lugar del default.
     """
     spec = FIELD_RENDER.get(field_key.upper(), {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
-    vmin, vmax, cmap_key = spec["vmin"], spec["vmax"], spec["cmap"]
-    if field_key not in ["VRAD", "WRAD", "PHIDP"]:
+    vmin, vmax = spec["vmin"], spec["vmax"]
+    cmap_key = override_cmap if override_cmap else spec["cmap"]
+    
+    # Determinar si es un cmap personalizado (grc_*) o uno de pyart/matplotlib
+    if cmap_key.startswith("grc_"):
+        # Colormap personalizado del módulo colores
         cmap = getattr(colores, f"get_cmap_{cmap_key}")()
-    else: # Usamos directamente cmap de pyart
+    elif cmap_key.startswith("pyart_"):
+        # Colormap de pyart (remover prefijo)
+        cmap = cmap_key.replace("pyart_", "")
+    else:
+        # Colormap estándar de matplotlib/pyart (NWSVel, Theodore16, etc)
         cmap = cmap_key
+    
     return cmap, vmin, vmax, cmap_key
 
 

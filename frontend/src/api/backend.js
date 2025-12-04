@@ -19,6 +19,7 @@ export const processFile = async ({
   filters,
   selectedVolumes,
   selectedRadars,
+  colormap_overrides,
 }) => {
   const payload = {
     filepaths: files,
@@ -31,6 +32,7 @@ export const processFile = async ({
     ...(filters && { filters }),
     ...(selectedVolumes && { selectedVolumes }),
     ...(selectedRadars && { selectedRadars }),
+    ...(colormap_overrides && { colormap_overrides }),
   };
 
   return api.post("/process", payload);
@@ -56,6 +58,7 @@ export async function generatePseudoRHI({
   filters = [],
   png_width_px = 900,
   png_height_px = 500,
+  colormap_overrides,
 }) {
   return api.post("/process/pseudo_rhi", {
     filepaths: [filepath],
@@ -64,15 +67,16 @@ export async function generatePseudoRHI({
     end_lat,
     ...(start_lon != null &&
       start_lat != null && {
-        start_lon,
-        start_lat,
-      }),
+      start_lon,
+      start_lat,
+    }),
     max_length_km: max_length_km,
     max_height_km: max_height_km,
     elevation,
     filters,
     png_width_px,
     png_height_px,
+    ...(colormap_overrides && { colormap_overrides }),
   });
 }
 
@@ -121,4 +125,14 @@ export async function generateElevationProfile({
     interpolate,
     points_per_km,
   });
+}
+
+export async function getColormapOptions() {
+  const response = await api.get("/colormap/options");
+  return response.data;
+}
+
+export async function getColormapDefaults() {
+  const response = await api.get("/colormap/defaults");
+  return response.data;
 }
