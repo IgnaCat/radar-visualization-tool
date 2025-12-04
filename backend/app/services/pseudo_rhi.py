@@ -248,7 +248,8 @@ def generate_pseudo_rhi_png(
     radar = pyart.io.read(filepath)
     # radar = radar.extract_sweeps([elevation]) if elevation < radar.nsweeps else radar.extract_sweeps([0])
 
-    field_name, _ = resolve_field(radar, field)
+    field_name, field_key = resolve_field(radar, field)
+    
     site_lon, site_lat, site_alt = get_radar_site(radar)
     range_max_km = safe_range_max_m(radar) / 1000.0
     # Ajustar límites a capacidades físicas
@@ -283,6 +284,7 @@ def generate_pseudo_rhi_png(
         same_origin = geodesic((start_lat_f, start_lon_f), (site_lat, site_lon)).meters <= 1000.0
         if not same_origin:
             _generate_segment_transect_png(
+                filepath=filepath,
                 radar=radar,
                 field_name=field_name,
                 file_hash=file_hash,
@@ -351,6 +353,7 @@ def generate_pseudo_rhi_png(
 
 def _generate_segment_transect_png(
     *,
+    filepath: str,
     radar: pyart.core.Radar,
     field_name: str,
     file_hash: str,
@@ -367,154 +370,188 @@ def _generate_segment_transect_png(
     max_height_km: Optional[float] = None,
 ):
     """
-    Genera transecto vertical entre dos puntos usando cross-sections radiales nativos
-    del radar (evita regridding 3D que degrada calidad y performance).
-    
-    Similar a variable_radar_cross_section pero para segmentos arbitrarios.
+    Genera transecto vertical entre dos puntos usando GridMapDisplay.plot_cross_section
+    con grilla 3D cacheada para máxima calidad y performance.
     """
-    from scipy.interpolate import interp1d
     from pyproj import Geod
     
     site_lon, site_lat, _ = get_radar_site(radar)
     _geod = Geod(ellps="WGS84")
     
-    # 1) Construir polilínea start→end limitada por max_length_km
+    # 1) Buscar grilla 3D en cache (debe existir de process_radar_to_cog previo)
+    from ..utils.helpers import extract_metadata_from_filename
+    from ..core.constants import AFFECTS_INTERP_FIELDS
+    
+    # Extraer volumen del nombre del archivo (crítico para cache key)
+    try:
+        _,_,volume,_ = extract_metadata_from_filename(Path(filepath).name)
+        if volume is None:
+            raise ValueError("No se pudo extraer volume del filename")
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No se pudo extraer metadata del archivo: {e}"
+        )
+    
+    # Separar filtros QC (igual que en radar_processor)
+    qc_filters = []
+    for f in (filters or []):
+        ffield = str(getattr(f, "field", "") or "").upper()
+        if ffield in AFFECTS_INTERP_FIELDS:
+            qc_filters.append(f)
+    
+    # Calcular range_max_m del radar (igual que en radar_processor)
+    range_max_m = safe_range_max_m(radar)
+    
+    # Calcular z_top_m dinámicamente (DEBE coincidir con radar_processor)
+    # Nota: Para pseudo-RHI asumimos producto tipo PPI con elevación 0
+    # Si el usuario procesó otro producto, puede no encontrar cache
+    elev_deg = 0.0  # Elevación default para pseudo-RHI
+    if radar.nsweeps > 0:
+        try:
+            elev_deg = float(radar.fixed_angle['data'][0])
+        except Exception:
+            elev_deg = 0.0
+    
+    # Importar función para calcular altura máxima del haz
+    from ..services.radar_processor import beam_height_max_km
+    hmax_km = beam_height_max_km(range_max_m, elev_deg)
+    z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen (igual que PPI en radar_processor)
+    
+    # Generar cache key para buscar la grilla 3D
+    qc_sig = qc_signature(qc_filters)
+    grid_resolution = 300 if volume == '03' else 1200
+    
+    cache_key = grid3d_cache_key(
+        file_hash=file_hash,
+        field_to_use=field_name,
+        volume=volume,
+        qc_sig=qc_sig,
+        grid_res_xy=grid_resolution,
+        grid_res_z=grid_resolution,
+        z_top_m=z_top_m,
+    )
+    
+    # Buscar en cache
+    pkg_cached = GRID3D_CACHE.get(cache_key)
+    
+    if pkg_cached is None:
+        raise HTTPException(
+            status_code=400,
+            detail="No se encontró grilla 3D en cache. Debe procesarse primero un producto 2D (PPI/CAPPI/COLMAX) para generar la grilla 3D."
+        )
+    
+    # Reconstruir Grid desde cache
+    cached_field_name = pkg_cached.get("field_name", field_name)
+    field_metadata = pkg_cached.get("field_metadata", {})
+    
+    # Restaurar el campo completo con todos sus metadatos
+    field_dict = field_metadata.copy()
+    field_dict['data'] = pkg_cached["arr3d"]
+    
+    # Asegurar metadatos mínimos si no existen en cache
+    if 'units' not in field_dict:
+        field_dict['units'] = 'unknown'
+    if '_FillValue' not in field_dict:
+        field_dict['_FillValue'] = -9999.0
+    if 'long_name' not in field_dict:
+        field_dict['long_name'] = cached_field_name
+    
+    # Crear Grid con metadatos completos incluyendo time['units']
+    grid = pyart.core.Grid(
+        time={
+            'data': np.array([0]),
+            'units': 'seconds since 2000-01-01T00:00:00Z',
+            'calendar': 'gregorian',
+            'standard_name': 'time'
+        },
+        fields={cached_field_name: field_dict},
+        metadata={'instrument_name': 'RADAR'},
+        origin_latitude={'data': radar.latitude['data']},
+        origin_longitude={'data': radar.longitude['data']},
+        origin_altitude={'data': radar.altitude['data']},
+        x={'data': pkg_cached["x"]},
+        y={'data': pkg_cached["y"]},
+        z={'data': pkg_cached["z"]},
+    )
+    grid.projection = pkg_cached["projection"]
+
+    # DEBUG: verificar que la grilla sea verdaderamente 3D
+    try:
+        arr3d = grid.fields[cached_field_name]['data']
+        zvals = grid.z['data']
+        print(f"DEBUG grid field shape: {getattr(arr3d, 'shape', None)}, z shape: {getattr(zvals, 'shape', None)}")
+        print(f"DEBUG z range (m): min={float(np.nanmin(zvals))}, max={float(np.nanmax(zvals))}")
+        if getattr(arr3d, 'ndim', 0) != 3 or getattr(zvals, 'size', 0) <= 1:
+            raise HTTPException(
+                status_code=400,
+                detail="La grilla 3D cacheada tiene un solo nivel z o no es 3D. Procesá PPI/COLMAX primero para cachear grilla 3D."
+            )
+    except Exception as e:
+        print(f"WARNING: No se pudo verificar dimensiones de grilla: {e}")
+    
+    # 2) Limitar línea a max_length_km
     end_lon_eff, end_lat_eff, length_km = limit_line_to_range(
         start_lon, start_lat, end_lon, end_lat, max_length_km
     )
     
-    step_m = 150.0
-    n_pts = max(2, int((length_km * 1000.0) // step_m) + 1)
-    lons = np.empty(n_pts, dtype=np.float64)
-    lats = np.empty(n_pts, dtype=np.float64)
+    # 3) Calcular distancia acumulada para eje X
+    _, _, dist_total_m = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
+    dkm = dist_total_m / 1000.0
     
-    az12, _, dist_m = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
-    for i in range(n_pts):
-        d = i * step_m
-        lon_i, lat_i, _ = _geod.fwd(start_lon, start_lat, az12, d)
-        lons[i], lats[i] = lon_i, lat_i
+    # 4) Usar GridMapDisplay.plot_cross_section
+    fig = plt.figure(figsize=[15, 5.5])
+    ax = plt.subplot(1, 1, 1)
     
-    # 2) Calcular azimut y distancia desde el radar a cada punto
-    azimuths = np.array([calcule_radial_angle(site_lat, site_lon, lat, lon) 
-                        for lat, lon in zip(lats, lons)])
-    distances_km = np.array([_km_between(site_lon, site_lat, lon, lat) 
-                            for lat, lon in zip(lats, lons)])
+    display = pyart.graph.GridMapDisplay(grid)
     
-    # 3) Extraer cross-sections nativos para azimuts únicos (agrupados cada ~1°)
-    unique_az = np.unique(np.round(azimuths).astype(int))
-    xsect_cache = {}
-    
-    for az in unique_az:
-        try:
-            xsect = pyart.util.cross_section_ppi(radar, [float(az)])
-        except Exception:
-            continue
-            
-        # Aplicar filtros sobre el cross-section
-        gf_xsect = build_gatefilter(xsect, field_name, filters, is_rhi=True)
-        
-        # Extraer datos (puede ser 1D o 2D dependiendo de cross_section_ppi)
-        data_field = xsect.fields[field_name]["data"]
-        if data_field.ndim == 1:
-            data2d = np.ma.array(data_field)
-            if gf_xsect is not None and gf_xsect.gate_excluded.size == data2d.size:
-                mask = gf_xsect.gate_excluded
-                data2d.mask = np.ma.getmaskarray(data2d) | mask
-            gates_alt = xsect.gate_altitude["data"]
-        else:
-            data2d = np.ma.array(data_field[0, :])
-            if gf_xsect is not None and gf_xsect.gate_excluded.shape[1] == data2d.size:
-                mask = gf_xsect.gate_excluded[0, :]
-                data2d.mask = np.ma.getmaskarray(data2d) | mask
-            gates_alt = xsect.gate_altitude["data"][0, :]
-        
-        # Coordenadas (distancia en km, altura en km)
-        rng = xsect.range["data"] / 1000.0  # km
-        gates_alt_km = gates_alt / 1000.0  # km sobre nivel del mar
-        
-        xsect_cache[az] = {
-            "data": data2d,
-            "range": rng,
-            "altitude": gates_alt_km,
-        }
-    
-    if not xsect_cache:
-        # Fallback: sin cross-sections, crear imagen vacía
-        fig = plt.figure(figsize=[15, 5.5])
-        ax = plt.subplot(1, 1, 1)
-        ax.text(0.5, 0.5, "Sin cobertura de radar", ha="center", va="center", fontsize=16)
-        ax.set_xlabel("Distancia (km)")
-        ax.set_ylabel("Altura (km)")
-        plt.tight_layout()
-        plt.savefig(output_path, dpi=150, bbox_inches="tight")
-        plt.close()
-        return
-    
-    # 4) Interpolar valores en la polilínea usando cross-sections más cercanos
-    # Determinar altura máxima real de los datos
-    max_data_height = 0.0
-    for xs_data in xsect_cache.values():
-        alt_km = xs_data["altitude"]
-        if len(alt_km) > 0:
-            max_data_height = max(max_data_height, np.nanmax(alt_km))
-    
-    # Ajustar altura efectiva: mínimo entre la solicitada y la altura real + margen
-    effective_max_height = min(max_height_km, max_data_height + 1.0) if max_data_height > 0 else max_height_km
-    effective_max_height = max(effective_max_height, 5.0)  # mínimo 5 km
-    
-    nz = 200  # resolución vertical
-    z_levels = np.linspace(0, effective_max_height, nz)
-    vals = np.full((nz, n_pts), np.nan, dtype=np.float32)
-    
-    for i, (az, dist_km) in enumerate(zip(azimuths, distances_km)):
-        az_nearest = int(np.round(az))
-        if az_nearest not in xsect_cache:
-            # Buscar azimut más cercano disponible
-            available_az = list(xsect_cache.keys())
-            if not available_az:
-                continue
-            az_nearest = min(available_az, key=lambda a: abs(a - az))
-        
-        xs_data = xsect_cache[az_nearest]
-        rng = xs_data["range"]
-        alt_km = xs_data["altitude"]
-        data = xs_data["data"]
-        
-        # data es 1D: un valor por cada gate/rango
-        # alt_km también es 1D con la misma forma
-        # Encontrar valor en el rango más cercano al punto actual
-        idx_rng = np.argmin(np.abs(rng - dist_km))
-        if idx_rng >= len(data):
-            continue
-        
-        # Para cross-section, data y alt tienen la misma estructura 1D
-        # Necesitamos interpolar verticalmente usando los gates a diferentes alturas
-        # pero en el mismo azimut
-        # Como tenemos un solo perfil radial, usamos todos los gates
-        profile = data
-        alt_profile = alt_km
-        
-        # Interpolar a z_levels uniformes
-        valid = ~np.ma.getmaskarray(profile)
-        if valid.sum() < 2:
-            continue
-        
-        try:
-            f_interp = interp1d(
-                alt_profile[valid], 
-                profile[valid], 
-                kind="linear", 
-                bounds_error=False, 
-                fill_value=np.nan
-            )
-            vals[:, i] = f_interp(z_levels)
-        except Exception:
-            continue
-    
-    # 5) Perfil de terreno a lo largo de la línea
-    tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
-    ground_km = None
+    # plot_cross_section espera (start_lat, start_lon) y (end_lat, end_lon)
+    # IMPORTANTE: Usar cached_field_name (el que está en el grid) no field_name
     try:
+        display.plot_cross_section(
+            cached_field_name,  # Usar el nombre del campo que realmente está en el grid
+            (start_lat, start_lon),
+            (end_lat_eff, end_lon_eff),
+            ax=ax,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+        )
+    except Exception as e:
+        # Si falla plot_cross_section, intentar fallback manual
+        print(f"Warning: plot_cross_section falló ({e}), usando fallback")
+        import traceback
+        traceback.print_exc()
+        ax.text(0.5, 0.5, f"Error: {str(e)}", ha="center", va="center", fontsize=12)
+
+    # Ajustar límites verticales basados en niveles z reales (m -> km) y asegurar terreno visible
+    try:
+        zvals = grid.z['data']
+        zmax_km = float(np.nanmax(zvals)) / 1000.0
+        y_max_km = max_height_km if max_height_km else zmax_km
+        # expand slightly to include terrain curve
+        y_max_km = max(0.5, min(y_max_km, max(zmax_km, 30.0)))
+        ax.set_ylim(0.0, y_max_km)
+        ax.set_aspect('auto')
+        print(f"DEBUG set ylim: 0.0 to {y_max_km} km (zmax_km={zmax_km})")
+    except Exception as e:
+        print(f"WARNING: No se pudo ajustar límites verticales: {e}")
+    
+    # 5) Agregar perfil de terreno
+    tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
+    try:
+        # Samplear terreno a lo largo de la línea
+        step_m = 500.0  # puntos cada 500m
+        n_pts = max(2, int((length_km * 1000.0) // step_m) + 1)
+        lons = np.empty(n_pts, dtype=np.float64)
+        lats = np.empty(n_pts, dtype=np.float64)
+        
+        az12, _, _ = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
+        for i in range(n_pts):
+            d = i * step_m
+            lon_i, lat_i, _ = _geod.fwd(start_lon, start_lat, az12, d)
+            lons[i], lats[i] = lon_i, lat_i
+        
         with rasterio.open(tif_path) as src:
             with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
                 coords = list(zip(lons, lats))
@@ -522,40 +559,27 @@ def _generate_segment_transect_png(
                 nodata = vrt.nodata
                 if nodata is not None:
                     elev[elev == nodata] = np.nan
+                
+                # Calcular distancias acumuladas
+                dkm_terrain = np.zeros(n_pts, dtype=np.float64)
+                for i in range(1, n_pts):
+                    _, _, dd = _geod.inv(lons[i-1], lats[i-1], lons[i], lats[i])
+                    dkm_terrain[i] = dkm_terrain[i-1] + dd / 1000.0
+                
                 offset = 439.0423493233697
                 ground_km = (elev - offset) / 1000.0
-    except Exception:
-        ground_km = None
+                ax.plot(dkm_terrain, ground_km, color="black", linewidth=2, label="Terreno")
+    except Exception as e:
+        print(f"Warning: No se pudo graficar terreno: {e}")
     
-    # Distancias acumuladas para eje X (km)
-    dkm = np.zeros(n_pts, dtype=np.float64)
-    for i in range(1, n_pts):
-        _, _, dd = _geod.inv(lons[i-1], lats[i-1], lons[i], lats[i])
-        dkm[i] = dkm[i-1] + dd / 1000.0
-    
-    # 6) Graficar
-    fig = plt.figure(figsize=[15, 5.5])
-    ax = plt.subplot(1, 1, 1)
-    
-    im = ax.imshow(
-        vals,
-        origin="lower",
-        aspect="auto",
-        extent=[0, float(dkm[-1]), 0, effective_max_height],
-        cmap=cmap,
-        vmin=float(vmin) if np.isfinite(vmin) else None,
-        vmax=float(vmax) if np.isfinite(vmax) else None,
-    )
-    
-    if ground_km is not None:
-        ax.plot(dkm, ground_km, color="black", linewidth=2)
-    
+    # 6) Configurar ejes y límites
     ax.set_xlabel("Distancia (km)", fontsize=14)
     ax.set_ylabel("Altura (km)", fontsize=14)
-    ax.set_ylim(0, effective_max_height)  # Limitar eje Y a altura real
+    
+    if max_height_km:
+        ax.set_ylim(0, max_height_km)
+    
     ax.grid(True, alpha=0.3)
-    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    cbar.ax.set_ylabel(VARIABLE_UNITS.get(field_name, ""), fontsize=12)
     
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
