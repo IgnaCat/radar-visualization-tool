@@ -13,7 +13,7 @@ from rasterio.enums import ColorInterp
 from rasterio.warp import Resampling
 from urllib.parse import quote
 from ..core.config import settings
-from ..core.cache import GRID2D_CACHE
+from ..core.cache import GRID2D_CACHE, GRID3D_CACHE
 from ..core.constants import AFFECTS_INTERP_FIELDS
 from affine import Affine
 
@@ -25,10 +25,135 @@ from .radar_common import (
     filters_affect_interpolation,
     qc_signature,
     grid2d_cache_key,
+    grid3d_cache_key,
     normalize_proj_dict,
     safe_range_max_m,
     collapse_field_3d_to_2d
 )
+
+
+def _get_or_build_grid3d(
+    radar_to_use: pyart.core.Radar,
+    field_to_use: str,
+    file_hash: str,
+    volume: str | None,
+    qc_filters,
+    z_grid_limits: tuple,
+    y_grid_limits: tuple,
+    x_grid_limits: tuple,
+    grid_resolution: float,
+) -> pyart.core.Grid:
+    """
+    Función interna para obtener o construir una grilla 3D cacheada.
+    Usada tanto por process_radar_to_cog como por build_3d_grid.
+    """
+    # Generar cache key
+    qc_sig = qc_signature(qc_filters)
+    cache_key = grid3d_cache_key(
+        file_hash=file_hash,
+        field_to_use=field_to_use,
+        volume=volume,
+        qc_sig=qc_sig,
+        grid_res_xy=grid_resolution,
+        grid_res_z=grid_resolution,
+        z_top_m=z_grid_limits[1],
+    )
+    
+    # Verificar cache 3D
+    pkg_cached = GRID3D_CACHE.get(cache_key)
+    
+    if pkg_cached is not None:
+        # Reconstruir Grid desde cache con todos los metadatos del campo
+        cached_field_name = pkg_cached.get("field_name", field_to_use)
+        field_metadata = pkg_cached.get("field_metadata", {})
+        
+        # Restaurar el campo completo con todos sus metadatos
+        field_dict = field_metadata.copy()
+        field_dict['data'] = pkg_cached["arr3d"]
+        
+        # Asegurar metadatos mínimos si no existen en cache
+        if 'units' not in field_dict:
+            field_dict['units'] = 'unknown'
+        if '_FillValue' not in field_dict:
+            field_dict['_FillValue'] = -9999.0
+        if 'long_name' not in field_dict:
+            field_dict['long_name'] = cached_field_name
+        
+        # Crear Grid con metadatos completos incluyendo time['units']
+        grid = pyart.core.Grid(
+            time={
+                'data': np.array([0]),
+                'units': 'seconds since 2000-01-01T00:00:00Z',
+                'calendar': 'gregorian',
+                'standard_name': 'time'
+            },
+            fields={cached_field_name: field_dict},
+            metadata={'instrument_name': 'RADAR'},
+            origin_latitude={'data': radar_to_use.latitude['data']},
+            origin_longitude={'data': radar_to_use.longitude['data']},
+            origin_altitude={'data': radar_to_use.altitude['data']},
+            x={'data': pkg_cached["x"]},
+            y={'data': pkg_cached["y"]},
+            z={'data': pkg_cached["z"]},
+        )
+        grid.projection = pkg_cached["projection"]
+        return grid
+    
+    # Construir grilla 3D desde radar
+    gf = build_gatefilter(radar_to_use, field_to_use, qc_filters, is_rhi=False)
+    
+    grid_origin = (
+        float(radar_to_use.latitude['data'][0]),
+        float(radar_to_use.longitude['data'][0]),
+    )
+    
+    range_max_m = (y_grid_limits[1] - y_grid_limits[0]) / 2
+    constant_roi = max(
+        grid_resolution * 1.5,
+        800 + (range_max_m / 100000) * 400
+    )
+    
+    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution)) + 1
+    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
+    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
+    
+    # Campos a incluir en la grilla: principal + todos los QC disponibles
+    fields_for_grid = {field_to_use}
+    for qc_name in AFFECTS_INTERP_FIELDS:
+        if qc_name in radar_to_use.fields:
+            fields_for_grid.add(qc_name)
+    fields_for_grid = list(fields_for_grid)
+    
+    grid = pyart.map.grid_from_radars(
+        radar_to_use,
+        grid_shape=(z_points, y_points, x_points),
+        grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
+        gridding_algo="map_gates_to_grid",
+        grid_origin=grid_origin,
+        fields=fields_for_grid,
+        weighting_function='nearest',
+        gatefilters=gf,
+        roi_func="constant",
+        constant_roi=constant_roi,
+    )
+    grid.to_xarray()
+    
+    # Guardamos en caché el 3D grid completo, antes de colapsar.
+    # Guardar todos los metadatos del campo excepto 'data'
+    field_metadata = {k: v for k, v in grid.fields[field_to_use].items() if k != 'data'}
+    
+    pkg_to_cache = {
+        "arr3d": grid.fields[field_to_use]['data'].copy(),
+        "x": grid.x['data'].copy(),
+        "y": grid.y['data'].copy(),
+        "z": grid.z['data'].copy(),
+        "projection": dict(getattr(grid, "projection", {}) or {}),
+        "field_name": field_to_use,
+        "field_metadata": field_metadata,  # Incluir todos los metadatos (units, long_name, etc.)
+    }
+    GRID3D_CACHE[cache_key] = pkg_to_cache
+    
+    return grid
 
 
 def convert_to_cog(src_path, cog_path):
@@ -307,42 +432,18 @@ def process_radar_to_cog(
     pkg_cached = GRID2D_CACHE.get(cache_key)
 
     if pkg_cached is None:
-        # Ya no aplicamos GateFilter basado en filtros; construimos la grilla limpia
-        gf = None  # build_gatefilter(radar_to_use, field_to_use, []) podría usarse si quisieras algún gating fijo
-        grid_origin = (
-            float(radar_to_use.latitude['data'][0]),
-            float(radar_to_use.longitude['data'][0]),
+        # Construir o recuperar grilla 3D cacheada (compartida con build_3d_grid)
+        grid = _get_or_build_grid3d(
+            radar_to_use=radar_to_use,
+            field_to_use=field_to_use,
+            file_hash=file_hash,
+            volume=volume,
+            qc_filters=qc_filters,
+            z_grid_limits=z_grid_limits,
+            y_grid_limits=y_grid_limits,
+            x_grid_limits=x_grid_limits,
+            grid_resolution=grid_resolution,
         )
-
-        # ROI constante basado en resolución y rango máximo
-        # Experimentando con diferentes roi
-        min_radius = max(800.0, 1.2 * grid_resolution)
-        xy_factor = 0.02
-        constant_roi = max(
-            grid_resolution * 1.5,  # Mínimo 1.5x resolución
-            800 + (range_max_m / 100000) * 400  # Crece con rango: 800m @ 0km → 1760m @ 240km
-        )
-
-        # Campos a incluir en la grilla: principal + todos los QC disponibles definidos en AFFECTS_INTERP_FIELDS
-        fields_for_grid = {field_to_use}
-        for qc_name in AFFECTS_INTERP_FIELDS:
-            if qc_name in radar_to_use.fields:
-                fields_for_grid.add(qc_name)
-        fields_for_grid = list(fields_for_grid)
-
-        grid = pyart.map.grid_from_radars(
-            radar_to_use,
-            grid_shape=(z_points, y_points, x_points),
-            grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
-            gridding_algo="map_gates_to_grid",
-            grid_origin=grid_origin,
-            fields=fields_for_grid,
-            weighting_function='nearest',
-            gatefilters=gf,
-            roi_func="constant",
-            constant_roi=constant_roi,
-        )
-        grid.to_xarray()
 
         # Guardamos niveles z completos antes de colapsar el campo principal (lo usaremos para QC)
         z_levels_full = grid.z['data'].copy()
@@ -361,12 +462,13 @@ def process_radar_to_cog(
         # Colapsar QC a 2D usando la versión no destructiva y los niveles originales
         # (refactor pendiente: esto podría hacerse dentro de collapse_grid_to_2d)
         qc_2d = {}
-        for qf in fields_for_grid:
-            if qf == field_to_use:
+        # Obtener lista de campos QC que están en la grilla
+        for qc_name in AFFECTS_INTERP_FIELDS:
+            if qc_name == field_to_use:
                 continue
-            if qf not in grid.fields:
+            if qc_name not in grid.fields:
                 continue
-            data3d_q = grid.fields[qf]['data']
+            data3d_q = grid.fields[qc_name]['data']
             # data3d_q puede seguir en 3D aunque ya colapsamos el principal (porque collapse_grid_to_2d sólo afecta ese campo)
             q2d = collapse_field_3d_to_2d(
                 data3d_q,
@@ -377,7 +479,13 @@ def process_radar_to_cog(
                 elevation_deg=elev_deg,
                 target_height_m=cappi_height,
             )
-            qc_2d[qf] = q2d
+            qc_2d[qc_name] = q2d
+
+        # Obtener grid_origin para normalize_proj_dict
+        grid_origin = (
+            float(radar_to_use.latitude['data'][0]),
+            float(radar_to_use.longitude['data'][0]),
+        )
 
         x = grid.x['data'].astype(float)
         y = grid.y['data'].astype(float)
