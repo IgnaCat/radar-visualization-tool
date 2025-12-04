@@ -34,4 +34,17 @@ VARIABLE_UNITS = {
     'PHIDP': 'deg'
 }
 
+# Opciones de colormaps disponibles por campo
+FIELD_COLORMAP_OPTIONS = {
+    "DBZH": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
+    "DBZHF": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
+    "DBZV": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
+    "ZDR": ["grc_zdr2", "grc_zdr", "pyart_RefDiff", "pyart_Theodore16"],
+    "RHOHV": ["grc_rho", "pyart_RefDiff", "Greys", "viridis"],
+    "KDP": ["grc_rain", "grc_th", "pyart_Theodore16", "plasma"],
+    "VRAD": ["NWSVel", "pyart_BuDRd18", "seismic", "RdBu_r"],
+    "WRAD": ["Oranges", "YlOrRd", "hot", "plasma"],
+    "PHIDP": ["Theodore16", "hsv", "twilight", "twilight_shifted"],
+}
+
 AFFECTS_INTERP_FIELDS = {"RHOHV"}

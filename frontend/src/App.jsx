@@ -21,6 +21,7 @@ import VerticalToolbar from "./components/VerticalToolbar";
 import MapToolbar from "./components/MapToolbar";
 import ZoomControls from "./components/ZoomControls";
 import BaseMapSelector from "./components/BaseMapSelector";
+import ColorPaletteSelector from "./components/ColorPaletteSelector";
 import Alerts from "./components/Alerts";
 import ColorLegend from "./components/ColorLegend";
 import Loader from "./components/Loader";
@@ -100,6 +101,7 @@ function buildComputeKey({
   filters,
   selectedVolumes,
   selectedRadars,
+  colormap_overrides,
 }) {
   return stableStringify({
     files,
@@ -110,6 +112,7 @@ function buildComputeKey({
     filters,
     selectedVolumes,
     selectedRadars,
+    colormap_overrides,
   });
 }
 
@@ -177,6 +180,11 @@ export default function App() {
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
   });
+  // Estado para paletas de colores personalizadas por campo
+  const [selectedColormaps, setSelectedColormaps] = useState({});
+  const [initialColormaps, setInitialColormaps] = useState({});
+  const [paletteSelectorOpen, setPaletteSelectorOpen] = useState(false);
+
   // Derivar sitio del radar a partir del archivo activo (como activeToolFile)
   const radarSite = useMemo(() => {
     if (!activeToolFile) return null;
@@ -308,6 +316,7 @@ export default function App() {
         filters,
         selectedVolumes,
         selectedRadars,
+        colormap_overrides: selectedColormaps,
       });
 
       // Si solo cambió UI (opacidad/orden), no reproceses:
@@ -324,6 +333,7 @@ export default function App() {
         filters,
         selectedVolumes,
         selectedRadars,
+        colormap_overrides: selectedColormaps,
       });
       if (
         !processResp.data ||
@@ -336,11 +346,13 @@ export default function App() {
           severity: "warning",
         });
       }
-
       setOverlayData(processResp.data);
       setWarnings(processResp.data.warnings || []);
       setCurrentIndex(0);
       setComputeKey(nextKey);
+      // Guardar las paletas usadas como "iniciales" para futuras comparaciones
+      setInitialColormaps({ ...selectedColormaps });
+      // Animación se calcula dinámicamente más abajo
       // Animación se calcula dinámicamente más abajo
 
       // Guardar todos los cogs para el cleanup
@@ -409,6 +421,7 @@ export default function App() {
       filters,
       max_length_km,
       max_height_km,
+      colormap_overrides: selectedColormaps,
     });
     // devolvemos lo que el dialog espera
     return resp.data;
@@ -457,6 +470,26 @@ export default function App() {
 
   const handleSelectBaseMap = (map) => {
     setSelectedBaseMap(map);
+  };
+
+  // Handlers para selector de paletas de color
+  const handleTogglePaletteSelector = () => {
+    setPaletteSelectorOpen((prev) => !prev);
+  };
+
+  const handleSelectColormap = (field, colormap) => {
+    setSelectedColormaps((prev) => ({
+      ...prev,
+      [field]: colormap,
+    }));
+  };
+
+  // Handler para aplicar cambios de paleta (reprocesar)
+  const handleApplyColormaps = () => {
+    // Cerrar el selector de paletas
+    setPaletteSelectorOpen(false);
+    // Abrir el ProductSelectorDialog para reprocesar con las nuevas paletas
+    setSelectorOpen(true);
   };
 
   // Handlers para perfil de elevación
@@ -611,9 +644,11 @@ export default function App() {
         onAreaStatsClick={handleOpenAreaStatsMode}
         onPixelStatToggle={handleTogglePixelStat}
         onMapSelectorToggle={handleToggleMapSelector}
+        onPaletteSelectorToggle={handleTogglePaletteSelector}
         onElevationProfileClick={handleOpenElevationProfile}
         pixelStatActive={pixelStatMode}
         mapSelectorActive={mapSelectorOpen}
+        paletteSelectorActive={paletteSelectorOpen}
       />
       <MapToolbar
         onScreenshot={() => handleScreenshot("map-container")}
@@ -626,6 +661,16 @@ export default function App() {
         onClose={() => setMapSelectorOpen(false)}
         selectedMap={selectedBaseMap}
         onSelectMap={handleSelectBaseMap}
+      />
+      <ColorPaletteSelector
+        open={paletteSelectorOpen}
+        onClose={() => setPaletteSelectorOpen(false)}
+        selectedColormaps={selectedColormaps}
+        onSelectColormap={handleSelectColormap}
+        availableFields={fieldsUsed}
+        onApply={handleApplyColormaps}
+        hasLoadedImages={mergedOutputs.length > 0}
+        initialColormaps={initialColormaps}
       />
       <ZoomControls map={mapInstance} />
 

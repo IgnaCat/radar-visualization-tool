@@ -296,19 +296,26 @@ def process_radar_to_cog(
         elevation=0, 
         filters=[], 
         output_dir="app/storage/tmp",
-        volume=None
+        volume=None,
+        colormap_overrides=None
     ):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
     Si ya existe un COG generado para este archivo, devuelve directamente la info.
+    colormap_overrides: dict opcional {field: cmap_key} para personalizar paletas
     """
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]
     filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
     aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
-    unique_cog_name = f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}.tif"
+    
+    # Incluir cmap en el nombre si hay override
+    cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
+    cmap_suffix = f"_{cmap_override_key}" if cmap_override_key else ""
+    
+    unique_cog_name = f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}.tif"
     cog_path = Path(output_dir) / unique_cog_name
     file_uri = Path(cog_path).resolve().as_posix()
 
@@ -336,8 +343,9 @@ def process_radar_to_cog(
     if elevation > radar.nsweeps - 1:
         raise ValueError(f"El ángulo de elevación {elevation} no existe en el archivo.")
     
-    # defaults de render por variable
-    cmap, vmin, vmax, cmap_key = colormap_for(field_key)
+    # defaults de render por variable con posible override
+    cmap_override = (colormap_overrides or {}).get(field_requested, None)
+    cmap, vmin, vmax, cmap_key = colormap_for(field_key, override_cmap=cmap_override)
 
     if field_name == "DBZH" and product.upper() in ["CAPPI", "COLMAX"]:
         # Relleno el campo DBZH sino los -- no dejan interpolar

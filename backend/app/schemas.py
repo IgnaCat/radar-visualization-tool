@@ -25,6 +25,10 @@ class ProcessRequest(BaseModel):
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
     selectedVolumes: Optional[List[str]]
     selectedRadars: Optional[List[str]]
+    colormap_overrides: Optional[Dict[str, str]] = Field(
+        default=None, 
+        description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
+    )
 
 class LayerResult(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL
@@ -83,6 +87,10 @@ class PseudoRHIRequest(BaseModel):
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
     png_width_px: int = 900
     png_height_px: int = 500
+    colormap_overrides: Optional[Dict[str, str]] = Field(
+        default=None, 
+        description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
+    )
 
 class PseudoRHIResponse(BaseModel):
     image_url: str
@@ -104,6 +112,10 @@ class RadarStatsRequest(BaseModel):
         description="Ángulo de elevación en grados (0-12). Default 0"
     )
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
+    colormap_overrides: Optional[Dict[str, str]] = Field(
+        default=None, 
+        description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
+    )
 
     @validator("filepath")
     def validate_filepath(cls, v):
