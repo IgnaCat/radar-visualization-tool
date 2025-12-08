@@ -3,6 +3,7 @@ import os
 import pyart
 import uuid
 import pyproj
+import shutil
 import numpy as np
 from ..utils import cappi as cappi_utils
 from ..utils import png
@@ -158,43 +159,67 @@ def _get_or_build_grid3d(
 
 def convert_to_cog(src_path, cog_path):
     """
-    Convierte un GeoTIFF existente a un COG (Cloud Optimized GeoTIFF).
+    Convierte un GeoTIFF existente a un COG (Cloud Optimized GeoTIFF) optimizado para tiling rápido.
+    Re-escribe completamente el archivo con estructura tiled y overviews.
     """
-
-    with rasterio.open(src_path) as src:
-
-        # Copiar el perfil original y ajustarlo para COG
-        profile = src.profile.copy()
-        profile.update(
-            driver="COG",
-            compress="DEFLATE",
-            predictor=2,
-            BIGTIFF="IF_NEEDED",
-            photometric="RGB",
-            tiled=True
-        )
-        profile["band_descriptions"] = ["Red", "Green", "Blue", "Alpha"]
-
-        # Crear el archivo COG
-        with rasterio.open(cog_path, "w+", **profile) as dst:
-            # Copiar bandas directamente sin reproyección
-            for i in range(1, src.count + 1):
-                data = src.read(i)
-                dst.write(data, i)
-            
-            # Definir interpretaciones de color
-            dst.colorinterp = (
-                ColorInterp.red,
-                ColorInterp.green,
-                ColorInterp.blue,
-                ColorInterp.alpha
+    from rasterio.shutil import copy
+    from rasterio.enums import Resampling
+    
+    # Si el COG ya existe y es válido, no regenerar
+    if cog_path.exists():
+        try:
+            with rasterio.open(cog_path) as test:
+                if (test.profile.get('tiled') and 
+                    test.overviews(1) and 
+                    test.profile.get('blockxsize', 0) >= 256):
+                    return cog_path
+        except:
+            pass    
+    try:
+        with rasterio.open(src_path) as src:
+            # Configurar perfil COG optimizado con tiles grandes
+            # SIN compresión para máxima velocidad de lectura en tiles
+            profile = src.profile.copy()
+            profile.update(
+                driver='COG',
+                tiled=True,
+                blockxsize=512,
+                blockysize=512,
+                compress='DEFLATE',
+                BIGTIFF='IF_NEEDED',
+                NUM_THREADS='ALL_CPUS',
+                COPY_SRC_OVERVIEWS='YES',
             )
-
-            # Generar pirámides de overviews para navegación rápida
-            factors = [2, 4, 8, 16]
-            dst.build_overviews(factors, Resampling.nearest)
-            dst.update_tags(ns="rio_overview", resampling="nearest")
-
+            
+            # Escribir archivo intermedio tiled
+            temp_tiled = cog_path.parent / f"temp_{cog_path.name}"
+            
+            with rasterio.open(temp_tiled, 'w', **profile) as dst:
+                # Copiar todas las bandas
+                for i in range(1, src.count + 1):
+                    dst.write(src.read(i), i)
+                
+                # Copiar colorinterp si existe
+                try:
+                    dst.colorinterp = src.colorinterp
+                except:
+                    pass
+            
+            # Ahora agregar overviews al archivo tiled
+            with rasterio.open(temp_tiled, 'r+') as dst:
+                factors = [2, 4, 8, 16, 32]
+                dst.build_overviews(factors, Resampling.nearest)
+                dst.update_tags(ns='rio_overview', resampling='nearest')
+            
+            # Mover archivo temporal al destino final
+            shutil.move(str(temp_tiled), str(cog_path))
+            
+    except Exception as e:
+        print(f"Error generando COG optimizado: {e}")
+        # Fallback: copiar el original
+        if not cog_path.exists():
+            shutil.copy2(src_path, cog_path)
+    
     return cog_path
 
 

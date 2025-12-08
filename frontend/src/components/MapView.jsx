@@ -13,7 +13,12 @@ import AreaDrawOverlay from "./AreaDrawOverlay";
 import LineDrawOverlay from "./LineDrawOverlay";
 import UsePixelStatClick from "./UsePixelStatClick";
 
-function COGTile({ tilejsonUrl, opacity, zIndex = 500, hasInitializedViewRef }) {
+function COGTile({
+  tilejsonUrl,
+  opacity,
+  zIndex = 500,
+  hasInitializedViewRef,
+}) {
   const map = useMap();
   const [template, setTemplate] = useState(null);
   const [llb, setLLB] = useState(null);
@@ -30,7 +35,13 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500, hasInitializedViewRef }) 
 
     (async () => {
       try {
-        const r = await fetch(tilejsonUrl, { signal: ctrl.signal });
+        const r = await fetch(tilejsonUrl, {
+          signal: ctrl.signal,
+          keepalive: true,
+          headers: {
+            Connection: "keep-alive",
+          },
+        });
         if (!r.ok) {
           const txt = await r.text();
           console.error("TileJSON error", r.status, txt.slice(0, 200));
@@ -47,11 +58,14 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500, hasInitializedViewRef }) 
         if (url.includes("/tiles/") && !url.includes("/cog/tiles/")) {
           url = url.replace("/tiles/", "/cog/tiles/");
         }
-        // cache-buster para que no mezcle tiles entre productos
+        // cache-buster estable basado en tilejsonUrl (no Date.now() para permitir cache de browser)
+        const stableHash = tilejsonUrl
+          .split("")
+          .reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 0);
         url +=
           (url.includes("?") ? "&" : "?") +
           "v=" +
-          Date.now().toString().slice(-6);
+          Math.abs(stableHash).toString(36);
 
         // zooms nativos
         const minN = Number.isFinite(tj.minzoom) ? tj.minzoom : 0;
@@ -115,12 +129,12 @@ function COGTile({ tilejsonUrl, opacity, zIndex = 500, hasInitializedViewRef }) 
       maxNativeZoom={nativeZooms.max}
       zIndex={zIndex}
       // Optimizaciones de carga de tiles
-      updateWhenIdle={false}      // Actualiza mientras mueves el mapa
-      updateWhenZooming={false}   // No actualiza durante zoom animado (reduce requests)
-      updateInterval={200}        // Espera 200ms entre actualizaciones (agrupa requests)
-      keepBuffer={2}              // Mantiene 2 tiles de buffer fuera del viewport
-      tileSize={256}              // Tamaño estándar de tiles
-      reuseTiles={true}           // Reutiliza tiles ya cargadas
+      updateWhenIdle={true} // Actualiza mientras mueves el mapa
+      updateWhenZooming={true} // Actualiza durante zoom animado (más responsive)
+      updateInterval={200} // 200ms entre actualizaciones (más responsivo)
+      keepBuffer={4} // Mantiene 4 tiles de buffer fuera del viewport
+      tileSize={256} // Tamaño estándar de tiles
+      reuseTiles={true} // Reutiliza tiles ya cargadas
       // tile transparente en caso de error puntual
       errorTileUrl="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
       eventHandlers={{
