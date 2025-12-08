@@ -6,6 +6,8 @@ import PrintIcon from "@mui/icons-material/Print";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import BuildIcon from "@mui/icons-material/Build";
+import DownloadIcon from "@mui/icons-material/Download";
+import DownloadMenu from "./DownloadMenu";
 
 /**
  * MapToolbar - Barra de herramientas horizontal superior derecha
@@ -15,14 +17,17 @@ import BuildIcon from "@mui/icons-material/Build";
  * - onPrint: función para imprimir
  * - onFullscreen: función para alternar pantalla completa
  * - isFullscreen: booleano que indica si está en pantalla completa
+ * - availableDownloads: objeto con opciones de descarga disponibles
  */
 export default function MapToolbar({
   onScreenshot,
   onPrint,
   onFullscreen,
   isFullscreen = false,
+  availableDownloads = {},
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
   const { enqueueSnackbar } = useSnackbar();
 
   const handleScreenshotClick = async () => {
@@ -52,12 +57,31 @@ export default function MapToolbar({
     }
   };
 
+  const handleDownloadClick = (event) => {
+    setDownloadMenuAnchor(event.currentTarget);
+  };
+
+  const handleCloseDownloadMenu = () => {
+    setDownloadMenuAnchor(null);
+  };
+
+  const hasDownloads = Object.keys(availableDownloads).length > 0;
+
   const tools = [
     {
       icon: <ScreenshotMonitorIcon />,
       tooltip: "Capturar pantalla",
       action: handleScreenshotClick,
     },
+    ...(hasDownloads
+      ? [
+          {
+            icon: <DownloadIcon />,
+            tooltip: "Descargas",
+            action: handleDownloadClick,
+          },
+        ]
+      : []),
     {
       icon: <PrintIcon />,
       tooltip: "Imprimir",
@@ -163,6 +187,14 @@ export default function MapToolbar({
           </Zoom>
         ))}
       </Box>
+
+      {/* Menú de descargas */}
+      <DownloadMenu
+        anchorEl={downloadMenuAnchor}
+        open={Boolean(downloadMenuAnchor)}
+        onClose={handleCloseDownloadMenu}
+        availableDownloads={availableDownloads}
+      />
     </Paper>
   );
 }
