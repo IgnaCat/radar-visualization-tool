@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useSnackbar } from "notistack";
 import {
   uploadFile,
@@ -11,6 +11,7 @@ import {
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
 import { useMapActions } from "./hooks/useMapActions";
+import { useDownloads } from "./hooks/useDownloads";
 import "./print.css";
 import MapView from "./components/MapView";
 import ActiveLayerPicker from "./components/ActiveLayerPicker";
@@ -44,7 +45,12 @@ function mergeRadarFrames(results, toleranceSec = 240) {
       const tsISO = rawTs
         ? new Date(rawTs).toISOString() // normalizamos SIEMPRE a ISO
         : null;
-      shots.push({ tsISO, radar: r.radar, layers });
+      // Anotar el radar en cada layer para uso posterior
+      const layersWithRadar = layers.map((layer) => ({
+        ...layer,
+        radar: r.radar,
+      }));
+      shots.push({ tsISO, radar: r.radar, layers: layersWithRadar });
     }
   }
 
@@ -202,7 +208,11 @@ export default function App() {
   }, [activeToolFile, filesInfo]);
 
   // Hook para acciones del mapa (screenshot, print, fullscreen)
-  const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } = useMapActions();
+  const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } =
+    useMapActions();
+
+  // Hook para gestión de descargas
+  const { downloadFile, generateFilename } = useDownloads();
 
   // Registrar cleanup en cierre de pestaña/ventana
   useEffect(() => {
@@ -213,6 +223,162 @@ export default function App() {
     }));
     return unregister;
   }, [uploadedFiles, overlayData]);
+
+  // Seteamos currentOverlay
+  // Si la respuesta tiene results (multi-radar), combinamos los frames por timestamp
+  // sino dejamos la respuesta vieja
+  let mergedOutputs = [];
+  let animation = false;
+  // const product = overlayData.product;
+  if (overlayData.results) {
+    mergedOutputs = mergeRadarFrames(overlayData.results);
+    animation = mergedOutputs.length > 1;
+  } else {
+    mergedOutputs = overlayData.outputs || [];
+    animation = overlayData.animation;
+  }
+  var currentOverlay = mergedOutputs[currentIndex] || null;
+
+  // Sincronizar archivo activo con las capas visibles del frame actual
+  // Solo se setea activeToolFile cuando hay múltiples RADARES diferentes (no múltiples fields del mismo radar)
+  useEffect(() => {
+    if (!Array.isArray(currentOverlay) || currentOverlay.length === 0) {
+      setActiveToolFile(null);
+      return;
+    }
+
+    // Usar la información del radar que ya viene anotada desde mergeRadarFrames
+    const radarNames = [
+      ...new Set(currentOverlay.map((L) => L?.radar).filter(Boolean)),
+    ];
+    const sources = currentOverlay.map((L) => L?.source_file).filter(Boolean);
+
+    // Solo setear activeToolFile si hay múltiples radares diferentes
+    if (radarNames.length > 1) {
+      // Múltiples radares: setear activeToolFile al primero (o mantener el actual si está en la lista)
+      setActiveToolFile((prev) =>
+        prev && sources.includes(prev) ? prev : sources[0]
+      );
+    } else {
+      // Un solo radar (aunque tenga múltiples fields): NO setear activeToolFile
+      setActiveToolFile(null);
+    }
+  }, [currentOverlay]);
+
+  // Función para descargar COGs de las capas actuales
+  const handleDownloadCOGs = useCallback(async () => {
+    if (!currentOverlay || currentOverlay.length === 0) {
+      enqueueSnackbar("No hay capas disponibles para descargar", {
+        variant: "warning",
+      });
+      return;
+    }
+
+    try {
+      // Filtrar capas: solo las del radar activo (activeToolFile)
+      // Esto permite descargar todos los fields del radar activo, pero no de otros radares
+      const layersToDownload = currentOverlay.filter((layer) => {
+        if (!layer.image_url) return false;
+
+        // Si hay activeToolFile, solo descargar capas de ese radar
+        if (activeToolFile && layer.source_file) {
+          return layer.source_file === activeToolFile;
+        }
+
+        // Si no hay activeToolFile, descargar todas las capas con image_url
+        return true;
+      });
+
+      if (layersToDownload.length === 0) {
+        enqueueSnackbar("No hay archivos COG para descargar", {
+          variant: "warning",
+        });
+        return;
+      }
+
+      // Crear todos los links de descarga
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const downloadLinks = [];
+
+      for (const layer of layersToDownload) {
+        const filename =
+          layer.image_url.split("/").pop() || generateFilename("cog", ".tif");
+        const cogUrl = `${baseUrl}/${layer.image_url}`;
+
+        try {
+          const response = await fetch(cogUrl);
+          if (!response.ok) {
+            console.error(
+              `Error descargando ${filename}: HTTP ${response.status}`
+            );
+            continue;
+          }
+
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          link.style.display = "none";
+          document.body.appendChild(link);
+          downloadLinks.push({ link, url });
+        } catch (err) {
+          console.error(`Error preparando descarga de ${filename}:`, err);
+        }
+      }
+
+      // Hacer click en todos los links con pequeños delays
+      for (let i = 0; i < downloadLinks.length; i++) {
+        downloadLinks[i].link.click();
+        if (i < downloadLinks.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        }
+      }
+
+      // Limpiar después de un delay final
+      setTimeout(() => {
+        downloadLinks.forEach(({ link, url }) => {
+          document.body.removeChild(link);
+          window.URL.revokeObjectURL(url);
+        });
+      }, 1000);
+
+      enqueueSnackbar(`${downloadLinks.length} archivo(s) COG descargado(s)`, {
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error descargando COGs:", error);
+      enqueueSnackbar("Error al descargar archivos COG", { variant: "error" });
+    }
+  }, [currentOverlay, activeToolFile, generateFilename, enqueueSnackbar]);
+
+  // Configurar descargas disponibles para el toolbar
+  const availableDownloads = useMemo(() => {
+    const downloads = {};
+
+    // Captura del mapa (siempre disponible si hay mapa)
+    if (mapInstance) {
+      downloads.mapScreenshot = {
+        handler: () => handleScreenshot(mapInstance, "map-container"),
+        label: "Captura del mapa",
+        disabled: false,
+      };
+    }
+
+    // Descargar COGs de capas actuales
+    if (currentOverlay && currentOverlay.length > 0) {
+      downloads.cogLayers = {
+        //mostrar el nombre del archivo activo si hay uno  no todo el path d:/...
+        handler: handleDownloadCOGs,
+        label: activeToolFile
+          ? `Descargar capa de radar seleccionado`
+          : `Descargar ${currentOverlay.length} capa(s) Geotiff`,
+        disabled: false,
+      };
+    }
+
+    return downloads;
+  }, [mapInstance, currentOverlay, handleScreenshot, handleDownloadCOGs]);
 
   const handleFileUpload = () => {
     document.getElementById("upload-file").click();
@@ -571,32 +737,6 @@ export default function App() {
     }
   };
 
-  // ADAPTACIÓN MULTI-RADAR
-  // Si la respuesta tiene results (multi-radar), combinamos los frames por timestamp
-  // sino dejamos la respuesta vieja
-  let mergedOutputs = [];
-  let animation = false;
-  // const product = overlayData.product;
-  if (overlayData.results) {
-    mergedOutputs = mergeRadarFrames(overlayData.results);
-    animation = mergedOutputs.length > 1;
-  } else {
-    mergedOutputs = overlayData.outputs || [];
-    animation = overlayData.animation;
-  }
-  var currentOverlay = mergedOutputs[currentIndex] || null;
-
-  // Sincronizar archivo activo con las capas visibles del frame actual
-  useEffect(() => {
-    const sources = Array.isArray(currentOverlay)
-      ? currentOverlay.map((L) => L?.source_file).filter(Boolean)
-      : [];
-    if (sources.length === 0) return;
-    setActiveToolFile((prev) =>
-      prev && sources.includes(prev) ? prev : sources[0]
-    );
-  }, [currentOverlay]);
-
   return (
     <div id="map-container" style={{ height: "100vh", width: "100%" }}>
       <MapView
@@ -615,9 +755,9 @@ export default function App() {
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-            ]
+                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+              ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
@@ -651,10 +791,11 @@ export default function App() {
         paletteSelectorActive={paletteSelectorOpen}
       />
       <MapToolbar
-        onScreenshot={() => handleScreenshot("map-container")}
+        onScreenshot={() => handleScreenshot(mapInstance, "map-container")}
         onPrint={handlePrint}
         onFullscreen={handleFullscreen}
         isFullscreen={isFullscreen}
+        availableDownloads={availableDownloads}
       />
       <BaseMapSelector
         open={mapSelectorOpen}
@@ -675,11 +816,14 @@ export default function App() {
       <ZoomControls map={mapInstance} />
 
       {/* Componentes originales mantenidos */}
-      <ActiveLayerPicker
-        layers={Array.isArray(currentOverlay) ? currentOverlay : []}
-        value={activeToolFile}
-        onChange={setActiveToolFile}
-      />
+      {activeToolFile && (
+        <ActiveLayerPicker
+          layers={Array.isArray(currentOverlay) ? currentOverlay : []}
+          value={activeToolFile}
+          onChange={setActiveToolFile}
+        />
+      )}
+
       <ColorLegend fields={fieldsUsed} />
 
       {/* UploadButton oculto - funcionalidad movida a HeaderCard */}

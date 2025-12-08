@@ -16,8 +16,11 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import DownloadIcon from "@mui/icons-material/Download";
 import Draggable from "react-draggable";
 import RadarFilterControls from "./RadarFilterControls";
+import { useDownloads } from "../hooks/useDownloads";
+import { useSnackbar } from "notistack";
 
 const FIELD_OPTIONS = ["DBZH", "KDP", "RHOHV", "ZDR"];
 
@@ -62,6 +65,22 @@ export default function PseudoRHIDialog({
   const [showFilters, setShowFilters] = useState(false);
   const [maxLengthKm, setMaxLengthKm] = useState(240);
   const [maxHeightKm, setMaxHeightKm] = useState(20);
+
+  const { downloadImage, generateFilename } = useDownloads();
+  const { enqueueSnackbar } = useSnackbar();
+
+  const handleDownloadRHI = async () => {
+    if (!resultImg) return;
+
+    try {
+      const filename = generateFilename(`pseudo-rhi_${field}`, ".png");
+      await downloadImage(resultImg, filename);
+      enqueueSnackbar("Imagen RHI descargada", { variant: "success" });
+    } catch (error) {
+      console.error("Error descargando RHI:", error);
+      enqueueSnackbar("Error al descargar imagen", { variant: "error" });
+    }
+  };
 
   const handlePickStart = () => {
     setResultImg(null);
@@ -119,14 +138,7 @@ export default function PseudoRHIDialog({
       // Evitar re-aperturas repetidas
       setAutoFlowActive(false);
     }
-  }, [
-    open,
-    autoFlowActive,
-    pickTarget,
-    endLat,
-    endLon,
-    onAutoReopen,
-  ]);
+  }, [open, autoFlowActive, pickTarget, endLat, endLon, onAutoReopen]);
 
   // Update preview line
   useEffect(() => {
@@ -148,7 +160,15 @@ export default function PseudoRHIDialog({
       start: startPoint,
       end: hasEnd ? { lat: Number(endLat), lon: Number(endLon) } : null,
     });
-  }, [startLat, startLon, endLat, endLon, radarSite, pickTarget, onLinePreviewChange]);
+  }, [
+    startLat,
+    startLon,
+    endLat,
+    endLon,
+    radarSite,
+    pickTarget,
+    onLinePreviewChange,
+  ]);
 
   const handleGenerate = async () => {
     setResultImg(null);
@@ -358,24 +378,43 @@ export default function PseudoRHIDialog({
             </Box>
           </Collapse>
         </Box>
+        {resultImg && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            <Box>
+              <Box
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
+                mb={1}
+              >
+                <Typography variant="subtitle2" color="text.secondary">
+                  Resultado del corte vertical
+                </Typography>
+                <Button
+                  size="small"
+                  startIcon={<DownloadIcon />}
+                  onClick={handleDownloadRHI}
+                  variant="outlined"
+                >
+                  Descargar
+                </Button>
+              </Box>
+              <Box display="flex" justifyContent="center">
+                <img
+                  src={resultImg}
+                  alt="pseudo-rhi"
+                  style={{ maxWidth: "100%", borderRadius: 8 }}
+                />
+              </Box>
+            </Box>
+          </>
+        )}
 
         {error && (
           <Typography color="error" mt={2}>
             {error}
           </Typography>
-        )}
-
-        {resultImg && (
-          <>
-            <Divider sx={{ my: 2 }} />
-            <Box display="flex" justifyContent="center">
-              <img
-                src={resultImg}
-                alt="pseudo-rhi"
-                style={{ maxWidth: "100%", borderRadius: 8 }}
-              />
-            </Box>
-          </>
         )}
       </DialogContent>
 
