@@ -14,14 +14,21 @@ import {
 export default function ActiveLayerPicker({ layers = [], value, onChange }) {
   if (!Array.isArray(layers) || layers.length <= 1) return null;
 
-  const items = layers
-    .map((L, idx) => {
-      const src = L?.source_file || null;
-      const label = buildLabel(L, idx);
-      if (!src) return null;
-      return { value: src, label };
-    })
-    .filter(Boolean);
+  // Agrupar capas por archivo fuente (radar)
+  const radarGroups = {};
+  layers.forEach((L) => {
+    const src = L?.source_file;
+    if (!src) return;
+    if (!radarGroups[src]) {
+      radarGroups[src] = {
+        value: src,
+        label: buildLabel(src),
+        radar: L?.radar,
+      };
+    }
+  });
+
+  const items = Object.values(radarGroups);
 
   if (items.length <= 1) return null;
 
@@ -62,12 +69,9 @@ export default function ActiveLayerPicker({ layers = [], value, onChange }) {
   );
 }
 
-function buildLabel(L) {
-  const field = L?.field || "Layer";
-  const src = L?.source_file || "";
-  const base = basename(src);
-  // Try to make it compact: FIELD — filename
-  return `${field} — ${base}`;
+function buildLabel(filepath) {
+  // Extraer solo el nombre del archivo, sin ruta
+  return basename(filepath);
 }
 
 function basename(path) {
