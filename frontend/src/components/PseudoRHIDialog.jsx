@@ -13,6 +13,8 @@ import {
   Paper,
   IconButton,
   Collapse,
+  Autocomplete,
+  Chip,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -51,13 +53,13 @@ export default function PseudoRHIDialog({
   onAutoClose,
   onAutoReopen,
 }) {
-  const [field, setField] = useState(fields_present[0] || "DBZH");
+  const [selectedFields, setSelectedFields] = useState([fields_present[0] || "DBZH"]);
   const [startLat, setStartLat] = useState("");
   const [startLon, setStartLon] = useState("");
   const [endLat, setEndLat] = useState("");
   const [endLon, setEndLon] = useState("");
   const [loading, setLoading] = useState(false);
-  const [resultImg, setResultImg] = useState(null);
+  const [resultImgs, setResultImgs] = useState([]);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState([]);
   const [pickTarget, setPickTarget] = useState(null); // 'start' | 'end' | null
@@ -69,12 +71,12 @@ export default function PseudoRHIDialog({
   const { downloadImage, generateFilename } = useDownloads();
   const { enqueueSnackbar } = useSnackbar();
 
-  const handleDownloadRHI = async () => {
-    if (!resultImg) return;
+  const handleDownloadRHI = async (imageUrl, fieldName) => {
+    if (!imageUrl) return;
 
     try {
-      const filename = generateFilename(`pseudo-rhi_${field}`, ".png");
-      await downloadImage(resultImg, filename);
+      const filename = generateFilename(`pseudo-rhi_${fieldName}`, ".png");
+      await downloadImage(imageUrl, filename);
       enqueueSnackbar("Imagen RHI descargada", { variant: "success" });
     } catch (error) {
       console.error("Error descargando RHI:", error);
@@ -83,7 +85,7 @@ export default function PseudoRHIDialog({
   };
 
   const handlePickStart = () => {
-    setResultImg(null);
+    setResultImgs([]);
     setError("");
     setPickTarget("start");
     setAutoFlowActive(true);
@@ -92,7 +94,7 @@ export default function PseudoRHIDialog({
   };
 
   const handlePickEnd = () => {
-    setResultImg(null);
+    setResultImgs([]);
     setError("");
     setPickTarget("end");
     setAutoFlowActive(true);
@@ -171,10 +173,14 @@ export default function PseudoRHIDialog({
   ]);
 
   const handleGenerate = async () => {
-    setResultImg(null);
+    setResultImgs([]);
     setError("");
     if (!filepath) {
       setError("Seleccione un archivo primero");
+      return;
+    }
+    if (selectedFields.length === 0) {
+      setError("Seleccione al menos un campo");
       return;
     }
     const sLat = Number(startLat);
@@ -193,18 +199,37 @@ export default function PseudoRHIDialog({
     }
     try {
       setLoading(true);
-      const resp = await onGenerate({
-        filepath,
-        field,
-        start_lat: startLat === "" || startLon === "" ? undefined : sLat,
-        start_lon: startLat === "" || startLon === "" ? undefined : sLon,
-        end_lat: eLat,
-        end_lon: eLon,
-        filters,
-        max_length_km: Number(maxLengthKm),
-        max_height_km: Number(maxHeightKm),
-      });
-      setResultImg(resp?.[0].image_url || null);
+      const results = [];
+
+      // Hacer una request por cada campo seleccionado
+      for (const field of selectedFields) {
+        try {
+          const resp = await onGenerate({
+            filepath,
+            field,
+            start_lat: startLat === "" || startLon === "" ? undefined : sLat,
+            start_lon: startLat === "" || startLon === "" ? undefined : sLon,
+            end_lat: eLat,
+            end_lon: eLon,
+            filters,
+            max_length_km: Number(maxLengthKm),
+            max_height_km: Number(maxHeightKm),
+          });
+          if (resp?.[0]?.image_url) {
+            results.push({ field, image_url: resp[0].image_url });
+          }
+        } catch (fieldError) {
+          console.error(`Error generando RHI para campo ${field}:`, fieldError);
+          results.push({ field, error: fieldError?.response?.data?.detail || String(fieldError) });
+        }
+      }
+
+      setResultImgs(results);
+
+      // Si todos los campos fallaron, mostrar error
+      if (results.length > 0 && results.every(r => r.error)) {
+        setError("Error generando todos los cortes");
+      }
     } catch (e) {
       setError(e?.response?.data?.detail || String(e));
     } finally {
@@ -251,19 +276,38 @@ export default function PseudoRHIDialog({
 
         <Box display="grid" gridTemplateColumns="1fr" gap={2} mt={2}>
           <Box display="grid" gridTemplateColumns="1fr" gap={1}>
-            <TextField
-              select
+            <Autocomplete
+              multiple
               size="small"
-              label="Campo"
-              value={field}
-              onChange={(e) => setField(e.target.value)}
-            >
-              {fields_present.map((f) => (
-                <MenuItem key={f} value={f}>
-                  {f}
-                </MenuItem>
-              ))}
-            </TextField>
+              options={fields_present}
+              value={selectedFields}
+              onChange={(event, newValue) => {
+                if (newValue.length <= 3) {
+                  setSelectedFields(newValue);
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Campos (máx. 3)"
+                  helperText={`${selectedFields.length}/3 campos seleccionados`}
+                />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip
+                      key={key}
+                      label={option}
+                      size="small"
+                      {...tagProps}
+                    />
+                  );
+                })
+              }
+              disableCloseOnSelect
+            />
           </Box>
 
           <Typography variant="subtitle2">Punto de inicio</Typography>
@@ -339,13 +383,13 @@ export default function PseudoRHIDialog({
               {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
             </IconButton>
             <Typography variant="subtitle2" sx={{ userSelect: "none" }}>
-              Filtros
+              Filtros {selectedFields.length > 1 && "(se aplican a todos los campos)"}
             </Typography>
           </Box>
           <Collapse in={showFilters} timeout="auto" unmountOnExit>
             <Box mt={1}>
               <RadarFilterControls
-                selectedField={field}
+                selectedField={selectedFields[0]}
                 onFiltersChange={setFilters}
                 showVariableFilterDefault={true}
               />
@@ -378,35 +422,50 @@ export default function PseudoRHIDialog({
             </Box>
           </Collapse>
         </Box>
-        {resultImg && (
+        {resultImgs.length > 0 && (
           <>
             <Divider sx={{ my: 2 }} />
             <Box>
-              <Box
-                display="flex"
-                justifyContent="space-between"
-                alignItems="center"
-                mb={1}
-              >
-                <Typography variant="subtitle2" color="text.secondary">
-                  Resultado del corte vertical
-                </Typography>
-                <Button
-                  size="small"
-                  startIcon={<DownloadIcon />}
-                  onClick={handleDownloadRHI}
-                  variant="outlined"
-                >
-                  Descargar
-                </Button>
-              </Box>
-              <Box display="flex" justifyContent="center">
-                <img
-                  src={resultImg}
-                  alt="pseudo-rhi"
-                  style={{ maxWidth: "100%", borderRadius: 8 }}
-                />
-              </Box>
+              <Typography variant="subtitle2" color="text.secondary" mb={2}>
+                Resultados de los cortes verticales
+              </Typography>
+              {resultImgs.map((result, idx) => (
+                <Box key={idx} mb={3}>
+                  <Box
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    mb={1}
+                  >
+                    <Typography variant="body2" fontWeight="medium">
+                      Campo: {result.field}
+                    </Typography>
+                    {result.image_url && (
+                      <Button
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => handleDownloadRHI(result.image_url, result.field)}
+                        variant="outlined"
+                      >
+                        Descargar
+                      </Button>
+                    )}
+                  </Box>
+                  {result.image_url ? (
+                    <Box display="flex" justifyContent="center">
+                      <img
+                        src={result.image_url}
+                        alt={`pseudo-rhi-${result.field}`}
+                        style={{ maxWidth: "100%", borderRadius: 8 }}
+                      />
+                    </Box>
+                  ) : result.error ? (
+                    <Typography color="error" variant="body2">
+                      Error: {result.error}
+                    </Typography>
+                  ) : null}
+                </Box>
+              ))}
             </Box>
           </>
         )}

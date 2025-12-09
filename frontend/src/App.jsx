@@ -191,11 +191,12 @@ export default function App() {
   const [initialColormaps, setInitialColormaps] = useState({});
   const [paletteSelectorOpen, setPaletteSelectorOpen] = useState(false);
 
-  // Derivar sitio del radar a partir del archivo activo (como activeToolFile)
+  // Derivar sitio del radar a partir del archivo activo o el archivo actual en visualización
   const radarSite = useMemo(() => {
-    if (!activeToolFile) return null;
-    // Buscar metadata del archivo activo
-    const fi = filesInfo.find((f) => f.filepath === activeToolFile);
+    const fileToUse = activeToolFile || uploadedFiles[currentIndex];
+    if (!fileToUse) return null;
+    // Buscar metadata del archivo
+    const fi = filesInfo.find((f) => f.filepath === fileToUse);
     const md = fi?.metadata;
     if (!md) return null;
     const site = md.radar_site || md.site; // soportar ambos nombres
@@ -205,7 +206,7 @@ export default function App() {
       lon: Number(site.lon),
       alt_m: site.alt_m ?? site.alt ?? null,
     };
-  }, [activeToolFile, filesInfo]);
+  }, [activeToolFile, uploadedFiles, currentIndex, filesInfo]);
 
   // Hook para acciones del mapa (screenshot, print, fullscreen)
   const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } =
@@ -551,11 +552,12 @@ export default function App() {
   };
   const handlePickPoint = (pt) => {
     setPickedPoint(pt);
-    setPickPointMode(false); // se desactiva al elegir
+    // No desactivar pickPointMode aquí - se maneja desde PseudoRHIDialog
     // No modificar rhiLinePreview aquí - lo maneja PseudoRHIDialog vía onLinePreviewChange
   };
   const handleClearPickedPoint = () => {
     setPickedPoint(null);
+    setPickPointMode(false); // Desactivar cuando se limpia
     setRhiLinePreview({ start: null, end: null });
   };
 
@@ -755,9 +757,9 @@ export default function App() {
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-              ]
+              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+            ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
