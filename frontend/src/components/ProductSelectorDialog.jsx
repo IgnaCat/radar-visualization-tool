@@ -133,6 +133,40 @@ export default function ProductSelectorDialog({
       return;
     }
 
+    // Si derivedLayers cambió, sincronizar el orden
+    // Comparar si el orden de los campos habilitados cambió
+    const currentEnabledFields = layers.filter(l => l.enabled).map(l => l.field);
+    const derivedEnabledFields = derivedLayers.filter(l => l.enabled).map(l => l.field);
+
+    // Si el orden cambió, reordenar manteniendo estados enabled/disabled
+    const orderChanged = currentEnabledFields.length === derivedEnabledFields.length &&
+      currentEnabledFields.some((field, idx) => field !== derivedEnabledFields[idx]);
+
+    if (orderChanged) {
+      // Reordenar layers según el orden en derivedLayers, manteniendo enabled/disabled
+      const reordered = [];
+
+      // Primero los campos en el orden de derivedLayers
+      derivedLayers.forEach(dl => {
+        const existing = layers.find(l => l.field === dl.field);
+        if (existing) {
+          reordered.push(existing);
+        } else {
+          reordered.push(dl);
+        }
+      });
+
+      // Luego los campos que están en layers pero no en derivedLayers
+      layers.forEach(l => {
+        if (!derivedLayers.find(dl => dl.field === l.field)) {
+          reordered.push(l);
+        }
+      });
+
+      setLayers(reordered);
+      return;
+    }
+
     // Si hay nuevos campos en derivedLayers que no están en layers actuales, agregarlos al final
     const currentFields = new Set(layers.map(l => l.field));
     const newLayers = derivedLayers.filter(dl => !currentFields.has(dl.field));
@@ -141,6 +175,7 @@ export default function ProductSelectorDialog({
       // Agregar nuevos campos al final, manteniendo el orden existente
       setLayers(prev => [...prev, ...newLayers]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [derivedLayers]);
 
   useEffect(() => {

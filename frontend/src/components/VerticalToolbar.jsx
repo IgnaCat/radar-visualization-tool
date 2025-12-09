@@ -16,9 +16,11 @@ export default function VerticalToolbar({
   onMapSelectorToggle,
   onPaletteSelectorToggle,
   onElevationProfileClick,
+  onLayerManagerToggle,
   pixelStatActive = false,
   mapSelectorActive = false,
   paletteSelectorActive = false,
+  layerManagerActive = false,
 }) {
   const tools = [
     {
@@ -30,8 +32,8 @@ export default function VerticalToolbar({
     {
       icon: <LayersIcon />,
       tooltip: "Capas",
-      action: () => console.log("Capas - por implementar"),
-      active: false,
+      action: onLayerManagerToggle,
+      active: layerManagerActive,
     },
     {
       icon: <MapIcon />,

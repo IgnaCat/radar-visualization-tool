@@ -32,6 +32,7 @@ import PseudoRHIDialog from "./components/PseudoRHIDialog";
 import WarningPanel from "./components/WarningPanel";
 import AreaStatsDialog from "./components/AreaStatsDialog";
 import ElevationProfileDialog from "./components/ElevationProfileDialog";
+import LayerManagerDialog from "./components/LayerManagerDialog";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
 function mergeRadarFrames(results, toleranceSec = 240) {
@@ -134,7 +135,7 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
   const [selectorOpen, setSelectorOpen] = useState(false);
-  const [fieldsUsed, setFieldsUsed] = useState("DBZH");
+  const [fieldsUsed, setFieldsUsed] = useState(["DBZH"]);
   const [filesInfo, setFilesInfo] = useState([]);
   const [volumes, setVolumes] = useState([]); // lista de volúmenes cargados sin repetidos
   const [availableRadars, setAvailableRadars] = useState([]); // todos los radares presentes en archivos subidos
@@ -190,6 +191,7 @@ export default function App() {
   const [selectedColormaps, setSelectedColormaps] = useState({});
   const [initialColormaps, setInitialColormaps] = useState({});
   const [paletteSelectorOpen, setPaletteSelectorOpen] = useState(false);
+  const [layerManagerOpen, setLayerManagerOpen] = useState(false);
 
   // Derivar sitio del radar a partir del archivo activo o el archivo actual en visualización
   const radarSite = useMemo(() => {
@@ -660,6 +662,91 @@ export default function App() {
     setSelectorOpen(true);
   };
 
+  // Handlers para gestor de capas
+  const handleToggleLayerManager = () => {
+    setLayerManagerOpen((prev) => !prev);
+  };
+
+  const handleLayerReorder = (reorderedLayers) => {
+    // Actualizar el orden de las capas en currentOverlay
+    // Asignar nuevo 'order' basado en el índice
+    const updatedLayers = reorderedLayers.map((layer, idx) => ({
+      ...layer,
+      order: idx,
+    }));
+
+    // Extraer el orden de los campos
+    const fieldOrder = updatedLayers.map(l => l.field);
+    const uniqueFields = [...new Set(fieldOrder)];
+
+    // Actualizar savedLayers para sincronizar con ProductSelectorDialog
+    // Mantener TODOS los campos (habilitados y deshabilitados) pero reordenar los habilitados
+    const reorderedSavedLayers = [];
+
+    // Primero agregar los campos activos en el nuevo orden
+    uniqueFields.forEach(field => {
+      const existingLayer = savedLayers.find(l => l.field === field || l.label === field);
+      if (existingLayer) {
+        reorderedSavedLayers.push(existingLayer);
+      }
+    });
+
+    // Luego agregar los campos deshabilitados que no están en el nuevo orden
+    savedLayers.forEach(layer => {
+      const isInNewOrder = uniqueFields.includes(layer.field) || uniqueFields.includes(layer.label);
+      if (!isInNewOrder) {
+        reorderedSavedLayers.push(layer);
+      }
+    });
+
+    if (reorderedSavedLayers.length > 0) {
+      setSavedLayers(reorderedSavedLayers);
+    }
+
+    // Actualizar activeToolFile si cambió el primer radar
+    if (updatedLayers.length > 0) {
+      const firstRadarFile = updatedLayers[0].source_file;
+      if (firstRadarFile !== activeToolFile) {
+        setActiveToolFile(firstRadarFile);
+      }
+    }
+
+    // Actualizar TODOS los frames con el nuevo orden
+    // Aplicar el orden a todas las capas de todos los frames
+    const updatedOutputs = mergedOutputs.map((frame) => {
+      if (!Array.isArray(frame)) return frame;
+
+      // Reordenar las capas de este frame según el nuevo orden
+      const reordered = [...frame].sort((a, b) => {
+        const aIdx = updatedLayers.findIndex(l =>
+          l.field === a.field && l.source_file === a.source_file
+        );
+        const bIdx = updatedLayers.findIndex(l =>
+          l.field === b.field && l.source_file === b.source_file
+        );
+
+        // Si no se encuentra, mantener al final
+        if (aIdx === -1 && bIdx === -1) return 0;
+        if (aIdx === -1) return 1;
+        if (bIdx === -1) return -1;
+
+        return aIdx - bIdx;
+      });
+
+      // Asignar los índices de orden
+      return reordered.map((layer, idx) => ({
+        ...layer,
+        order: idx,
+      }));
+    });
+
+    setOverlayData({
+      ...overlayData,
+      outputs: updatedOutputs,
+      results: null, // Eliminar results para que use outputs
+    });
+  };
+
   // Handlers para perfil de elevación
   const handleOpenElevationProfile = () => {
     setElevationProfileOpen(true);
@@ -788,9 +875,11 @@ export default function App() {
         onMapSelectorToggle={handleToggleMapSelector}
         onPaletteSelectorToggle={handleTogglePaletteSelector}
         onElevationProfileClick={handleOpenElevationProfile}
+        onLayerManagerToggle={handleToggleLayerManager}
         pixelStatActive={pixelStatMode}
         mapSelectorActive={mapSelectorOpen}
         paletteSelectorActive={paletteSelectorOpen}
+        layerManagerActive={layerManagerOpen}
       />
       <MapToolbar
         onScreenshot={() => handleScreenshot(mapInstance, "map-container")}
@@ -814,6 +903,12 @@ export default function App() {
         onApply={handleApplyColormaps}
         hasLoadedImages={mergedOutputs.length > 0}
         initialColormaps={initialColormaps}
+      />
+      <LayerManagerDialog
+        open={layerManagerOpen}
+        onClose={() => setLayerManagerOpen(false)}
+        layers={Array.isArray(currentOverlay) ? currentOverlay : []}
+        onReorder={handleLayerReorder}
       />
       <ZoomControls map={mapInstance} />
 
