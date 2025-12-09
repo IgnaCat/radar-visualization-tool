@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import PropTypes from "prop-types";
 import {
   Box,
@@ -11,8 +11,11 @@ import {
   Typography,
   Divider,
   Tooltip,
+  Button,
 } from "@mui/material";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 
 /**
  * items: [
@@ -23,7 +26,13 @@ import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
  *
  * onChange(nextItems) -> devuelve lista actualizada (orden/estado/opacity)
  */
-function LayerControlList({ title = "Productos de Radar", items, onChange }) {
+function LayerControlList({ title = "Productos de Radar", items, onChange, initialVisible = 3 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Determinar qué elementos mostrar
+  const visibleItems = isExpanded ? items : items.slice(0, initialVisible);
+  const hasMoreItems = items.length > initialVisible;
+
   // --- Drag & Drop (HTML5 nativo) ---
   const onDragStart = useCallback((e, fromIdx) => {
     e.dataTransfer.setData("text/plain", String(fromIdx));
@@ -40,12 +49,18 @@ function LayerControlList({ title = "Productos de Radar", items, onChange }) {
       e.preventDefault();
       const fromIdx = Number(e.dataTransfer.getData("text/plain"));
       if (Number.isNaN(fromIdx) || fromIdx === toIdx) return;
+
+      // Si la lista está colapsada, solo permitir reordenar dentro de los elementos visibles
+      if (!isExpanded && (fromIdx >= initialVisible || toIdx >= initialVisible)) {
+        return;
+      }
+
       const next = items.slice();
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
       onChange(next);
     },
-    [items, onChange]
+    [items, onChange, isExpanded, initialVisible]
   );
 
   const toggleEnabled = (idx) => {
@@ -88,57 +103,78 @@ function LayerControlList({ title = "Productos de Radar", items, onChange }) {
 
       <List disablePadding>
         {items.length > 0 &&
-          items.map((it, idx) => (
-            <Box
-              key={it.id}
-              draggable
-              onDragStart={(e) => onDragStart(e, idx)}
-              onDragOver={onDragOver}
-              onDrop={(e) => onDrop(e, idx)}
-              sx={{
-                p: 1,
-                mb: 1,
-                width: "90%",
-                bgcolor: "background.paper",
-              }}
-            >
-              {/* Nombre arriba */}
-              <ListItem disableGutters sx={{ py: 0 }}>
-                <ListItemText
-                  primary={<Typography variant="body1">{it.label}</Typography>}
-                />
-              </ListItem>
+          visibleItems.map((it, displayIdx) => {
+            // El índice real en el array completo
+            const actualIdx = items.findIndex(item => item.id === it.id);
 
-              {/* Abajo: checkbox + slider + manija de arrastre */}
-              <Box display="flex" alignItems="center" gap={1}>
-                <Checkbox
-                  checked={!!it.enabled}
-                  onChange={() => toggleEnabled(idx)}
-                  disabled={
-                    !it.enabled && items.filter((l) => l.enabled).length >= 3
-                  }
-                  inputProps={{ "aria-label": `activar ${it.label}` }}
-                />
+            return (
+              <Box
+                key={it.id}
+                draggable
+                onDragStart={(e) => onDragStart(e, actualIdx)}
+                onDragOver={onDragOver}
+                onDrop={(e) => onDrop(e, actualIdx)}
+                sx={{
+                  p: 1,
+                  mb: 1,
+                  width: "90%",
+                  bgcolor: "background.paper",
+                }}
+              >
+                {/* Nombre arriba */}
+                <ListItem disableGutters sx={{ py: 0 }}>
+                  <ListItemText
+                    primary={<Typography variant="body1">{it.label}</Typography>}
+                  />
+                </ListItem>
 
-                <Slider
-                  value={Number(it.opacity ?? 1)}
-                  onChange={(_, v) => changeOpacity(idx, v)}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  valueLabelDisplay="auto"
-                  sx={{ flex: 1 }}
-                />
+                {/* Abajo: checkbox + slider + manija de arrastre */}
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Checkbox
+                    checked={!!it.enabled}
+                    onChange={() => toggleEnabled(actualIdx)}
+                    disabled={
+                      !it.enabled && items.filter((l) => l.enabled).length >= 3
+                    }
+                    inputProps={{ "aria-label": `activar ${it.label}` }}
+                  />
 
-                <Tooltip title="Arrastrar para cambiar el orden">
-                  <IconButton size="small" sx={{ cursor: "grab", px: 1 }}>
-                    <DragIndicatorIcon />
-                  </IconButton>
-                </Tooltip>
+                  <Slider
+                    value={Number(it.opacity ?? 1)}
+                    onChange={(_, v) => changeOpacity(actualIdx, v)}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    valueLabelDisplay="auto"
+                    sx={{ flex: 1 }}
+                  />
+
+                  <Tooltip title="Arrastrar para cambiar el orden">
+                    <IconButton size="small" sx={{ cursor: "grab", px: 1 }}>
+                      <DragIndicatorIcon />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
               </Box>
-            </Box>
-          ))}
+            );
+          })}
       </List>
+
+      {/* Botón para expandir/colapsar */}
+      {hasMoreItems && (
+        <Box display="flex" justifyContent="center" mt={1}>
+          <Button
+            size="small"
+            onClick={() => setIsExpanded(!isExpanded)}
+            startIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            sx={{ textTransform: "none" }}
+          >
+            {isExpanded
+              ? "Mostrar menos"
+              : `Mostrar ${items.length - initialVisible} más`}
+          </Button>
+        </Box>
+      )}
 
       <Divider sx={{ mt: 1 }} />
     </Box>
@@ -156,6 +192,7 @@ LayerControlList.propTypes = {
     })
   ).isRequired,
   onChange: PropTypes.func.isRequired,
+  initialVisible: PropTypes.number, // Número de elementos visibles inicialmente
 };
 
 export default LayerControlList;
