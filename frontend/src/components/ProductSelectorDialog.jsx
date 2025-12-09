@@ -126,9 +126,20 @@ export default function ProductSelectorDialog({
   const [elevationIdx, setElevationIdx] = useState(initialElevationIndex);
   const [filters, setFilters] = useState(structuredClone(initialFilters));
 
+  // Actualizar capas preservando el orden del usuario cuando cambian los campos disponibles
   useEffect(() => {
     if (layers.length === 0 || !layers.some((l) => l.enabled)) {
       setLayers(derivedLayers);
+      return;
+    }
+
+    // Si hay nuevos campos en derivedLayers que no están en layers actuales, agregarlos al final
+    const currentFields = new Set(layers.map(l => l.field));
+    const newLayers = derivedLayers.filter(dl => !currentFields.has(dl.field));
+
+    if (newLayers.length > 0) {
+      // Agregar nuevos campos al final, manteniendo el orden existente
+      setLayers(prev => [...prev, ...newLayers]);
     }
   }, [derivedLayers]);
 
