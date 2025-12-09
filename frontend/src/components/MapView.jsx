@@ -226,11 +226,12 @@ export default function MapView({
               : opacities[idx] ?? 1;
 
           // Las capas del radar seleccionado se muestran arriba (mayor zIndex)
+          // El orden en el array es bottom-to-top, así que invertimos idx para zIndex
           const isActiveRadar =
             activeToolFile && L.source_file === activeToolFile;
           const zIndex = isActiveRadar
-            ? baseZ + 1000 + idx * 10 // radar activo: zIndex muy alto
-            : baseZ + (n - 1 - idx) * 10; // otros radares: zIndex normal invertido
+            ? baseZ + 1000 + (n - 1 - idx) * 10 // radar activo: zIndex muy alto, orden invertido
+            : baseZ + (n - 1 - idx) * 10; // otros radares: zIndex normal, orden invertido
 
           return (
             <COGTile
