@@ -16,6 +16,7 @@ from ..core.config import settings
 from ..core.cache import GRID3D_CACHE
 
 from ..schemas import RangeFilter
+from ..services.radar_processor import beam_height_max_km
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
     safe_range_max_m, get_radar_site, md5_file, limit_line_to_range,
@@ -415,22 +416,21 @@ def _generate_segment_transect_png(
         except Exception:
             elev_deg = 0.0
     
-    # Importar función para calcular altura máxima del haz
-    from ..services.radar_processor import beam_height_max_km
     hmax_km = beam_height_max_km(range_max_m, elev_deg)
     z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen (igual que PPI en radar_processor)
     
     # Generar cache key para buscar la grilla 3D
     qc_sig = qc_signature(qc_filters)
-    grid_resolution = 300 if volume == '03' else 1200
+    grid_resolution_xy = 300 if volume == '03' else 1200
+    grid_resolution_z = 300  # Siempre 300m en Z (debe coincidir con radar_processor)
     
     cache_key = grid3d_cache_key(
         file_hash=file_hash,
         field_to_use=field_name,
         volume=volume,
         qc_sig=qc_sig,
-        grid_res_xy=grid_resolution,
-        grid_res_z=grid_resolution,
+        grid_res_xy=grid_resolution_xy,
+        grid_res_z=grid_resolution_z,
         z_top_m=z_top_m,
     )
     
@@ -518,6 +518,7 @@ def _generate_segment_transect_png(
             cmap=cmap,
             vmin=vmin,
             vmax=vmax,
+            #mask_outside=False,  # No enmascarar fuera del haz para ver toda la interpolación
         )
     except Exception as e:
         # Si falla plot_cross_section, intentar fallback manual

@@ -42,7 +42,8 @@ def _get_or_build_grid3d(
     z_grid_limits: tuple,
     y_grid_limits: tuple,
     x_grid_limits: tuple,
-    grid_resolution: float,
+    grid_resolution_xy: float,
+    grid_resolution_z: float,
 ) -> pyart.core.Grid:
     """
     Función interna para obtener o construir una grilla 3D cacheada.
@@ -55,8 +56,8 @@ def _get_or_build_grid3d(
         field_to_use=field_to_use,
         volume=volume,
         qc_sig=qc_sig,
-        grid_res_xy=grid_resolution,
-        grid_res_z=grid_resolution,
+        grid_res_xy=grid_resolution_xy,
+        grid_res_z=grid_resolution_z,
         z_top_m=z_grid_limits[1],
     )
     
@@ -110,13 +111,13 @@ def _get_or_build_grid3d(
     
     range_max_m = (y_grid_limits[1] - y_grid_limits[0]) / 2
     constant_roi = max(
-        grid_resolution * 1.5,
+        grid_resolution_xy * 1.5,
         800 + (range_max_m / 100000) * 400
     )
     
-    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution)) + 1
-    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
-    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
+    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution_z)) + 1
+    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution_xy)
+    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution_xy)
     
     # Campos a incluir en la grilla: principal + todos los QC disponibles
     fields_for_grid = {field_to_use}
@@ -430,10 +431,12 @@ def process_radar_to_cog(
     x_grid_limits = (-range_max_m, range_max_m)
 
     # Calculamos la cantidad de puntos en cada dimensión
-    grid_resolution = 300 if volume == '03' else 1200
-    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution)) + 1
-    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution)
-    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution)
+    # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
+    grid_resolution_xy = 300 if volume == '03' else 1200
+    grid_resolution_z = 300  # Siempre usar 300m en Z para cross-sections de calidad
+    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution_z)) + 1
+    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution_xy)
+    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution_xy)
 
     interp = 'nearest'
 
@@ -475,7 +478,8 @@ def process_radar_to_cog(
             z_grid_limits=z_grid_limits,
             y_grid_limits=y_grid_limits,
             x_grid_limits=x_grid_limits,
-            grid_resolution=grid_resolution,
+            grid_resolution_xy=grid_resolution_xy,
+            grid_resolution_z=grid_resolution_z,
         )
 
         # Guardamos niveles z completos antes de colapsar el campo principal (lo usaremos para QC)
