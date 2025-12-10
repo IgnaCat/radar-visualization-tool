@@ -31,6 +31,20 @@ from .radar_common import (
     safe_range_max_m,
     collapse_field_3d_to_2d
 )
+from .grid_geometry import (
+    calculate_z_limits,
+    calculate_grid_resolution,
+    calculate_grid_points
+)
+from .product_preparation import (
+    prepare_radar_for_product,
+    fill_dbzh_if_needed
+)
+from .filter_application import (
+    separate_filters,
+    apply_visual_filters,
+    apply_qc_filters
+)
 
 
 def _get_or_build_grid3d(
@@ -47,7 +61,6 @@ def _get_or_build_grid3d(
 ) -> pyart.core.Grid:
     """
     Función interna para obtener o construir una grilla 3D cacheada.
-    Usada tanto por process_radar_to_cog como por build_3d_grid.
     """
     # Generar cache key
     qc_sig = qc_signature(qc_filters)
@@ -81,7 +94,7 @@ def _get_or_build_grid3d(
         if 'long_name' not in field_dict:
             field_dict['long_name'] = cached_field_name
         
-        # Crear Grid con metadatos completos incluyendo time['units']
+        # Crear Grid con metadatos completos a partir del array cacheado
         grid = pyart.core.Grid(
             time={
                 'data': np.array([0]),
@@ -115,11 +128,13 @@ def _get_or_build_grid3d(
         800 + (range_max_m / 100000) * 400
     )
     
-    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution_z)) + 1
-    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution_xy)
-    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution_xy)
+    # Calcular puntos de grilla usando la función del módulo grid_geometry
+    z_points, y_points, x_points = calculate_grid_points(
+        z_grid_limits, y_grid_limits, x_grid_limits,
+        grid_resolution_z, grid_resolution_xy
+    )
     
-    # Campos a incluir en la grilla: principal + todos los QC disponibles
+    # Campos a incluir en la grilla: principal + todos los campos de filtrado QC (ej. RHOHV)
     fields_for_grid = {field_to_use}
     for qc_name in AFFECTS_INTERP_FIELDS:
         if qc_name in radar_to_use.fields:
@@ -224,35 +239,67 @@ def convert_to_cog(src_path, cog_path):
     return cog_path
 
 
-def create_colmax(radar):
+def _generate_cog_filename(
+    field_requested: str,
+    product: str,
+    elevation: int,
+    cappi_height: float,
+    filters,
+    file_hash: str,
+    colormap_overrides: dict = None
+) -> str:
     """
-    Crea un campo de reflectividad compuesto (COLMAX) a partir de todas las
-    elevaciones disponibles en el radar.
+    Genera nombre único pero estable para el archivo COG.
+    
+    Args:
+        field_requested: Campo solicitado (ej: 'DBZH')
+        product: Tipo de producto ('PPI', 'CAPPI', 'COLMAX')
+        elevation: Índice de elevación (para PPI)
+        cappi_height: Altura CAPPI en metros
+        filters: Lista de filtros aplicados
+        file_hash: Hash del archivo radar
+        colormap_overrides: Dict opcional con overrides de colormap
+    
+    Returns:
+        Nombre del archivo COG (sin path)
     """
-
-    compz = pyart.retrieve.composite_reflectivity(radar, field="filled_DBZH")
-
-    # Cambiamos el long_name para que en el titulo de la figura salga COLMAX
-    compz.fields['composite_reflectivity']['long_name'] = 'COLMAX'
-
-    # Volver a la máscara antes de exportar
-    data = compz.fields['composite_reflectivity']['data']
-    mask = np.isnan(data) | np.isclose(data, -30) | (data < -40)
-    compz.fields['composite_reflectivity']['data'] = np.ma.array(data, mask=mask)
-    compz.fields['composite_reflectivity']['_FillValue'] = -9999.0
-
-    return compz
+    filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
+    aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
+    
+    # Incluir cmap en el nombre si hay override
+    cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
+    cmap_suffix = f"_{cmap_override_key}" if cmap_override_key else ""
+    
+    return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}.tif"
 
 
-def beam_height_max_km(range_max_m, elev_deg, antenna_alt_m=0.0):
+def _build_output_summary(
+    unique_cog_name: str,
+    field_requested: str,
+    filepath: str,
+    cog_path: Path
+) -> dict:
     """
-    Calcula la altura máxima del haz en km para un rango y elevación dados.
+    Construye el diccionario de resumen para la respuesta API.
+    
+    Args:
+        unique_cog_name: Nombre del archivo COG
+        field_requested: Campo procesado
+        filepath: Path del archivo radar original
+        cog_path: Path completo al archivo COG
+    
+    Returns:
+        Dict con image_url, field, source_file, tilejson_url
     """
-    Re = 8.49e6  # m
-    r = float(range_max_m)
-    th = math.radians(float(elev_deg))
-    h = r*math.sin(th) + (r*r)/(2.0*Re) + antenna_alt_m
-    return h/1000.0  # km
+    file_uri = cog_path.resolve().as_posix()
+    style = "&resampling=nearest&warp_resampling=nearest"
+    
+    return {
+        "image_url": f"static/tmp/{unique_cog_name}",
+        "field": field_requested,
+        "source_file": filepath,
+        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
+    }
 
 
 def collapse_grid_to_2d(grid, field, product, *,
@@ -334,25 +381,14 @@ def process_radar_to_cog(
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]
-    filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
-    aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
-    
-    # Incluir cmap en el nombre si hay override
-    cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
-    cmap_suffix = f"_{cmap_override_key}" if cmap_override_key else ""
-    
-    unique_cog_name = f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}.tif"
+    unique_cog_name = _generate_cog_filename(
+        field_requested, product, elevation, cappi_height,
+        filters, file_hash, colormap_overrides
+    )
     cog_path = Path(output_dir) / unique_cog_name
-    file_uri = Path(cog_path).resolve().as_posix()
 
     # Generamos el resumen de salida
-    style = "&resampling=nearest&warp_resampling=nearest"
-    summary = {
-        "image_url": f"static/tmp/{unique_cog_name}",
-        "field": field_requested,
-        "source_file": filepath,
-        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
-    }
+    summary = _build_output_summary(unique_cog_name, field_requested, filepath, cog_path)
 
     # Si ya existe el COG, devolvemos directo
     if cog_path.exists():
@@ -373,32 +409,11 @@ def process_radar_to_cog(
     cmap_override = (colormap_overrides or {}).get(field_requested, None)
     cmap, vmin, vmax, cmap_key = colormap_for(field_key, override_cmap=cmap_override)
 
-    if field_name == "DBZH" and product.upper() in ["CAPPI", "COLMAX"]:
-        # Relleno el campo DBZH sino los -- no dejan interpolar
-        filled_DBZH = radar.fields[field_name]['data'].filled(fill_value=-30)
-        radar.add_field_like(field_name, 'filled_DBZH', filled_DBZH, replace_existing=True)
-        field_name = 'filled_DBZH'
-
-    # Definimos qué radar y campo usar según el producto
-    product_upper = product.upper()
-    if product_upper == "PPI":
-        radar_to_use = radar.extract_sweeps([elevation])
-        field_to_use = field_name
-    elif product_upper == "CAPPI":
-        cappi = cappi_utils.create_cappi(radar, fields=[field_name], height=cappi_height)
-        # Creamos un campo de 5400x523 y lo rellenamos con el cappi
-        # Hacemos esto por problemas con el interpolador de pyart
-        template = cappi.fields[field_name]['data']   # (360, 523)
-        zeros_array = np.tile(template, (15, 1))   # (5400, 523)
-        radar.add_field_like('DBZH', 'cappi', zeros_array, replace_existing=True)
-
-        radar_to_use = radar
-        field_to_use = "cappi"
-    elif product_upper == "COLMAX" and field_key.upper() == "DBZH":
-        radar_to_use = create_colmax(radar)
-        field_to_use = 'composite_reflectivity'
-    else:
-        raise ValueError(f"Producto inválido: {product_upper}")
+    # Preparar radar según producto (PPI/CAPPI/COLMAX)
+    field_name = fill_dbzh_if_needed(radar, field_name, product)
+    radar_to_use, field_to_use = prepare_radar_for_product(
+        radar, product, field_name, elevation, cappi_height
+    )
 
     # Generamos la imagen PNG para previsualización y referencia
     # png.create_png(
@@ -418,42 +433,28 @@ def process_radar_to_cog(
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
     range_max_m = safe_range_max_m(radar)
 
-    if product_upper == "CAPPI":
-        z_top_m = cappi_height + 2000  # +2 km de margen
-        elev_deg = None
-    else:
-        elev_deg = float(radar.fixed_angle['data'][elevation])
-        hmax_km = beam_height_max_km(range_max_m, elev_deg)
-        z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen
-    
-    z_grid_limits = (0.0, z_top_m)
+    # Calcular límites Z según producto
+    z_min, z_max, elev_deg = calculate_z_limits(
+        product, range_max_m, elevation, cappi_height, radar.fixed_angle['data']
+    )
+    z_grid_limits = (z_min, z_max)
     y_grid_limits = (-range_max_m, range_max_m)
     x_grid_limits = (-range_max_m, range_max_m)
 
     # Calculamos la cantidad de puntos en cada dimensión
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
-    grid_resolution_xy = 300 if volume == '03' else 1200
-    grid_resolution_z = 300  # Siempre usar 300m en Z para cross-sections de calidad
-    z_points = int(np.ceil(z_grid_limits[1] / grid_resolution_z)) + 1
-    y_points = int((y_grid_limits[1] - y_grid_limits[0]) / grid_resolution_xy)
-    x_points = int((x_grid_limits[1] - x_grid_limits[0]) / grid_resolution_xy)
+    grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
 
     interp = 'nearest'
 
-    # Separar filtros QC vs otros (todos se aplicarán post-grid como máscaras 2D)
+    # Separar filtros QC (RHOHV) vs otros (todos se aplicarán post-grid como máscaras 2D)
     # Ya no forzamos regridding por filtros: la grilla se genera UNA sola vez
-    qc_filters = []
-    visual_filters = []  # incluye los que actúan sobre el campo principal
-    for f in (filters or []):
-        ffield = str(getattr(f, "field", "") or "").upper()
-        if ffield in AFFECTS_INTERP_FIELDS:
-            qc_filters.append(f)
-        else:
-            visual_filters.append(f)
+    qc_filters, visual_filters = separate_filters(filters, field_to_use)
 
     # No usamos needs_regrid ni qc_sig (el cache ignora filtros para regridding)
 
     # Intentamos cachear la 2D colapsada
+    product_upper = product.upper()
     cache_key = grid2d_cache_key(
         file_hash=file_hash,
         product_upper=product_upper,
@@ -468,7 +469,7 @@ def process_radar_to_cog(
     pkg_cached = GRID2D_CACHE.get(cache_key)
 
     if pkg_cached is None:
-        # Construir o recuperar grilla 3D cacheada (compartida con build_3d_grid)
+        # Construir o recuperar grilla 3D cacheada
         grid = _get_or_build_grid3d(
             radar_to_use=radar_to_use,
             field_to_use=field_to_use,
@@ -482,7 +483,7 @@ def process_radar_to_cog(
             grid_resolution_z=grid_resolution_z,
         )
 
-        # Guardamos niveles z completos antes de colapsar el campo principal (lo usaremos para QC)
+        # Guardamos niveles z completos antes de colapsar el campo principal
         z_levels_full = grid.z['data'].copy()
 
         collapse_grid_to_2d(
@@ -496,7 +497,7 @@ def process_radar_to_cog(
         arr2d = grid.fields[field_to_use]['data'][0, :, :]
         arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
 
-        # Colapsar QC a 2D usando la versión no destructiva y los niveles originales
+        # Colapsar grilla campo QC (RHOHV) a 2D usando la versión no destructiva y los niveles originales
         # (refactor pendiente: esto podría hacerse dentro de collapse_grid_to_2d)
         qc_2d = {}
         # Obtener lista de campos QC que están en la grilla
@@ -506,7 +507,7 @@ def process_radar_to_cog(
             if qc_name not in grid.fields:
                 continue
             data3d_q = grid.fields[qc_name]['data']
-            # data3d_q puede seguir en 3D aunque ya colapsamos el principal (porque collapse_grid_to_2d sólo afecta ese campo)
+            # data3d_q puede seguir en 3D aunque ya colapsamos el principal (collapse_grid_to_2d sólo afecta ese campo)
             q2d = collapse_field_3d_to_2d(
                 data3d_q,
                 product=product.lower(),
@@ -547,51 +548,21 @@ def process_radar_to_cog(
         }
         GRID2D_CACHE[cache_key] = pkg_cached
 
-    # Si hay filtros “visuales” sobre el MISMO campo, aplicar máscara post-grid
+    # Si hay filtros "visuales" sobre el MISMO campo, aplicar máscara post-grid
     # Regla: cualquier filtro cuyo .field == field_to_use (mismo campo) lo aplicamos como máscara 2D
-    masked = np.ma.array(pkg_cached["arr"], copy=True)
-    dyn_mask = np.zeros(masked.shape, dtype=bool)
-
-    for f in (visual_filters or []):
-        ffield = getattr(f, "field", None)
-        if not ffield:
-            continue
-        if str(ffield).upper() == str(field_to_use).upper():
-            fmin = getattr(f, "min", None)
-            fmax = getattr(f, "max", None)
-            if fmin is not None:
-                if (fmin <= 0.3 and field_to_use == "RHOHV"):
-                    continue
-                else:
-                    dyn_mask |= (masked < float(fmin))
-            if fmax is not None:
-                dyn_mask |= (masked > float(fmax))
-
-    masked.mask = np.ma.getmaskarray(masked) | dyn_mask
+    masked = apply_visual_filters(pkg_cached["arr"], visual_filters, field_to_use)
 
     # Aplicar filtros QC post-grid (sin regridding)
     if qc_filters:
         qc_dict = pkg_cached.get("qc", {}) or {}
-        for f in qc_filters:
-            qf = str(getattr(f, "field", "") or "").upper()
-            q2d = qc_dict.get(qf)
-            if q2d is None:
-                continue
-            qmask = np.zeros(masked.shape, dtype=bool)
-            fmin = getattr(f, "min", None)
-            fmax = getattr(f, "max", None)
-            if fmin is not None:
-                qmask |= (q2d < float(fmin))
-            if fmax is not None:
-                qmask |= (q2d > float(fmax))
-            masked.mask = np.ma.getmaskarray(masked) | qmask
+        masked = apply_qc_filters(masked, qc_filters, qc_dict)
 
     # Crear path único para el GeoTIFF temporal (antes de convertir a Cloud Optimized GeoTIFF)
     os.makedirs(output_dir, exist_ok=True)
     unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
     tiff_path = Path(output_dir) / unique_tif_name
 
-    # Creamos un grid (ahora 2D) de "bolsillo” (sin reinterpolar)
+    # Creamos un grid (ahora 2D) de "bolsillo” (sin reinterpolar) (usando el arr2d)
     # Reusamos la malla x/y de la cache: como no guardamos grid anterior completo, derivamos dims del array
     # Armamos un grid pyart mínimo para write_grid_geotiff, escribiendo el 2D como nivel 0
     ny, nx = masked.shape
@@ -620,8 +591,10 @@ def process_radar_to_cog(
         warp_to_mercator=True
     )
     
-    # ACTUALIZAR CACHE: Si es la primera vez, guardar versión warped para stats
-    # (solo se hace una vez por cache_key, no en cada cambio de filtros)
+    # ACTUALIZAR CACHE: 
+    # Si es la primera vez que guardamos versión warped del array, la generamos ahora
+    # (solo se hace una vez por cache_key, luego se reutiliza en futuros procesos)
+    # Hacemos este paso para cachear el array warped en mercator y usarlo en stats futuros
     if pkg_cached.get("arr_warped") is None:
         temp_numeric_tif = Path(output_dir) / f"numeric_{uuid.uuid4().hex}.tif"
         pyart.io.write_grid_geotiff(

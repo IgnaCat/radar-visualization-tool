@@ -16,7 +16,7 @@ from ..core.config import settings
 from ..core.cache import GRID3D_CACHE
 
 from ..schemas import RangeFilter
-from ..services.radar_processor import beam_height_max_km
+from ..services.grid_geometry import beam_height_max_km
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
     safe_range_max_m, get_radar_site, md5_file, limit_line_to_range,
