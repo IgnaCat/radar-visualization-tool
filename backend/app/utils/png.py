@@ -37,9 +37,15 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
     if cmap_key == "grc_zdr2":
         cmap_key = "grc_zdr"
 
-    if field_used not in ["VRAD", "WRAD", "PHIDP"]:
+    # Determinar si es un cmap personalizado (grc_*) o uno de pyart/matplotlib
+    if cmap_key.startswith("grc_"):
+        # Colormap personalizado del módulo colores
         cmap = getattr(colores, f"get_cmap_{cmap_key}")()
-    else: # Usamos directamente cmap de pyart
+    elif cmap_key.startswith("pyart_"):
+        # Colormap de pyart (remover prefijo)
+        cmap = cmap_key.replace("pyart_", "")
+    else:
+        # Colormap estándar de matplotlib/pyart (NWSVel, Theodore16, etc)
         cmap = cmap_key
 
     # Enmascarar datos inválidos
