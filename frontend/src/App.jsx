@@ -222,7 +222,7 @@ export default function App() {
     const unregister = registerCleanupAxios(() => ({
       uploads: uploadedFiles,
       cogs: Array.from(allCogsRef.current),
-      delete_cache: false,
+      delete_cache: true,
     }));
     return unregister;
   }, [uploadedFiles, overlayData]);
