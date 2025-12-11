@@ -17,6 +17,11 @@ from ..services.radar_common import (
     filters_affect_interpolation,
     md5_file,
 )
+from ..services.filter_application import (
+    separate_filters,
+    apply_visual_filters,
+    apply_qc_filters,
+)
 
 router = APIRouter(prefix="/stats", tags=["radar-pixel"])
 
@@ -36,15 +41,14 @@ def get_cache_key_for_radar_stats(
     elevation: Optional[int] = 0,
     cappi_height: Optional[int] = 4000,
     volume: Optional[str] = None,
-    filters: Optional[list] = [],
 ) -> str:
-
+    """
+    Genera cache key sin incluir filtros (se aplican dinámicamente).
+    """
     product_upper = product.upper()
     field_to_use = field.upper()
 
-    interp = "nearest"  # método de interpolación (podría ser otro)
-    qc_sig = qc_signature(filters)
-    needs_regrid = filters_affect_interpolation(filters, field_to_use)
+    interp = "nearest"  # método de interpolación
 
     # clave del archivo (hash del contenido)
     file_hash = md5_file(filepath)[:12]
@@ -57,8 +61,10 @@ def get_cache_key_for_radar_stats(
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
         volume=volume,
         interp=interp,
-        qc_sig=qc_sig if needs_regrid else tuple()
+        qc_sig=tuple()  # Filtros se aplican dinámicamente, no en cache
     )
+    print(f"Cache key generada pixel: {cache_key}")
+    print(f"Campos: file_hash={file_hash}, product={product_upper}, field={field_to_use}, elevation={elevation}, cappi_height={cappi_height}, volume={volume}, interp={interp}")
 
     return cache_key
 
@@ -86,7 +92,6 @@ def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
         elevation=p.elevation,
         cappi_height=p.height,
         volume=volume,
-        filters=p.filters,
     )
 
     pkg = GRID2D_CACHE.get(cache_key)
@@ -96,11 +101,27 @@ def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     if not (-90 <= float(p.lat) <= 90 and -180 <= float(p.lon) <= 180):
         raise HTTPException(status_code=400, detail="Coordenadas no WGS84 (use lat∈[-90,90], lon∈[-180,180])")
     
+    # Separar filtros QC y visuales
+    field_to_use = field.upper()
+    qc_filters, visual_filters = separate_filters(p.filters or [], field_to_use)
+    
     # Usar versión warped si está disponible (optimizado para stats desde WGS84)
     arr = pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
     crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
     transform = pkg["transform_warped"] if pkg.get("transform_warped") is not None else pkg["transform"]
     crs = pyproj.CRS.from_wkt(crs_wkt)
+    
+    # Aplicar filtros dinámicamente (cache tiene array sin filtrar)
+    arr = apply_visual_filters(arr, visual_filters, field_to_use)
+    
+    # Aplicar filtros QC si existen en el cache
+    # Usar qc_warped si arr_warped está disponible para coincidir dimensiones
+    if qc_filters:
+        if pkg.get("arr_warped") is not None:
+            qc_dict = pkg.get("qc_warped", {}) or {}
+        else:
+            qc_dict = pkg.get("qc", {}) or {}
+        arr = apply_qc_filters(arr, qc_filters, qc_dict)
 
     # 4326 -> CRS del grid (siempre_xy=True porque pasamos (lon,lat))
     tf = Transformer.from_crs("EPSG:4326", crs, always_xy=True)
