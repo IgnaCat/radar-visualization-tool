@@ -223,7 +223,8 @@ def convert_to_cog(src_path, cog_path):
                     pass
             
             # Ahora agregar overviews al archivo tiled
-            with rasterio.open(temp_tiled, 'r+') as dst:
+            # También necesita IGNORE_COG_LAYOUT_BREAK porque el driver COG ya optimizó el archivo
+            with rasterio.open(temp_tiled, 'r+', IGNORE_COG_LAYOUT_BREAK='YES') as dst:
                 factors = [2, 4, 8, 16, 32]
                 dst.build_overviews(factors, Resampling.nearest)
                 dst.update_tags(ns='rio_overview', resampling='nearest')
@@ -557,8 +558,6 @@ def process_radar_to_cog(
             "transform_warped": None,
         }
         GRID2D_CACHE[cache_key] = pkg_cached
-        print(f"Cache 2D creada para key: {cache_key}")
-        print(f"Campos cache key: file_hash={file_hash}, product={product_upper}, field={field_to_use}, elevation={elevation}, cappi_height={cappi_height}, volume={volume}, interp={interp}, qc_sig=N/A")
 
     # Si hay filtros "visuales" sobre el MISMO campo, aplicar máscara post-grid
     # Regla: cualquier filtro cuyo .field == field_to_use (mismo campo) lo aplicamos como máscara 2D
