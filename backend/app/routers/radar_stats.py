@@ -15,6 +15,11 @@ from ..services.radar_common import (
     filters_affect_interpolation,
     md5_file,
 )
+from ..services.filter_application import (
+    separate_filters,
+    apply_visual_filters,
+    apply_qc_filters,
+)
 
 ALLOWED_GEOMS = {"Polygon", "MultiPolygon"}
 
@@ -48,7 +53,6 @@ async def radar_stats(payload: RadarStatsRequest):
         elevation=payload.elevation,
         cappi_height=payload.height,
         volume=volume,
-        filters=payload.filters,
     )
 
     try:
@@ -56,7 +60,9 @@ async def radar_stats(payload: RadarStatsRequest):
         stats_result = await run_in_threadpool(
             stats_from_cache,
             cache_key,
-            polygon_gj_4326
+            polygon_gj_4326,
+            payload.filters or [],
+            field
         )
     except Exception as e:
         print(e)
@@ -75,15 +81,14 @@ def get_cache_key_for_radar_stats(
     elevation: Optional[int] = 0,
     cappi_height: Optional[int] = 4000,
     volume: Optional[str] = None,
-    filters: Optional[list] = [],
 ) -> str:
-
+    """
+    Genera cache key sin incluir filtros (se aplican dinámicamente).
+    """
     product_upper = product.upper()
     field_to_use = field.upper()
 
-    interp = "nearest"  # método de interpolación (podría ser otro)
-    qc_sig = qc_signature(filters)
-    needs_regrid = filters_affect_interpolation(filters, field_to_use)
+    interp = "nearest"  # método de interpolación
 
     # clave del archivo (hash del contenido)
     file_hash = md5_file(filepath)[:12]
@@ -96,16 +101,17 @@ def get_cache_key_for_radar_stats(
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
         volume=volume,
         interp=interp,
-        qc_sig=qc_sig if needs_regrid else tuple()
+        qc_sig=tuple()  # Filtros se aplican dinámicamente, no en cache
     )
 
     return cache_key
 
 
-def stats_from_cache(cache_key: str, polygon_gj_4326: dict):
+def stats_from_cache(cache_key: str, polygon_gj_4326: dict, filters: List = [], field: str = ""):
     """
     Calcula estadísticas básicas (min, max, mean, etc.) dentro del polígono
     usando la grilla 2D cacheada en GRID2D_CACHE.
+    Aplica filtros dinámicamente sobre el array cacheado.
     """
     pkg = GRID2D_CACHE.get(cache_key)
     if pkg is None:
@@ -116,6 +122,21 @@ def stats_from_cache(cache_key: str, polygon_gj_4326: dict):
     crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
     transform = pkg["transform_warped"] if pkg.get("transform_warped") is not None else pkg["transform"]
     crs = pyproj.CRS.from_wkt(crs_wkt)
+    
+    # Aplicar filtros dinámicamente (cache tiene array sin filtrar)
+    field_to_use = field.upper()
+    qc_filters, visual_filters = separate_filters(filters, field_to_use)
+    
+    arr = apply_visual_filters(arr, visual_filters, field_to_use)
+    
+    # Aplicar filtros QC si existen en el cache
+    # Usar qc_warped si arr_warped está disponible para coincidir dimensiones
+    if qc_filters:
+        if pkg.get("arr_warped") is not None:
+            qc_dict = pkg.get("qc_warped", {}) or {}
+        else:
+            qc_dict = pkg.get("qc", {}) or {}
+        arr = apply_qc_filters(arr, qc_filters, qc_dict)
 
     # reproyectar polígono: 4326 → crs del grid
     geom4326 = _extract_geometry(polygon_gj_4326)

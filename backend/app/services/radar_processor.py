@@ -192,7 +192,8 @@ def convert_to_cog(src_path, cog_path):
         except:
             pass    
     try:
-        with rasterio.open(src_path) as src:
+        # Abrir con IGNORE_COG_LAYOUT_BREAK para permitir modificar archivos COG
+        with rasterio.open(src_path, IGNORE_COG_LAYOUT_BREAK='YES') as src:
             # Configurar perfil COG optimizado con tiles grandes
             # SIN compresión para máxima velocidad de lectura en tiles
             profile = src.profile.copy()
@@ -208,7 +209,7 @@ def convert_to_cog(src_path, cog_path):
             )
             
             # Escribir archivo intermedio tiled
-            temp_tiled = cog_path.parent / f"temp_{cog_path.name}"
+            temp_tiled = Path(cog_path.parent) / f"temp_{cog_path.name}"
             
             with rasterio.open(temp_tiled, 'w', **profile) as dst:
                 # Copiar todas las bandas
@@ -228,10 +229,19 @@ def convert_to_cog(src_path, cog_path):
                 dst.update_tags(ns='rio_overview', resampling='nearest')
             
             # Mover archivo temporal al destino final
+            # shutil.move elimina el temp_tiled automáticamente
             shutil.move(str(temp_tiled), str(cog_path))
             
     except Exception as e:
         print(f"Error generando COG optimizado: {e}")
+        
+        # Limpiar archivo temporal si quedó creado
+        try:
+            if temp_tiled.exists():
+                temp_tiled.unlink()
+        except:
+            pass
+        
         # Fallback: copiar el original
         if not cog_path.exists():
             shutil.copy2(src_path, cog_path)
@@ -547,6 +557,8 @@ def process_radar_to_cog(
             "transform_warped": None,
         }
         GRID2D_CACHE[cache_key] = pkg_cached
+        print(f"Cache 2D creada para key: {cache_key}")
+        print(f"Campos cache key: file_hash={file_hash}, product={product_upper}, field={field_to_use}, elevation={elevation}, cappi_height={cappi_height}, volume={volume}, interp={interp}, qc_sig=N/A")
 
     # Si hay filtros "visuales" sobre el MISMO campo, aplicar máscara post-grid
     # Regla: cualquier filtro cuyo .field == field_to_use (mismo campo) lo aplicamos como máscara 2D
@@ -616,13 +628,53 @@ def process_radar_to_cog(
             pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
             pkg_cached["transform_warped"] = transform_warped
             pkg_cached["crs_warped"] = crs_warped
-            GRID2D_CACHE[cache_key] = pkg_cached
         
         # Limpiar GeoTIFF numérico temporal
         try:
             temp_numeric_tif.unlink()
         except OSError:
             pass
+        
+        # Generar versiones warped de campos QC para que coincidan con arr_warped
+        qc_dict = pkg_cached.get("qc", {}) or {}
+        qc_warped = {}
+        
+        for qc_field_name, qc_arr2d in qc_dict.items():
+            # Crear grid temporal con este campo QC
+            grid_qc = pyart.core.Grid(
+                time={'data': np.array([0])},
+                fields={qc_field_name: {'data': qc_arr2d[np.newaxis, :, :], '_FillValue': -9999.0}},
+                metadata={'instrument_name': 'RADAR'},
+                origin_latitude={'data': radar_to_use.latitude['data']},
+                origin_longitude={'data': radar_to_use.longitude['data']},
+                origin_altitude={'data': radar_to_use.altitude['data']},
+                x={'data': grid_fake.x['data']},
+                y={'data': grid_fake.y['data']},
+                z={'data': np.array([0.0], dtype=np.float32)}
+            )
+            
+            temp_qc_tif = Path(output_dir) / f"qc_{qc_field_name}_{uuid.uuid4().hex}.tif"
+            pyart.io.write_grid_geotiff(
+                grid=grid_qc,
+                filename=str(temp_qc_tif),
+                field=qc_field_name,
+                level=0,
+                rgb=False,
+                warp_to_mercator=True
+            )
+            
+            # Leer versión warped
+            with rasterio.open(temp_qc_tif) as src_qc:
+                qc_warped[qc_field_name] = src_qc.read(1, masked=True).astype(np.float32)
+            
+            # Limpiar temporal
+            try:
+                temp_qc_tif.unlink()
+            except OSError:
+                pass
+        
+        pkg_cached["qc_warped"] = qc_warped
+        GRID2D_CACHE[cache_key] = pkg_cached
 
     # Convertir a COG (Cloud Optimized GeoTIFF)
     _ = convert_to_cog(tiff_path, cog_path)
