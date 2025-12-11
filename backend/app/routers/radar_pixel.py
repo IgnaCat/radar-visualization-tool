@@ -41,6 +41,7 @@ def get_cache_key_for_radar_stats(
     elevation: Optional[int] = 0,
     cappi_height: Optional[int] = 4000,
     volume: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """
     Genera cache key sin incluir filtros (se aplican dinámicamente).
@@ -61,7 +62,8 @@ def get_cache_key_for_radar_stats(
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
         volume=volume,
         interp=interp,
-        qc_sig=tuple()  # Filtros se aplican dinámicamente, no en cache
+        qc_sig=tuple(),  # Filtros se aplican dinámicamente, no en cache
+        session_id=session_id,
     )
     print(f"Cache key generada pixel: {cache_key}")
     print(f"Campos: file_hash={file_hash}, product={product_upper}, field={field_to_use}, elevation={elevation}, cappi_height={cappi_height}, volume={volume}, interp={interp}")
@@ -92,6 +94,7 @@ def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
         elevation=p.elevation,
         cappi_height=p.height,
         volume=volume,
+        session_id=p.session_id,
     )
 
     pkg = GRID2D_CACHE.get(cache_key)

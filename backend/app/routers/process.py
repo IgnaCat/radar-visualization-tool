@@ -145,7 +145,8 @@ async def process_file(payload: ProcessRequest):
                         elevation=elevation,
                         filters=filters,
                         volume=vol,
-                        colormap_overrides=payload.colormap_overrides
+                        colormap_overrides=payload.colormap_overrides,
+                        session_id=payload.session_id
                     )
                     future_to_meta[fut] = (f_rel, ts, idx, field, radar, vol)
 

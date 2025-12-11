@@ -58,11 +58,15 @@ def _get_or_build_grid3d(
     x_grid_limits: tuple,
     grid_resolution_xy: float,
     grid_resolution_z: float,
+    session_id: str | None = None,
 ) -> pyart.core.Grid:
     """
     Función interna para obtener o construir una grilla 3D cacheada.
+    
+    Args:
+        session_id: Identificador de sesión para aislar cache
     """
-    # Generar cache key
+    # Generar cache key con session_id
     qc_sig = qc_signature(qc_filters)
     cache_key = grid3d_cache_key(
         file_hash=file_hash,
@@ -72,6 +76,7 @@ def _get_or_build_grid3d(
         grid_res_xy=grid_resolution_xy,
         grid_res_z=grid_resolution_z,
         z_top_m=z_grid_limits[1],
+        session_id=session_id,  # Incluir session_id
     )
     
     # Verificar cache 3D
@@ -381,14 +386,22 @@ def process_radar_to_cog(
         filters=[], 
         output_dir="app/storage/tmp",
         volume=None,
-        colormap_overrides=None
+        colormap_overrides=None,
+        session_id=None
     ):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
     Si ya existe un COG generado para este archivo, devuelve directamente la info.
-    colormap_overrides: dict opcional {field: cmap_key} para personalizar paletas
+    
+    Args:
+        colormap_overrides: dict opcional {field: cmap_key} para personalizar paletas
+        session_id: Identificador de sesión para aislar archivos y cache
     """
+    # Crear subdirectorio por sesión si se provee session_id
+    if session_id:
+        output_dir = str(Path(output_dir) / session_id)
+        os.makedirs(output_dir, exist_ok=True)
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]
@@ -475,6 +488,7 @@ def process_radar_to_cog(
         volume=volume,
         interp=interp,
         qc_sig=tuple(),  # no dependemos de filtros para cache
+        session_id=session_id,
     )
 
     pkg_cached = GRID2D_CACHE.get(cache_key)
@@ -492,6 +506,7 @@ def process_radar_to_cog(
             x_grid_limits=x_grid_limits,
             grid_resolution_xy=grid_resolution_xy,
             grid_resolution_z=grid_resolution_z,
+            session_id=session_id,
         )
 
         # Guardamos niveles z completos antes de colapsar el campo principal

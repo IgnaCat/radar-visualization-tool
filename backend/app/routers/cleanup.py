@@ -116,23 +116,25 @@ def cleanup_close(req: CleanupRequest):
 
     # Borrar COGs relacionados con los uploads eliminados (por file_hash matching)
     if req.delete_cache and file_hashes:
-        deleted["cogs"] = _delete_related_cogs(file_hashes)
+        deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=req.session_id)
 
     # Limpiar entradas de cache en memoria relacionadas con archivos borrados
     if file_hashes:
-        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes)
+        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
 
     return {"deleted": deleted}
 
 
-def _delete_related_cogs(file_hashes: set[str]) -> int:
+def _delete_related_cogs(file_hashes: set[str], session_id: str | None = None) -> int:
     """
     Borra todos los COGs en /tmp que contengan alguno de los file_hashes en su nombre.
+    Si session_id está presente, busca solo en el subdirectorio de sesión.
     
     Los COGs se nombran como: radar_FIELD_product_FIELD_vmin_vmax_elevation_HASH.tif
     
     Args:
         file_hashes: Set de hashes de archivos (12 caracteres)
+        session_id: ID de sesión (opcional) para limpieza scoped
     
     Returns:
         Número de COGs eliminados
@@ -140,11 +142,23 @@ def _delete_related_cogs(file_hashes: set[str]) -> int:
     count = 0
     
     try:
-        # Listar todos los archivos en TMP_DIR
-        if not TMP_DIR.exists():
-            return 0
+        # Si hay session_id, buscar en subdirectorio de sesión
+        if session_id:
+            search_dir = TMP_DIR / session_id
+        else:
+            search_dir = TMP_DIR
             
-        for file_path in TMP_DIR.iterdir():
+        if not search_dir.exists():
+            return 0
+        
+        # Buscar recursivamente si no hay session_id (legacy)
+        if session_id:
+            files_to_check = list(search_dir.iterdir())
+        else:
+            # Buscar en TMP_DIR y todos los subdirectorios (legacy + session dirs)
+            files_to_check = list(search_dir.rglob('*'))
+            
+        for file_path in files_to_check:
             if not file_path.is_file():
                 continue
             
@@ -163,17 +177,19 @@ def _delete_related_cogs(file_hashes: set[str]) -> int:
         print(f"Error limpiando COGs: {e}")
     
     if count > 0:
-        print(f"Eliminados {count} COG(s) relacionados con {len(file_hashes)} archivo(s)")
+        print(f"Eliminados {count} COG(s) relacionados con {len(file_hashes)} archivo(s) {'en sesión ' + session_id if session_id else ''}")
     
     return count
 
 
-def _cleanup_cache_entries(file_hashes: set[str]) -> int:
+def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None) -> int:
     """
     Limpia entradas de GRID2D_CACHE y GRID3D_CACHE relacionadas con archivos específicos.
+    Si session_id está presente, solo elimina entradas que coincidan con esa sesión.
     
     Args:
         file_hashes: Set de hashes de archivos (12 caracteres)
+        session_id: ID de sesión (opcional) para limpieza scoped
     
     Returns:
         Número de entradas de cache eliminadas
@@ -181,14 +197,23 @@ def _cleanup_cache_entries(file_hashes: set[str]) -> int:
     count = 0
     
     # Limpiar GRID2D_CACHE
-    # Cache keys tienen formato: (file_hash, product, field, ...)
+    # Cache keys v2 tienen formato: (file_hash, product, field, ..., session_id)
+    # session_id está en la última posición de la tupla
     keys_to_delete = []
     for cache_key in list(GRID2D_CACHE.keys()):
         # cache_key es una tupla, el primer elemento es file_hash
         if isinstance(cache_key, tuple) and len(cache_key) > 0:
             key_file_hash = cache_key[0]
-            if key_file_hash in file_hashes:
-                keys_to_delete.append(cache_key)
+            # Si session_id está presente, verificar que coincida
+            if session_id:
+                # Última posición debería ser session_id en cache v2
+                key_session_id = cache_key[-1] if len(cache_key) > 1 else None
+                if key_file_hash in file_hashes and key_session_id == session_id:
+                    keys_to_delete.append(cache_key)
+            else:
+                # Legacy: borrar todas las entradas con ese file_hash
+                if key_file_hash in file_hashes:
+                    keys_to_delete.append(cache_key)
     
     for key in keys_to_delete:
         try:
@@ -202,8 +227,14 @@ def _cleanup_cache_entries(file_hashes: set[str]) -> int:
     for cache_key in list(GRID3D_CACHE.keys()):
         if isinstance(cache_key, tuple) and len(cache_key) > 0:
             key_file_hash = cache_key[0]
-            if key_file_hash in file_hashes:
-                keys_to_delete_3d.append(cache_key)
+            # Misma lógica de session matching
+            if session_id:
+                key_session_id = cache_key[-1] if len(cache_key) > 1 else None
+                if key_file_hash in file_hashes and key_session_id == session_id:
+                    keys_to_delete_3d.append(cache_key)
+            else:
+                if key_file_hash in file_hashes:
+                    keys_to_delete_3d.append(cache_key)
     
     for key in keys_to_delete_3d:
         try:

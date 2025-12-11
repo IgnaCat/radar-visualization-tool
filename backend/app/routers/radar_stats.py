@@ -53,6 +53,7 @@ async def radar_stats(payload: RadarStatsRequest):
         elevation=payload.elevation,
         cappi_height=payload.height,
         volume=volume,
+        session_id=payload.session_id,
     )
 
     try:
@@ -81,6 +82,7 @@ def get_cache_key_for_radar_stats(
     elevation: Optional[int] = 0,
     cappi_height: Optional[int] = 4000,
     volume: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> str:
     """
     Genera cache key sin incluir filtros (se aplican dinámicamente).
@@ -101,7 +103,8 @@ def get_cache_key_for_radar_stats(
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
         volume=volume,
         interp=interp,
-        qc_sig=tuple()  # Filtros se aplican dinámicamente, no en cache
+        qc_sig=tuple(),  # Filtros se aplican dinámicamente, no en cache
+        session_id=session_id,
     )
 
     return cache_key

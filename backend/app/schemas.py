@@ -29,6 +29,10 @@ class ProcessRequest(BaseModel):
         default=None, 
         description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Identificador único de sesión para aislar archivos y cache"
+    )
 
 class LayerResult(BaseModel):
     image_url: str    # si radar_processor devuelve PNG/Geotiff/URL
@@ -69,6 +73,10 @@ class CleanupRequest(BaseModel):
     uploads: list[str] = []
     cogs: list[str] = []
     delete_cache: bool = False
+    session_id: Optional[str] = Field(
+        default=None,
+        description="ID de sesión para cleanup selectivo"
+    )
 
 
 class PseudoRHIRequest(BaseModel):
@@ -91,6 +99,10 @@ class PseudoRHIRequest(BaseModel):
         default=None, 
         description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
     )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Identificador único de sesión"
+    )
 
 class PseudoRHIResponse(BaseModel):
     image_url: str
@@ -112,6 +124,10 @@ class RadarStatsRequest(BaseModel):
         description="Ángulo de elevación en grados (0-12). Default 0"
     )
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Identificador único de sesión"
+    )
     colormap_overrides: Optional[Dict[str, str]] = Field(
         default=None, 
         description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
@@ -152,6 +168,10 @@ class RadarPixelRequest(BaseModel):
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
     lat: float                   # click del usuario (EPSG:4326)
     lon: float
+    session_id: Optional[str] = Field(
+        default=None,
+        description="Identificador único de sesión"
+    )
 
 class RadarPixelResponse(BaseModel):
     value: Optional[float] = None
