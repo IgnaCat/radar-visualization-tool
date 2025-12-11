@@ -90,6 +90,7 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 start_lon=start_lon,
                 start_lat=start_lat,
                 colormap_overrides=payload.colormap_overrides,
+                session_id=payload.session_id,
             )
             result_dict["timestamp"] = timestamp
             processed.append(PseudoRHIResponse(**result_dict))

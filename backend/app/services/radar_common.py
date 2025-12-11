@@ -223,9 +223,15 @@ def qc_signature(filters):
 
 def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
                      elevation, cappi_height, volume,
-                     interp, qc_sig) -> str:
+                     interp, qc_sig, session_id=None) -> str:
+    """
+    Genera cache key para grilla 2D con soporte para aislamiento por sesión.
+    
+    Args:
+        session_id: Identificador único de sesión (None = compartido globalmente)
+    """
     payload = {
-        "v": 1,  # versión del formato de clave
+        "v": 2,  # versión del formato de clave (incrementada para session support)
         "file": file_hash,
         "prod": product_upper,
         "field": str(field_to_use).upper(),
@@ -234,15 +240,22 @@ def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
         "vol": str(volume) if volume is not None else None,
         "interp": str(interp),
         "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple)) else qc_sig,
+        "sess": str(session_id) if session_id else None,  # Aislar por sesión
     }
     return "g2d_" + _hash_of(payload)
 
 
 def grid3d_cache_key(*, file_hash: str, field_to_use: str,
                      volume: str | None, qc_sig, grid_res_xy: float,
-                     grid_res_z: float, z_top_m: float) -> str:
+                     grid_res_z: float, z_top_m: float, session_id=None) -> str:
+    """
+    Genera cache key para grilla 3D con soporte para aislamiento por sesión.
+    
+    Args:
+        session_id: Identificador único de sesión (None = compartido globalmente)
+    """
     payload = {
-        "v": 1,
+        "v": 2,  # versión incrementada para session support
         "file": file_hash,
         "field": str(field_to_use).upper(),
         "vol": str(volume) if volume is not None else None,
@@ -250,6 +263,7 @@ def grid3d_cache_key(*, file_hash: str, field_to_use: str,
         "gxy": float(grid_res_xy),
         "gz": float(grid_res_z),
         "ztop": float(z_top_m),
+        "sess": str(session_id) if session_id else None,  # Aislar por sesión
     }
     return "g3d_" + _hash_of(payload)
 

@@ -231,6 +231,7 @@ def generate_pseudo_rhi_png(
     start_lon: Optional[float] = None,
     start_lat: Optional[float] = None,
     colormap_overrides: Optional[dict] = None,
+    session_id: Optional[str] = None,
 ):
     
     file_hash = md5_file(filepath)[:12]
@@ -432,6 +433,7 @@ def _generate_segment_transect_png(
         grid_res_xy=grid_resolution_xy,
         grid_res_z=grid_resolution_z,
         z_top_m=z_top_m,
+        session_id=session_id,
     )
     
     # Buscar en cache
