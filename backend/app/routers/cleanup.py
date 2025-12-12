@@ -121,6 +121,21 @@ def cleanup_close(req: CleanupRequest):
     # Limpiar entradas de cache en memoria relacionadas con archivos borrados
     if file_hashes:
         deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
+    
+    # Si hay session_id, verificar si la carpeta de uploads quedó vacía después de borrar archivos
+    if req.session_id and deleted["uploads"] > 0:
+        try:
+            upload_session_dir = UPLOAD_DIR / req.session_id
+            if upload_session_dir.exists() and upload_session_dir.is_dir():
+                if not any(upload_session_dir.iterdir()):
+                    upload_session_dir.rmdir()
+                    print(f"Eliminada carpeta vacía de sesión en UPLOADS: {req.session_id}")
+        except Exception as e:
+            print(f"Error al verificar carpeta de sesión en UPLOADS: {e}")
+    
+    # Limpiar carpetas vacías de sesión en TMP (ya se hace en _delete_related_cogs)
+    if req.session_id:
+        _cleanup_empty_session_dirs(req.session_id)
 
     return {"deleted": deleted}
 
@@ -175,6 +190,18 @@ def _delete_related_cogs(file_hashes: set[str], session_id: str | None = None) -
                         
     except Exception as e:
         print(f"Error limpiando COGs: {e}")
+    
+    # Si hay session_id y se borraron archivos, verificar si la carpeta quedó vacía
+    if session_id and count > 0:
+        try:
+            session_dir = TMP_DIR / session_id
+            if session_dir.exists() and session_dir.is_dir():
+                # Si no tiene archivos, eliminar la carpeta
+                if not any(session_dir.iterdir()):
+                    session_dir.rmdir()
+                    print(f"Eliminada carpeta vacía de sesión en TMP: {session_id}")
+        except Exception as e:
+            print(f"Error al verificar carpeta de sesión en TMP: {e}")
     
     if count > 0:
         print(f"Eliminados {count} COG(s) relacionados con {len(file_hashes)} archivo(s) {'en sesión ' + session_id if session_id else ''}")
@@ -247,3 +274,28 @@ def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None)
         print(f"Limpiadas {count} entradas de cache relacionadas con {len(file_hashes)} hash(es)")
     
     return count
+
+
+def _cleanup_empty_session_dirs(session_id: str) -> None:
+    """
+    Elimina carpetas de sesión si están vacías en UPLOAD_DIR y TMP_DIR.
+    
+    Args:
+        session_id: ID de sesión a limpiar
+    """
+    dirs_to_check = [
+        UPLOAD_DIR / session_id,
+        TMP_DIR / session_id,
+    ]
+    
+    for session_dir in dirs_to_check:
+        try:
+            if not session_dir.exists():
+                continue
+            
+            # Verificar si está vacía (no tiene archivos ni subdirectorios)
+            if session_dir.is_dir() and not any(session_dir.iterdir()):
+                session_dir.rmdir()
+                print(f"Eliminada carpeta vacía de sesión: {session_dir}")
+        except Exception as e:
+            print(f"Error limpiando carpeta de sesión {session_dir}: {e}")
