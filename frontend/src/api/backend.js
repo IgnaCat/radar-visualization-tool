@@ -4,9 +4,12 @@ const api = axios.create({
   baseURL: "http://localhost:8000",
 });
 
-export const uploadFile = async (files) => {
+export const uploadFile = async (files, session_id = null) => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
+  if (session_id) {
+    formData.append("session_id", session_id);
+  }
   return api.post("/upload", formData);
 };
 
@@ -20,6 +23,7 @@ export const processFile = async ({
   selectedVolumes,
   selectedRadars,
   colormap_overrides,
+  session_id,
 }) => {
   const payload = {
     filepaths: files,
@@ -33,13 +37,14 @@ export const processFile = async ({
     ...(selectedVolumes && { selectedVolumes }),
     ...(selectedRadars && { selectedRadars }),
     ...(colormap_overrides && { colormap_overrides }),
+    ...(session_id && { session_id }),
   };
 
   return api.post("/process", payload);
 };
 
 export function cleanupClose(payload) {
-  // payload: { uploads: string[], cogs: string[], delete_cache: boolean }
+  // payload: { uploads: string[], cogs: string[], delete_cache: boolean, session_id?: string }
   return api.post("/cleanup/close", payload, {
     headers: { "Content-Type": "application/json" },
   });
@@ -59,6 +64,7 @@ export async function generatePseudoRHI({
   png_width_px = 900,
   png_height_px = 500,
   colormap_overrides,
+  session_id,
 }) {
   return api.post("/process/pseudo_rhi", {
     filepaths: [filepath],
@@ -67,9 +73,9 @@ export async function generatePseudoRHI({
     end_lat,
     ...(start_lon != null &&
       start_lat != null && {
-      start_lon,
-      start_lat,
-    }),
+        start_lon,
+        start_lat,
+      }),
     max_length_km: max_length_km,
     max_height_km: max_height_km,
     elevation,
@@ -77,12 +83,21 @@ export async function generatePseudoRHI({
     png_width_px,
     png_height_px,
     ...(colormap_overrides && { colormap_overrides }),
+    ...(session_id && { session_id }),
   });
 }
 
 export async function generateAreaStats(payload) {
-  const { polygon, filepath, product, field, height, elevation, filters } =
-    payload;
+  const {
+    polygon,
+    filepath,
+    product,
+    field,
+    height,
+    elevation,
+    filters,
+    session_id,
+  } = payload;
 
   return api.post("/stats/area", {
     polygon_geojson: polygon,
@@ -94,12 +109,22 @@ export async function generateAreaStats(payload) {
     ...(elevation !== undefined &&
       elevation !== null && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
+    ...(session_id && { session_id }),
   });
 }
 
 export async function generatePixelStat(payload) {
-  const { filepath, product, field, height, elevation, filters, lat, lon } =
-    payload;
+  const {
+    filepath,
+    product,
+    field,
+    height,
+    elevation,
+    filters,
+    lat,
+    lon,
+    session_id,
+  } = payload;
 
   return api.post("/stats/pixel", {
     filepath,
@@ -112,6 +137,7 @@ export async function generatePixelStat(payload) {
     ...(filters && { filters }),
     lat,
     lon,
+    ...(session_id && { session_id }),
   });
 }
 
