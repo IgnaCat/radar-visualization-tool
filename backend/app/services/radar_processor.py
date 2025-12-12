@@ -293,7 +293,8 @@ def _build_output_summary(
     unique_cog_name: str,
     field_requested: str,
     filepath: str,
-    cog_path: Path
+    cog_path: Path,
+    session_id: str | None = None
 ) -> dict:
     """
     Construye el diccionario de resumen para la respuesta API.
@@ -303,15 +304,17 @@ def _build_output_summary(
         field_requested: Campo procesado
         filepath: Path del archivo radar original
         cog_path: Path completo al archivo COG
+        session_id: Identificador de sesión para aislar archivos
     
     Returns:
         Dict con image_url, field, source_file, tilejson_url
     """
     file_uri = cog_path.resolve().as_posix()
     style = "&resampling=nearest&warp_resampling=nearest"
+    relative_url = f"static/tmp/{session_id}/{unique_cog_name}" if session_id else f"static/tmp/{unique_cog_name}"
     
     return {
-        "image_url": f"static/tmp/{unique_cog_name}",
+        "image_url": relative_url,
         "field": field_requested,
         "source_file": filepath,
         "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
@@ -412,7 +415,7 @@ def process_radar_to_cog(
     cog_path = Path(output_dir) / unique_cog_name
 
     # Generamos el resumen de salida
-    summary = _build_output_summary(unique_cog_name, field_requested, filepath, cog_path)
+    summary = _build_output_summary(unique_cog_name, field_requested, filepath, cog_path, session_id=session_id)
 
     # Si ya existe el COG, devolvemos directo
     if cog_path.exists():

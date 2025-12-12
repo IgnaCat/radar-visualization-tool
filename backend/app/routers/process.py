@@ -61,7 +61,11 @@ async def process_file(payload: ProcessRequest):
             detail="Debe proporcionar una lista de 'filepaths'"
         )   
         
-    UPLOAD_DIR = settings.UPLOAD_DIR
+    # Determinar directorio de uploads según session_id
+    UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+    if payload.session_id:
+        UPLOAD_DIR = UPLOAD_DIR / payload.session_id
+    UPLOAD_DIR = str(UPLOAD_DIR)
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     filtered_filepaths = []
 

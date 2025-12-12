@@ -234,6 +234,11 @@ def generate_pseudo_rhi_png(
     session_id: Optional[str] = None,
 ):
     
+    # Crear subdirectorio de sesión si se proporciona session_id
+    if session_id:
+        output_dir = str(Path(output_dir) / session_id)
+    os.makedirs(output_dir, exist_ok=True)
+    
     file_hash = md5_file(filepath)[:12]
     filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
     points = (
@@ -244,8 +249,11 @@ def generate_pseudo_rhi_png(
     unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
+    # Construir URL relativa incluyendo session_id si existe
+    relative_url = f"static/tmp/{session_id}/{unique_out_name}" if session_id else f"static/tmp/{unique_out_name}"
+
     if out_path.exists():
-        return {"image_url": f"{settings.BASE_URL}/static/tmp/{unique_out_name}", "metadata": None}
+        return {"image_url": f"{settings.BASE_URL}/{relative_url}", "metadata": None}
 
     os.makedirs(output_dir, exist_ok=True)
     radar = pyart.io.read(filepath)
@@ -303,6 +311,7 @@ def generate_pseudo_rhi_png(
                 output_path=out_path,
                 filters=filters,
                 max_height_km=max_height_km,
+                session_id=session_id,
             )
         else:
             # Caso clásico: pseudo-RHI radial desde el radar
@@ -339,7 +348,7 @@ def generate_pseudo_rhi_png(
 
 
     return {
-        "image_url": f"{settings.BASE_URL}/static/tmp/{unique_out_name}",
+        "image_url": f"{settings.BASE_URL}/{relative_url}",
         "metadata": {
             "radar_site": {"lon": site_lon, "lat": site_lat, "alt_m": site_alt},
             "field": field.upper(),
@@ -372,6 +381,7 @@ def _generate_segment_transect_png(
     output_path: Path,
     filters: List[RangeFilter] = [],
     max_height_km: Optional[float] = None,
+    session_id: Optional[str] = None,
 ):
     """
     Genera transecto vertical entre dos puntos usando GridMapDisplay.plot_cross_section

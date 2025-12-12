@@ -50,11 +50,14 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
             detail="El ángulo de elevación debe estar entre 0 y 12."
         )
     
-    UPLOAD_DIR = settings.UPLOAD_DIR
+    # Determinar directorio de uploads según session_id
+    UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+    if payload.session_id:
+        UPLOAD_DIR = UPLOAD_DIR / payload.session_id
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
     for file in filepaths:
-        filepath = os.path.join(UPLOAD_DIR, file)
+        filepath = UPLOAD_DIR / file
         if not Path(filepath).exists():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -69,7 +72,7 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
         processed: List[PseudoRHIResponse] = []
 
         for file in filepaths:
-            filepath = Path(UPLOAD_DIR) / file
+            filepath = UPLOAD_DIR / file
 
             # Extraer metadata del nombre del archivo
             _, _, _, timestamp = await run_in_threadpool(

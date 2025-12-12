@@ -1,6 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, status
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Form
 from pathlib import Path
 from werkzeug.utils import secure_filename
+from typing import Optional
 import os
 
 from ..core.config import settings
@@ -20,16 +21,20 @@ def _max_size_ok(size_bytes: int) -> bool:
 
 
 @router.post("", status_code=201)
-async def upload(files: list[UploadFile] = File(...)):
+async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] = Form(None)):
     """
     Endpoint para subir múltiples archivos NetCDF.
+    Si session_id está presente, los archivos se guardan en uploads/{session_id}/
     Si un archivo ya existe, no se sobrescribe pero se devuelve en la respuesta con warning.
     Devuelve paths + metadata del radar and warnings.
     """
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
     
-    UPLOAD_DIR = settings.UPLOAD_DIR
+    # Crear subdirectorio de sesión si se proporciona session_id
+    UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+    if session_id:
+        UPLOAD_DIR = UPLOAD_DIR / session_id
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
     warnings: list[str] = []
@@ -48,7 +53,7 @@ async def upload(files: list[UploadFile] = File(...)):
                 )
 
             unique_name = secure_filename(file.filename)
-            target = Path(UPLOAD_DIR) / unique_name
+            target = UPLOAD_DIR / unique_name
 
             if target.exists():
                 warnings.append(f"El archivo '{file.filename}' ya existe")
