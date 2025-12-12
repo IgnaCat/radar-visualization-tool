@@ -13,6 +13,8 @@ import stableStringify from "json-stable-stringify";
 import { useMapActions } from "./hooks/useMapActions";
 import { useDownloads } from "./hooks/useDownloads";
 import "./print.css";
+
+import { generateSessionId } from "./utils/session";
 import MapView from "./components/MapView";
 import ActiveLayerPicker from "./components/ActiveLayerPicker";
 import UploadButton from "./components/UploadButton";
@@ -157,6 +159,10 @@ export default function App() {
   });
 
   const { enqueueSnackbar } = useSnackbar();
+
+  // Session ID único para esta pestaña/ventana del navegador
+  const [sessionId] = useState(() => generateSessionId());
+
   const [pixelStatMode, setPixelStatMode] = useState(false);
   const [pixelStatMarker, setPixelStatMarker] = useState(null);
   const [rhiOpen, setRhiOpen] = useState(false);
@@ -223,9 +229,10 @@ export default function App() {
       uploads: uploadedFiles,
       cogs: Array.from(allCogsRef.current),
       delete_cache: true,
+      session_id: sessionId,
     }));
     return unregister;
-  }, [uploadedFiles, overlayData]);
+  }, [uploadedFiles, overlayData, sessionId]);
 
   // Seteamos currentOverlay
   // Si la respuesta tiene results (multi-radar), combinamos los frames por timestamp
@@ -390,7 +397,7 @@ export default function App() {
   const handleFilesSelected = async (files) => {
     try {
       setLoading(true);
-      const uploadResp = await uploadFile(files);
+      const uploadResp = await uploadFile(files, sessionId);
       const warnings = uploadResp.data.warnings || [];
       const filesInfo = uploadResp.data.files || [];
       const filepaths = filesInfo.map((f) => f.filepath);
@@ -503,6 +510,7 @@ export default function App() {
         selectedVolumes,
         selectedRadars,
         colormap_overrides: selectedColormaps,
+        session_id: sessionId,
       });
       if (
         !processResp.data ||
@@ -592,6 +600,7 @@ export default function App() {
       max_length_km,
       max_height_km,
       colormap_overrides: selectedColormaps,
+      session_id: sessionId,
     });
     // devolvemos lo que el dialog espera
     return resp.data;
@@ -622,7 +631,7 @@ export default function App() {
 
   const handleAreaStatsRequest = async (payload) => {
     // backend espera: filepath, field, product, elevation?, height?, filters?, polygon
-    const r = await generateAreaStats(payload);
+    const r = await generateAreaStats({ ...payload, session_id: sessionId });
     return r.data;
   };
 
@@ -676,7 +685,7 @@ export default function App() {
     }));
 
     // Extraer el orden de los campos
-    const fieldOrder = updatedLayers.map(l => l.field);
+    const fieldOrder = updatedLayers.map((l) => l.field);
     const uniqueFields = [...new Set(fieldOrder)];
 
     // Actualizar savedLayers para sincronizar con ProductSelectorDialog
@@ -684,16 +693,20 @@ export default function App() {
     const reorderedSavedLayers = [];
 
     // Primero agregar los campos activos en el nuevo orden
-    uniqueFields.forEach(field => {
-      const existingLayer = savedLayers.find(l => l.field === field || l.label === field);
+    uniqueFields.forEach((field) => {
+      const existingLayer = savedLayers.find(
+        (l) => l.field === field || l.label === field
+      );
       if (existingLayer) {
         reorderedSavedLayers.push(existingLayer);
       }
     });
 
     // Luego agregar los campos deshabilitados que no están en el nuevo orden
-    savedLayers.forEach(layer => {
-      const isInNewOrder = uniqueFields.includes(layer.field) || uniqueFields.includes(layer.label);
+    savedLayers.forEach((layer) => {
+      const isInNewOrder =
+        uniqueFields.includes(layer.field) ||
+        uniqueFields.includes(layer.label);
       if (!isInNewOrder) {
         reorderedSavedLayers.push(layer);
       }
@@ -718,11 +731,11 @@ export default function App() {
 
       // Reordenar las capas de este frame según el nuevo orden
       const reordered = [...frame].sort((a, b) => {
-        const aIdx = updatedLayers.findIndex(l =>
-          l.field === a.field && l.source_file === a.source_file
+        const aIdx = updatedLayers.findIndex(
+          (l) => l.field === a.field && l.source_file === a.source_file
         );
-        const bIdx = updatedLayers.findIndex(l =>
-          l.field === b.field && l.source_file === b.source_file
+        const bIdx = updatedLayers.findIndex(
+          (l) => l.field === b.field && l.source_file === b.source_file
         );
 
         // Si no se encuentra, mantener al final
@@ -802,6 +815,7 @@ export default function App() {
         filters: filtersUsed,
         lat: latlng.lat,
         lon: latlng.lng,
+        session_id: sessionId,
       };
       const resp = await generatePixelStat(payload);
       const v = resp.data?.value.toFixed(2);
@@ -844,9 +858,9 @@ export default function App() {
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-            ]
+                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+              ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
