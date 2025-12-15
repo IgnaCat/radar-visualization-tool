@@ -20,8 +20,8 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import DownloadIcon from "@mui/icons-material/Download";
 import Draggable from "react-draggable";
-import RadarFilterControls from "./RadarFilterControls";
-import { useDownloads } from "../hooks/useDownloads";
+import RadarFilterControls from "../controls/RadarFilterControls";
+import { useDownloads } from "../../hooks/useDownloads";
 import { useSnackbar } from "notistack";
 
 const FIELD_OPTIONS = ["DBZH", "KDP", "RHOHV", "ZDR"];
@@ -53,7 +53,9 @@ export default function PseudoRHIDialog({
   onAutoClose,
   onAutoReopen,
 }) {
-  const [selectedFields, setSelectedFields] = useState([fields_present[0] || "DBZH"]);
+  const [selectedFields, setSelectedFields] = useState([
+    fields_present[0] || "DBZH",
+  ]);
   const [startLat, setStartLat] = useState("");
   const [startLon, setStartLon] = useState("");
   const [endLat, setEndLat] = useState("");
@@ -220,14 +222,17 @@ export default function PseudoRHIDialog({
           }
         } catch (fieldError) {
           console.error(`Error generando RHI para campo ${field}:`, fieldError);
-          results.push({ field, error: fieldError?.response?.data?.detail || String(fieldError) });
+          results.push({
+            field,
+            error: fieldError?.response?.data?.detail || String(fieldError),
+          });
         }
       }
 
       setResultImgs(results);
 
       // Si todos los campos fallaron, mostrar error
-      if (results.length > 0 && results.every(r => r.error)) {
+      if (results.length > 0 && results.every((r) => r.error)) {
         setError("Error generando todos los cortes");
       }
     } catch (e) {
@@ -297,12 +302,7 @@ export default function PseudoRHIDialog({
                 value.map((option, index) => {
                   const { key, ...tagProps } = getTagProps({ index });
                   return (
-                    <Chip
-                      key={key}
-                      label={option}
-                      size="small"
-                      {...tagProps}
-                    />
+                    <Chip key={key} label={option} size="small" {...tagProps} />
                   );
                 })
               }
@@ -383,7 +383,8 @@ export default function PseudoRHIDialog({
               {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
             </IconButton>
             <Typography variant="subtitle2" sx={{ userSelect: "none" }}>
-              Filtros {selectedFields.length > 1 && "(se aplican a todos los campos)"}
+              Filtros{" "}
+              {selectedFields.length > 1 && "(se aplican a todos los campos)"}
             </Typography>
           </Box>
           <Collapse in={showFilters} timeout="auto" unmountOnExit>
@@ -444,7 +445,9 @@ export default function PseudoRHIDialog({
                       <Button
                         size="small"
                         startIcon={<DownloadIcon />}
-                        onClick={() => handleDownloadRHI(result.image_url, result.field)}
+                        onClick={() =>
+                          handleDownloadRHI(result.image_url, result.field)
+                        }
                         variant="outlined"
                       >
                         Descargar

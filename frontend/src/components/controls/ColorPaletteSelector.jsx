@@ -15,7 +15,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import CheckIcon from "@mui/icons-material/Check";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import { getColormapOptions, getColormapDefaults } from "../api/backend";
+import { getColormapOptions, getColormapDefaults } from "../../api/backend";
 
 export default function ColorPaletteSelector({
   open,
@@ -36,7 +36,9 @@ export default function ColorPaletteSelector({
     if (!initialColormaps || Object.keys(initialColormaps).length === 0) {
       return Object.keys(selectedColormaps).length > 0;
     }
-    return JSON.stringify(selectedColormaps) !== JSON.stringify(initialColormaps);
+    return (
+      JSON.stringify(selectedColormaps) !== JSON.stringify(initialColormaps)
+    );
   };
 
   const handleApply = () => {
@@ -88,9 +90,10 @@ export default function ColorPaletteSelector({
   }
 
   // Filtrar solo los campos disponibles
-  const fieldsToShow = availableFields?.length > 0
-    ? availableFields.filter(field => colormapOptions[field])
-    : Object.keys(colormapOptions);
+  const fieldsToShow =
+    availableFields?.length > 0
+      ? availableFields.filter((field) => colormapOptions[field])
+      : Object.keys(colormapOptions);
 
   return (
     <Collapse
@@ -187,7 +190,8 @@ export default function ColorPaletteSelector({
         ) : (
           fieldsToShow.map((field) => {
             const options = colormapOptions[field] || [];
-            const currentSelection = selectedColormaps[field] || defaultColormaps[field];
+            const currentSelection =
+              selectedColormaps[field] || defaultColormaps[field];
 
             return (
               <Box key={field}>

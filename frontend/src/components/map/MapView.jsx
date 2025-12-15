@@ -8,10 +8,10 @@ import {
   Polyline,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
-import MapPickOverlay from "./MapPickOverlay";
-import AreaDrawOverlay from "./AreaDrawOverlay";
-import LineDrawOverlay from "./LineDrawOverlay";
-import UsePixelStatClick from "./UsePixelStatClick";
+import MapPickOverlay from "../overlays/MapPickOverlay";
+import AreaDrawOverlay from "../overlays/AreaDrawOverlay";
+import LineDrawOverlay from "../overlays/LineDrawOverlay";
+import UsePixelStatClick from "../overlays/UsePixelStatClick";
 
 function COGTile({
   tilejsonUrl,

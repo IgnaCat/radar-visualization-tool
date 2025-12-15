@@ -7,7 +7,7 @@ import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import BuildIcon from "@mui/icons-material/Build";
 import DownloadIcon from "@mui/icons-material/Download";
-import DownloadMenu from "./DownloadMenu";
+import DownloadMenu from "../ui/DownloadMenu";
 
 /**
  * MapToolbar - Barra de herramientas horizontal superior derecha

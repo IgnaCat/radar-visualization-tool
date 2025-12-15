@@ -17,7 +17,7 @@ import {
   Checkbox,
   Divider,
 } from "@mui/material";
-import LayerControlList from "./LayerControlList";
+import LayerControlList from "../controls/LayerControlList";
 
 const MARKS_01 = [
   { value: 0, label: "0" },
@@ -135,20 +135,27 @@ export default function ProductSelectorDialog({
 
     // Si derivedLayers cambió, sincronizar el orden
     // Comparar si el orden de los campos habilitados cambió
-    const currentEnabledFields = layers.filter(l => l.enabled).map(l => l.field);
-    const derivedEnabledFields = derivedLayers.filter(l => l.enabled).map(l => l.field);
+    const currentEnabledFields = layers
+      .filter((l) => l.enabled)
+      .map((l) => l.field);
+    const derivedEnabledFields = derivedLayers
+      .filter((l) => l.enabled)
+      .map((l) => l.field);
 
     // Si el orden cambió, reordenar manteniendo estados enabled/disabled
-    const orderChanged = currentEnabledFields.length === derivedEnabledFields.length &&
-      currentEnabledFields.some((field, idx) => field !== derivedEnabledFields[idx]);
+    const orderChanged =
+      currentEnabledFields.length === derivedEnabledFields.length &&
+      currentEnabledFields.some(
+        (field, idx) => field !== derivedEnabledFields[idx]
+      );
 
     if (orderChanged) {
       // Reordenar layers según el orden en derivedLayers, manteniendo enabled/disabled
       const reordered = [];
 
       // Primero los campos en el orden de derivedLayers
-      derivedLayers.forEach(dl => {
-        const existing = layers.find(l => l.field === dl.field);
+      derivedLayers.forEach((dl) => {
+        const existing = layers.find((l) => l.field === dl.field);
         if (existing) {
           reordered.push(existing);
         } else {
@@ -157,8 +164,8 @@ export default function ProductSelectorDialog({
       });
 
       // Luego los campos que están en layers pero no en derivedLayers
-      layers.forEach(l => {
-        if (!derivedLayers.find(dl => dl.field === l.field)) {
+      layers.forEach((l) => {
+        if (!derivedLayers.find((dl) => dl.field === l.field)) {
           reordered.push(l);
         }
       });
@@ -168,12 +175,14 @@ export default function ProductSelectorDialog({
     }
 
     // Si hay nuevos campos en derivedLayers que no están en layers actuales, agregarlos al final
-    const currentFields = new Set(layers.map(l => l.field));
-    const newLayers = derivedLayers.filter(dl => !currentFields.has(dl.field));
+    const currentFields = new Set(layers.map((l) => l.field));
+    const newLayers = derivedLayers.filter(
+      (dl) => !currentFields.has(dl.field)
+    );
 
     if (newLayers.length > 0) {
       // Agregar nuevos campos al final, manteniendo el orden existente
-      setLayers(prev => [...prev, ...newLayers]);
+      setLayers((prev) => [...prev, ...newLayers]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [derivedLayers]);
@@ -353,7 +362,8 @@ export default function ProductSelectorDialog({
             <Box display="flex" flexWrap="wrap" gap={1}>
               {radars.map((site) => {
                 const isSelected = selectedRadars.includes(site);
-                const atMax = !isSelected && selectedRadars.length >= MAX_RADARS;
+                const atMax =
+                  !isSelected && selectedRadars.length >= MAX_RADARS;
                 return (
                   <Button
                     key={site}
@@ -389,7 +399,10 @@ export default function ProductSelectorDialog({
                 );
               })}
             </Box>
-            <Typography variant="caption" sx={{ opacity: 0.7, display: 'block', mt: 0.5 }}>
+            <Typography
+              variant="caption"
+              sx={{ opacity: 0.7, display: "block", mt: 0.5 }}
+            >
               Máximo {MAX_RADARS} radares a la vez.
             </Typography>
           </Box>
