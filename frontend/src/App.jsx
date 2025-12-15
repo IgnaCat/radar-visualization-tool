@@ -15,26 +15,26 @@ import { useDownloads } from "./hooks/useDownloads";
 import "./print.css";
 
 import { generateSessionId } from "./utils/session";
-import MapView from "./components/MapView";
-import ActiveLayerPicker from "./components/ActiveLayerPicker";
-import UploadButton from "./components/UploadButton";
-import FloatingMenu from "./components/FloatingMenu";
-import HeaderCard from "./components/HeaderCard";
-import VerticalToolbar from "./components/VerticalToolbar";
-import MapToolbar from "./components/MapToolbar";
-import ZoomControls from "./components/ZoomControls";
-import BaseMapSelector from "./components/BaseMapSelector";
-import ColorPaletteSelector from "./components/ColorPaletteSelector";
-import Alerts from "./components/Alerts";
-import ColorLegend from "./components/ColorLegend";
-import Loader from "./components/Loader";
-import AnimationControls from "./components/AnimationControls";
-import ProductSelectorDialog from "./components/ProductSelectorDialog";
-import PseudoRHIDialog from "./components/PseudoRHIDialog";
-import WarningPanel from "./components/WarningPanel";
-import AreaStatsDialog from "./components/AreaStatsDialog";
-import ElevationProfileDialog from "./components/ElevationProfileDialog";
-import LayerManagerDialog from "./components/LayerManagerDialog";
+import MapView from "./components/map/MapView";
+import ActiveLayerPicker from "./components/controls/ActiveLayerPicker";
+import UploadButton from "./components/ui/UploadButton";
+import FloatingMenu from "./components/ui/FloatingMenu";
+import HeaderCard from "./components/ui/HeaderCard";
+import VerticalToolbar from "./components/controls/VerticalToolbar";
+import MapToolbar from "./components/controls/MapToolbar";
+import ZoomControls from "./components/controls/ZoomControls";
+import BaseMapSelector from "./components/map/BaseMapSelector";
+import ColorPaletteSelector from "./components/controls/ColorPaletteSelector";
+import Alerts from "./components/ui/Alerts";
+import ColorLegend from "./components/map/ColorLegend";
+import Loader from "./components/ui/Loader";
+import AnimationControls from "./components/controls/AnimationControls";
+import ProductSelectorDialog from "./components/dialogs/ProductSelectorDialog";
+import PseudoRHIDialog from "./components/dialogs/PseudoRHIDialog";
+import WarningPanel from "./components/ui/WarningPanel";
+import AreaStatsDialog from "./components/dialogs/AreaStatsDialog";
+import ElevationProfileDialog from "./components/dialogs/ElevationProfileDialog";
+import LayerManagerDialog from "./components/dialogs/LayerManagerDialog";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
 function mergeRadarFrames(results, toleranceSec = 240) {

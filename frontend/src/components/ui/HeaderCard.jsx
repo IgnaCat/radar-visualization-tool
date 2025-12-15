@@ -1,6 +1,6 @@
 import { Box, Button, Paper } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
-import logoSrc from "../assets/lrsr_logo.png";
+import logoSrc from "../../assets/lrsr_logo.png";
 
 export default function HeaderCard({ onUploadClick }) {
   return (
@@ -27,9 +27,10 @@ export default function HeaderCard({ onUploadClick }) {
         src={logoSrc}
         alt="LRSR Logo"
         sx={{
-          height: 40,
+          height: 36,
           width: "auto",
           objectFit: "contain",
+          marginLeft: 1,
         }}
         onError={(e) => {
           // Fallback si la imagen no carga

@@ -13,13 +13,13 @@ import CloseIcon from "@mui/icons-material/Close";
 import CheckIcon from "@mui/icons-material/Check";
 
 // Import images
-import argenmapImg from "../assets/argenmap.webp";
-import argenmapGrisImg from "../assets/argenmap-gris.webp";
-import argenmapOscuroImg from "../assets/argenmap-oscuro.webp";
-import argenmapTopoImg from "../assets/argenmap-topo.webp";
-import esriImg from "../assets/esri.webp";
-import esritImg from "../assets/esrit.webp";
-import bingImg from "../assets/bing.webp";
+import argenmapImg from "../../assets/argenmap.webp";
+import argenmapGrisImg from "../../assets/argenmap-gris.webp";
+import argenmapOscuroImg from "../../assets/argenmap-oscuro.webp";
+import argenmapTopoImg from "../../assets/argenmap-topo.webp";
+import esriImg from "../../assets/esri.webp";
+import esritImg from "../../assets/esrit.webp";
+import bingImg from "../../assets/bing.webp";
 
 const baseMaps = [
   {
