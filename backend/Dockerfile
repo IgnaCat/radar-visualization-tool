@@ -1,0 +1,67 @@
+# Multi-stage build for Python backend with GDAL support
+FROM python:3.11-slim as base
+
+# Install system dependencies for GDAL, HDF5, NetCDF4, and other radar libraries
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # GDAL and geospatial libraries
+    gdal-bin \
+    libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
+    libspatialindex-dev \
+    # HDF5 and NetCDF4 for radar data
+    libhdf5-dev \
+    libnetcdf-dev \
+    # Build tools for Python packages
+    build-essential \
+    gcc \
+    g++ \
+    gfortran \
+    git \
+    # Utilities
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set GDAL environment variables
+ENV GDAL_CONFIG=/usr/bin/gdal-config \
+    CPLUS_INCLUDE_PATH=/usr/include/gdal \
+    C_INCLUDE_PATH=/usr/include/gdal
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements.txt .
+
+# Install Python dependencies
+# Note: PyART is installed from custom GitHub fork
+# Filter out Windows-only packages (pywin32) before installing
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir numpy && \
+    GDAL_VERSION=$(gdal-config --version) && \
+    pip install --no-cache-dir GDAL==${GDAL_VERSION} && \
+    grep -v "pywin32" requirements.txt > requirements-docker.txt && \
+    pip install --no-cache-dir -r requirements-docker.txt
+
+# Copy application code
+COPY ./app ./app
+
+# Create necessary directories for storage
+RUN mkdir -p /app/app/storage/uploads \
+    /app/app/storage/tmp \
+    /app/app/storage/cache \
+    /app/app/storage/data
+
+# Set permissions
+RUN chmod -R 755 /app/app/storage
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run uvicorn
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
