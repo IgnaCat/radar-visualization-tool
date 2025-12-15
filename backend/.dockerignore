@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+venv311/
+env/
+ENV/
+
+# Storage directories (will be created fresh in container)
+app/storage/uploads/*
+app/storage/tmp/*
+app/storage/cache/*
+app/storage/data/*
+!app/storage/uploads/.gitkeep
+!app/storage/tmp/.gitkeep
+!app/storage/cache/.gitkeep
+!app/storage/data/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+!README.md
+
+# GDAL wheels (not needed in Linux container)
+*.whl
+
+# Environment files
+.env
+.env.local
+
+# Jupyter notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Makefile
+makefile
+
+# Conda
+environment.yml

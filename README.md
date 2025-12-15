@@ -4,9 +4,19 @@ Herramienta web para la visualización interactiva de datos de radar meteorológ
 
 ---
 
+**Puedes correr este proyecto de dos formas:**
+
+- **Modo local:** Instalando dependencias manualmente.
+- **Usando Docker**
+
+Ambas opciones están documentadas abajo.
+
+---
+
 ## 🚀 Installation Guide
 
 Este proyecto tiene dos partes principales:
+
 - **Backend**: API en FastAPI para procesar y servir datos de radar.
 - **Frontend**: Interfaz web en React para visualizar los datos.
 
@@ -15,6 +25,7 @@ Este proyecto tiene dos partes principales:
 ## 🎨 Frontend
 
 1. Instalar Node.js con NVM (Linux/macOS)
+
    ```bash
    curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
    nvm install 20
@@ -22,6 +33,7 @@ Este proyecto tiene dos partes principales:
    ```
 
 2. Instalar dependencias
+
    ```bash
    npm install
    ```
@@ -31,18 +43,19 @@ Este proyecto tiene dos partes principales:
    npm run dev
    ```
 
-
 ## 📦 Backend
 
 ### 🔹 Linux
 
 1. Crear entorno virtual
+
    ```bash
    python3 -m venv venv
    source venv/bin/activate
    ```
 
 2. Instalar dependencias
+
    ```bash
    sudo apt install -y build-essential gdal-bin libgdal-dev libhdf5-dev libnetcdf-dev
    pip install -r requirements.txt
@@ -56,12 +69,14 @@ Este proyecto tiene dos partes principales:
 ### 🔹 Windows
 
 1. Crear entorno con conda
+
    ```bash
    conda create -n radar-env -c conda-forge python=3.11 gdal rasterio pyproj shapely
    conda activate radar-env
    ```
 
 2. Instalar dependencias
+
    ```bash
    pip install -r requirements.txt
    ```
@@ -70,3 +85,35 @@ Este proyecto tiene dos partes principales:
    ```bash
    make run
    ```
+
+---
+
+## 🐳 Docker
+
+### Levantar toda la app
+
+```bash
+# Desde la raíz del proyecto
+docker compose up --build
+```
+
+- Frontend: http://localhost:3000
+- Backend: http://localhost:8000
+- Docs API: http://localhost:8000/docs
+
+### Detener servicios
+
+```bash
+docker compose down
+```
+
+### Persistencia de archivos
+
+- Por defecto, los archivos subidos y temporales se guardan en tu PC (carpetas backend/app/storage/\*).
+- Si quieres que sean efímeros (solo en RAM del contenedor), elimina la sección `volumes:` del backend en `docker-compose.yml`.
+
+### Variables de entorno
+
+- Copia `.env.example` a `.env` y ajusta según tu entorno.
+
+---
