@@ -80,7 +80,7 @@ def calculate_grid_resolution(volume: str | None) -> tuple[float, float]:
     """
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
     grid_resolution_xy = 300 if volume == '03' else 1200
-    grid_resolution_z = 300  # Siempre usar 300m en Z para cross-sections de calidad
+    grid_resolution_z = 1000  # Siempre usar 300m en Z para cross-sections de calidad
     
     return grid_resolution_xy, grid_resolution_z
 
