@@ -7,6 +7,9 @@ import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import BuildIcon from "@mui/icons-material/Build";
 import DownloadIcon from "@mui/icons-material/Download";
+import VerticalSplitIcon from "@mui/icons-material/VerticalSplit";
+import LockIcon from "@mui/icons-material/Lock";
+import LockOpenIcon from "@mui/icons-material/LockOpen";
 import DownloadMenu from "../ui/DownloadMenu";
 
 /**
@@ -18,6 +21,12 @@ import DownloadMenu from "../ui/DownloadMenu";
  * - onFullscreen: función para alternar pantalla completa
  * - isFullscreen: booleano que indica si está en pantalla completa
  * - availableDownloads: objeto con opciones de descarga disponibles
+ * - isSplitScreen: booleano que indica si está en modo split screen
+ * - showSplitButton: booleano para mostrar botón de split
+ * - showLockButton: booleano para mostrar botón de lock
+ * - locked: booleano que indica si los mapas están sincronizados
+ * - onToggleSplit: función para alternar split screen
+ * - onToggleLock: función para alternar lock de sincronización
  */
 export default function MapToolbar({
   onScreenshot,
@@ -25,6 +34,12 @@ export default function MapToolbar({
   onFullscreen,
   isFullscreen = false,
   availableDownloads = {},
+  isSplitScreen = false,
+  showSplitButton = true,
+  showLockButton = false,
+  locked = false,
+  onToggleSplit,
+  onToggleLock,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
@@ -67,7 +82,55 @@ export default function MapToolbar({
 
   const hasDownloads = Object.keys(availableDownloads).length > 0;
 
+  const handleSplitClick = () => {
+    try {
+      onToggleSplit?.();
+      enqueueSnackbar(
+        isSplitScreen
+          ? "Pantalla simple activada"
+          : "Pantalla dividida activada",
+        { variant: "info" }
+      );
+    } catch {
+      enqueueSnackbar("Error al cambiar modo de pantalla", {
+        variant: "error",
+      });
+    }
+  };
+
+  const handleLockClick = () => {
+    try {
+      onToggleLock?.();
+      enqueueSnackbar(
+        locked ? "Sincronización desactivada" : "Sincronización activada",
+        { variant: "info" }
+      );
+    } catch {
+      enqueueSnackbar("Error al cambiar sincronización", { variant: "error" });
+    }
+  };
+
   const tools = [
+    ...(showSplitButton
+      ? [
+          {
+            icon: <VerticalSplitIcon />,
+            tooltip: isSplitScreen ? "Pantalla simple" : "Dividir pantalla",
+            action: handleSplitClick,
+            active: isSplitScreen,
+          },
+        ]
+      : []),
+    ...(showLockButton
+      ? [
+          {
+            icon: locked ? <LockIcon /> : <LockOpenIcon />,
+            tooltip: locked ? "Desbloquear mapas" : "Bloquear mapas",
+            action: handleLockClick,
+            active: locked,
+          },
+        ]
+      : []),
     {
       icon: <ScreenshotMonitorIcon />,
       tooltip: "Capturar pantalla",
@@ -170,13 +233,17 @@ export default function MapToolbar({
                   height: 30,
                   borderRadius: "6px",
                   color: "#000",
-                  backgroundColor: "transparent",
+                  backgroundColor: tool.active
+                    ? "rgba(74, 144, 226, 0.2)"
+                    : "transparent",
                   transition: "all 0.2s ease",
                   "& .MuiSvgIcon-root": {
                     fontSize: "1.25rem",
                   },
                   "&:hover": {
-                    backgroundColor: "rgba(0, 0, 0, 0.08)",
+                    backgroundColor: tool.active
+                      ? "rgba(74, 144, 226, 0.3)"
+                      : "rgba(0, 0, 0, 0.08)",
                     transform: "scale(1.05)",
                   },
                 }}

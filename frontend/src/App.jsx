@@ -15,26 +15,11 @@ import { useDownloads } from "./hooks/useDownloads";
 import "./print.css";
 
 import { generateSessionId } from "./utils/session";
-import MapView from "./components/map/MapView";
-import ActiveLayerPicker from "./components/controls/ActiveLayerPicker";
 import UploadButton from "./components/ui/UploadButton";
-import FloatingMenu from "./components/ui/FloatingMenu";
 import HeaderCard from "./components/ui/HeaderCard";
-import VerticalToolbar from "./components/controls/VerticalToolbar";
-import MapToolbar from "./components/controls/MapToolbar";
-import ZoomControls from "./components/controls/ZoomControls";
-import BaseMapSelector from "./components/map/BaseMapSelector";
-import ColorPaletteSelector from "./components/controls/ColorPaletteSelector";
 import Alerts from "./components/ui/Alerts";
-import ColorLegend from "./components/map/ColorLegend";
 import Loader from "./components/ui/Loader";
-import AnimationControls from "./components/controls/AnimationControls";
-import ProductSelectorDialog from "./components/dialogs/ProductSelectorDialog";
-import PseudoRHIDialog from "./components/dialogs/PseudoRHIDialog";
-import WarningPanel from "./components/ui/WarningPanel";
-import AreaStatsDialog from "./components/dialogs/AreaStatsDialog";
-import ElevationProfileDialog from "./components/dialogs/ElevationProfileDialog";
-import LayerManagerDialog from "./components/dialogs/LayerManagerDialog";
+import SplitScreenContainer from "./components/layout/SplitScreenContainer";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
 function mergeRadarFrames(results, toleranceSec = 240) {
@@ -199,6 +184,9 @@ export default function App() {
   const [paletteSelectorOpen, setPaletteSelectorOpen] = useState(false);
   const [layerManagerOpen, setLayerManagerOpen] = useState(false);
 
+  // Estado para split screen
+  const [splitScreenActive, setSplitScreenActive] = useState(false);
+
   // Derivar sitio del radar a partir del archivo activo o el archivo actual en visualización
   const radarSite = useMemo(() => {
     const fileToUse = activeToolFile || uploadedFiles[currentIndex];
@@ -239,6 +227,7 @@ export default function App() {
   // sino dejamos la respuesta vieja
   let mergedOutputs = [];
   let animation = false;
+  let product = overlayData.product || "PPI";
   // const product = overlayData.product;
   if (overlayData.results) {
     mergedOutputs = mergeRadarFrames(overlayData.results);
@@ -841,181 +830,113 @@ export default function App() {
   };
 
   return (
-    <div id="map-container" style={{ height: "100vh", width: "100%" }}>
-      <MapView
-        overlayData={currentOverlay}
-        opacities={opacity}
-        opacityByField={opacityByField}
-        pickPointMode={pickPointMode}
-        radarSite={radarSite}
-        pickedPoint={pickedPoint}
-        onPickPoint={handlePickPoint}
-        drawAreaMode={areaDrawMode}
-        onAreaComplete={handleAreaComplete}
-        pixelStatMode={pixelStatMode}
-        onPixelStatClick={handleMapClickPixelStat}
-        pixelStatMarker={pixelStatMarker}
-        lineOverlay={
-          rhiLinePreview?.start && rhiLinePreview?.end
-            ? [
-                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-              ]
-            : null
-        }
-        onClearLineOverlay={handleClearLineOverlay}
-        rhiEndpoints={{ start: rhiLinePreview.start, end: rhiLinePreview.end }}
-        activeToolFile={activeToolFile}
-        onMapReady={setMapInstance}
-        baseMapUrl={selectedBaseMap.url}
-        baseMapAttribution={selectedBaseMap.attribution}
-        lineDrawMode={lineDrawMode}
-        drawnLineCoords={drawnLineCoords}
-        onLineComplete={handleLineComplete}
-        onLinePointsChange={setDrawnLineCoords}
-        highlightedPoint={highlightedPoint}
-      />
-
-      {/* Nuevo diseño estilo IGN */}
+    <div
+      id="app-container"
+      style={{ height: "100vh", width: "100%", position: "relative" }}
+    >
+      {/* Header común para ambas vistas */}
       <HeaderCard
         onUploadClick={handleFileUpload}
         logoSrc="/assets/lrsr_logo.png"
       />
-      <VerticalToolbar
-        onChangeProductClick={() => setSelectorOpen(true)}
-        onPseudoRhiClick={handleOpenRHI}
-        onAreaStatsClick={handleOpenAreaStatsMode}
-        onPixelStatToggle={handleTogglePixelStat}
-        onMapSelectorToggle={handleToggleMapSelector}
-        onPaletteSelectorToggle={handleTogglePaletteSelector}
-        onElevationProfileClick={handleOpenElevationProfile}
-        onLayerManagerToggle={handleToggleLayerManager}
-        pixelStatActive={pixelStatMode}
-        mapSelectorActive={mapSelectorOpen}
-        paletteSelectorActive={paletteSelectorOpen}
-        layerManagerActive={layerManagerOpen}
-      />
-      <MapToolbar
-        onScreenshot={() => handleScreenshot(mapInstance, "map-container")}
-        onPrint={handlePrint}
-        onFullscreen={handleFullscreen}
-        isFullscreen={isFullscreen}
-        availableDownloads={availableDownloads}
-      />
-      <BaseMapSelector
-        open={mapSelectorOpen}
-        onClose={() => setMapSelectorOpen(false)}
-        selectedMap={selectedBaseMap}
-        onSelectMap={handleSelectBaseMap}
-      />
-      <ColorPaletteSelector
-        open={paletteSelectorOpen}
-        onClose={() => setPaletteSelectorOpen(false)}
-        selectedColormaps={selectedColormaps}
-        onSelectColormap={handleSelectColormap}
-        availableFields={fieldsUsed}
-        onApply={handleApplyColormaps}
-        hasLoadedImages={mergedOutputs.length > 0}
-        initialColormaps={initialColormaps}
-      />
-      <LayerManagerDialog
-        open={layerManagerOpen}
-        onClose={() => setLayerManagerOpen(false)}
-        layers={Array.isArray(currentOverlay) ? currentOverlay : []}
-        onReorder={handleLayerReorder}
-      />
-      <ZoomControls map={mapInstance} />
 
-      {/* Componentes originales mantenidos */}
-      {activeToolFile && (
-        <ActiveLayerPicker
-          layers={Array.isArray(currentOverlay) ? currentOverlay : []}
-          value={activeToolFile}
-          onChange={setActiveToolFile}
-        />
-      )}
-
-      <ColorLegend fields={fieldsUsed} />
+      {/* Contenedor de split screen que maneja uno o dos mapas */}
+      <SplitScreenContainer
+        splitScreenActive={splitScreenActive}
+        setSplitScreenActive={setSplitScreenActive}
+        map1Props={{
+          currentOverlay,
+          mergedOutputs,
+          opacity,
+          opacityByField,
+          currentIndex,
+          setCurrentIndex,
+          animation,
+          pixelStatMode,
+          setPixelStatMode,
+          pixelStatMarker,
+          setPixelStatMarker,
+          pickPointMode,
+          setPickPointMode,
+          pickedPoint,
+          setPickedPoint,
+          areaDrawMode,
+          setAreaDrawMode,
+          areaPolygon,
+          setAreaPolygon,
+          lineDrawMode,
+          setLineDrawMode,
+          drawnLineCoords,
+          setDrawnLineCoords,
+          lineDrawingFinished,
+          setLineDrawingFinished,
+          highlightedPoint,
+          setHighlightedPoint,
+          rhiLinePreview,
+          setRhiLinePreview,
+          selectorOpen,
+          setSelectorOpen,
+          rhiOpen,
+          setRhiOpen,
+          areaStatsOpen,
+          setAreaStatsOpen,
+          elevationProfileOpen,
+          setElevationProfileOpen,
+          mapSelectorOpen,
+          setMapSelectorOpen,
+          paletteSelectorOpen,
+          setPaletteSelectorOpen,
+          layerManagerOpen,
+          setLayerManagerOpen,
+          selectedBaseMap,
+          setSelectedBaseMap,
+          selectedColormaps,
+          setSelectedColormaps,
+          initialColormaps,
+          setInitialColormaps,
+          onProductChosen: handleProductChosen,
+          onGenerateRHI: handleGenerateRHI,
+          onAreaStatsRequest: handleAreaStatsRequest,
+          onPixelStatClick: handleMapClickPixelStat,
+          onGenerateElevationProfile: handleGenerateElevationProfile,
+          onLayerReorder: handleLayerReorder,
+          mapInstance,
+          setMapInstance,
+          onScreenshot: handleScreenshot,
+          onPrint: handlePrint,
+          onFullscreen: handleFullscreen,
+          isFullscreen,
+          savedLayers,
+          fieldsUsed,
+          filtersUsed,
+          activeElevation,
+          activeHeight,
+          activeToolFile,
+          setActiveToolFile,
+          radarSite,
+          warnings,
+          availableDownloads,
+          drawnLayerRef,
+          product,
+          loading,
+        }}
+        sharedProps={{
+          uploadedFiles,
+          filesInfo,
+          volumes,
+          availableRadars,
+          sessionId,
+          enqueueSnackbar,
+          processFile,
+          generatePixelStat,
+          mergeRadarFrames,
+        }}
+      />
 
       {/* UploadButton oculto - funcionalidad movida a HeaderCard */}
       <div style={{ display: "none" }}>
         <UploadButton onFilesSelected={handleFilesSelected} />
       </div>
-
-      {/* Slider para múltiples imágenes */}
-      {mergedOutputs.length > 0 && (
-        <AnimationControls
-          overlayData={{ outputs: mergedOutputs, animation }}
-          currentIndex={currentIndex}
-          setCurrentIndex={setCurrentIndex}
-          showPlayButton={animation}
-        />
-      )}
-
-      <ProductSelectorDialog
-        open={selectorOpen}
-        fields_present={Array.from(
-          new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
-        )}
-        elevations={Array.from(
-          new Set(filesInfo.map((f) => f.metadata.elevations).flat())
-        )}
-        volumes={volumes}
-        radars={availableRadars}
-        initialLayers={savedLayers}
-        onClose={() => setSelectorOpen(false)}
-        onConfirm={handleProductChosen}
-      />
-
-      {/* Dialog Pseudo-RHI */}
-      <PseudoRHIDialog
-        open={rhiOpen}
-        onClose={() => setRhiOpen(false)}
-        filepath={activeToolFile || uploadedFiles[currentIndex]}
-        radarSite={radarSite}
-        fields_present={
-          Array.from(
-            new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
-          ) || ["DBZH", "KDP", "RHOHV", "ZDR"]
-        }
-        onRequestPickPoint={handleRequestPickPoint}
-        pickedPoint={pickedPoint}
-        onClearPickedPoint={handleClearPickedPoint}
-        onGenerate={handleGenerateRHI}
-        onLinePreviewChange={setRhiLinePreview}
-        onAutoClose={() => setRhiOpen(false)}
-        onAutoReopen={() => setRhiOpen(true)}
-      />
-
-      <AreaStatsDialog
-        open={areaStatsOpen}
-        onClose={handleCloseAreaStats}
-        requestFn={handleAreaStatsRequest}
-        payload={{
-          filepath: activeToolFile || uploadedFiles[currentIndex],
-          field: fieldsUsed?.[0] || "DBZH",
-          product: overlayData?.product || "PPI",
-          elevation: activeElevation,
-          height: activeHeight,
-          filters: filtersUsed,
-          polygon: areaPolygon,
-        }}
-      />
-
-      <ElevationProfileDialog
-        open={elevationProfileOpen}
-        onClose={() => {
-          setElevationProfileOpen(false);
-          handleClearLineDrawing();
-        }}
-        onRequestDraw={handleRequestLineDrawing}
-        drawnCoordinates={drawnLineCoords}
-        drawingFinished={lineDrawingFinished}
-        onGenerate={handleGenerateElevationProfile}
-        onClearDrawing={handleClearLineDrawing}
-        onHighlightPoint={handleHighlightPoint}
-        onProfileGenerated={handleProfileGenerated}
-      />
 
       <Alerts
         open={alert.open}
@@ -1023,7 +944,6 @@ export default function App() {
         severity={alert.severity}
         onClose={() => setAlert({ ...alert, open: false })}
       />
-      <WarningPanel warnings={warnings} />
       <Loader open={loading} />
     </div>
   );
