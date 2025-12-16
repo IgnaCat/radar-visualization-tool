@@ -470,7 +470,13 @@ export default function App() {
       setSavedLayers(data.layers);
       setFiltersUsed(filters);
       if (elevation !== undefined) setActiveElevation(elevation);
-      if (height !== undefined) setActiveHeight(height);
+
+      // Reset height to null when product is not CAPPI
+      if (height !== undefined) {
+        setActiveHeight(height);
+      } else {
+        setActiveHeight(null);
+      }
 
       const nextKey = buildComputeKey({
         files: uploadedFiles,
