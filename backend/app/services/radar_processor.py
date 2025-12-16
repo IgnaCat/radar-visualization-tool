@@ -178,10 +178,161 @@ def _get_or_build_grid3d(
     return grid
 
 
+def warp_array_to_mercator(data_2d, radar_lat, radar_lon, x_limits, y_limits):
+    """
+    Warpea un array 2D de coordenadas locales del radar a Web Mercator.
+    Retorna el array warped, transform y CRS string.
+    """
+    from rasterio.warp import calculate_default_transform, reproject, Resampling
+    from pyproj import Proj
+    
+    # Proyección de origen: Azimuthal Equidistant centrada en el radar
+    src_proj = Proj(proj='aeqd', lat_0=radar_lat, lon_0=radar_lon, datum='WGS84')
+    src_crs = src_proj.to_wkt()
+    
+    # Calcular transform de origen (coordenadas locales del radar)
+    ny, nx = data_2d.shape
+    x_min, x_max = x_limits
+    y_min, y_max = y_limits
+    pixel_size_x = (x_max - x_min) / nx
+    pixel_size_y = (y_max - y_min) / ny
+    
+    src_transform = Affine.translation(x_min, y_max) * Affine.scale(pixel_size_x, -pixel_size_y)
+    
+    # Calcular bounds en coordenadas geográficas
+    left, bottom = src_proj(x_min, y_min, inverse=True)
+    right, top = src_proj(x_max, y_max, inverse=True)
+    
+    # Proyección destino: Web Mercator
+    dst_crs = 'EPSG:3857'
+    
+    # Calcular transformación y dimensiones en Web Mercator
+    dst_transform, dst_width, dst_height = calculate_default_transform(
+        src_crs, dst_crs, nx, ny,
+        left=left, bottom=bottom, right=right, top=top
+    )
+    
+    # Crear array de salida
+    warped_data = np.full((dst_height, dst_width), np.nan, dtype=data_2d.dtype)
+    
+    # Warpear datos
+    reproject(
+        source=data_2d,
+        destination=warped_data,
+        src_transform=src_transform,
+        src_crs=src_crs,
+        dst_transform=dst_transform,
+        dst_crs=dst_crs,
+        resampling=Resampling.nearest,
+        src_nodata=np.nan,
+        dst_nodata=np.nan
+    )
+    
+    return warped_data, dst_transform, dst_crs
+
+
+def create_cog_from_warped_array(
+    data_warped, output_path, transform, crs, cmap, vmin, vmax
+):
+    """
+    Crea un COG (Cloud Optimized GeoTIFF) RGB desde un array ya warped a Web Mercator.
+    
+    Args:
+        data_warped: Array numpy 2D ya proyectado en Web Mercator con valores numéricos
+        output_path: Path donde guardar el COG
+        transform: Affine transform del array warped
+        crs: CRS del array warped (debe ser Web Mercator)
+        cmap: Matplotlib colormap para RGB
+        vmin, vmax: Rango de valores para normalización
+    
+    Returns:
+        Path del COG creado
+    """
+    # Aplicar colormap para generar RGBA con transparencia
+    if not np.ma.is_masked(data_warped):
+        data_masked = np.ma.masked_invalid(data_warped)
+    else:
+        data_masked = data_warped.copy()
+    
+    # Enmascarar valores inválidos (NaN, inf)
+    data_masked = np.ma.masked_invalid(data_masked)
+    
+    # PyART usa 0.0 como fill_value en bordes durante warp
+    # Enmascarar 0.0 SOLO en los bordes (10 pixels) para no afectar datos reales
+    # h, w = data_masked.shape
+    # border_width = 10
+    
+    # border_mask = np.zeros_like(data_masked.data, dtype=bool)
+    # border_mask[:border_width, :] = True  # Arriba
+    # border_mask[-border_width:, :] = True  # Abajo
+    # border_mask[:, :border_width] = True  # Izquierda
+    # border_mask[:, -border_width:] = True  # Derecha
+    
+    # zero_mask = (data_masked.data == 0.0) & border_mask
+    # data_masked.mask = data_masked.mask | zero_mask
+    
+    # Normalizar solo los valores válidos
+    data_norm = (data_masked - vmin) / (vmax - vmin)
+    data_norm = np.clip(data_norm, 0, 1)
+    
+    # Aplicar colormap (retorna RGBA)
+    # filled(0) pone 0 en los valores enmascarados, pero luego los pondremos negros explícitamente
+    rgba = cmap(data_norm.filled(0))
+    data_rgba = (rgba * 255).astype(np.uint8)
+    
+    # Crear máscara de transparencia
+    mask = data_masked.mask
+    alpha = np.where(mask, 0, 255).astype(np.uint8)
+    
+    # Poner pixels transparentes en negro para evitar halos de color
+    for i in range(3):
+        data_rgba[:, :, i] = np.where(mask, 0, data_rgba[:, :, i])
+    
+    # Configuración del COG optimizado con 4 bandas (RGBA)
+    height, width = data_warped.shape
+    profile = {
+        'driver': 'COG',
+        'height': height,
+        'width': width,
+        'count': 4,  # RGBA = 4 bandas
+        'dtype': np.uint8,
+        'crs': crs,
+        'transform': transform,
+        'compress': 'DEFLATE',
+        'tiled': True,
+        'blockxsize': 512,
+        'blockysize': 512,
+        'photometric': 'RGB',
+        'OVERVIEW_RESAMPLING': 'NEAREST',
+        'RESAMPLING': 'NEAREST',
+        'NUM_THREADS': 'ALL_CPUS',
+        'BIGTIFF': 'IF_SAFER'
+    }
+    
+    # Escribir COG con las 4 bandas RGBA
+    with rasterio.open(output_path, 'w', **profile) as dst:
+        # Escribir RGB
+        for i in range(3):
+            dst.write(data_rgba[:, :, i], i + 1)
+        # Escribir Alpha (canal de transparencia)
+        dst.write(alpha, 4)
+        # Marcar banda 4 como alpha
+        dst.colorinterp = [
+            rasterio.enums.ColorInterp.red,
+            rasterio.enums.ColorInterp.green,
+            rasterio.enums.ColorInterp.blue,
+            rasterio.enums.ColorInterp.alpha
+        ]
+    
+    return output_path
+
+
 def convert_to_cog(src_path, cog_path):
     """
     Convierte un GeoTIFF existente a un COG (Cloud Optimized GeoTIFF) optimizado para tiling rápido.
     Re-escribe completamente el archivo con estructura tiled y overviews.
+    NOTA: Esta función se mantiene para compatibilidad legacy. 
+    Para nuevos desarrollos usar create_cog_from_warped_array().
     """
     from rasterio.shutil import copy
     from rasterio.enums import Resampling
@@ -498,6 +649,7 @@ def process_radar_to_cog(
 
     if pkg_cached is None:
         # Construir o recuperar grilla 3D cacheada
+
         grid = _get_or_build_grid3d(
             radar_to_use=radar_to_use,
             field_to_use=field_to_use,
@@ -586,10 +738,7 @@ def process_radar_to_cog(
         qc_dict = pkg_cached.get("qc", {}) or {}
         masked = apply_qc_filters(masked, qc_filters, qc_dict)
 
-    # Crear path único para el GeoTIFF temporal (antes de convertir a Cloud Optimized GeoTIFF)
     os.makedirs(output_dir, exist_ok=True)
-    unique_tif_name = f"radar_{uuid.uuid4().hex}.tif"
-    tiff_path = Path(output_dir) / unique_tif_name
 
     # Creamos un grid (ahora 2D) de "bolsillo” (sin reinterpolar) (usando el arr2d)
     # Reusamos la malla x/y de la cache: como no guardamos grid anterior completo, derivamos dims del array
@@ -607,41 +756,49 @@ def process_radar_to_cog(
         z={'data': np.array([0.0], dtype=np.float32)}
     )
 
-    # Exportar a GeoTIFF
-    pyart.io.write_grid_geotiff(
-        grid=grid_fake,
-        filename=str(tiff_path),
-        field=field_to_use,
-        level=0,
-        rgb=True,
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-        warp_to_mercator=True
-    )
-    
-    # ACTUALIZAR CACHE: 
-    # Si es la primera vez que guardamos versión warped del array, la generamos ahora
-    # (solo se hace una vez por cache_key, luego se reutiliza en futuros procesos)
-    # Hacemos este paso para cachear el array warped en mercator y usarlo en stats futuros
+    # ACTUALIZAR CACHE: Generar GeoTIFF numérico warped con PyART si no existe
+    # (solo se hace una vez por cache_key, luego se reutiliza)
+    # Usamos PyART para mantener consistencia con transformaciones/interpolaciones internas
     if pkg_cached.get("arr_warped") is None:
+        # Crear grid PyART temporal
+        ny, nx = masked.shape
+        grid_temp = pyart.core.Grid(
+            time={'data': np.array([0])},
+            fields={field_to_use: {'data': masked[np.newaxis, :, :], '_FillValue': -9999.0}},
+            metadata={'instrument_name': 'RADAR'},
+            origin_latitude={'data': radar_to_use.latitude['data']},
+            origin_longitude={'data': radar_to_use.longitude['data']},
+            origin_altitude={'data': radar_to_use.altitude['data']},
+            x={'data': np.linspace(x_grid_limits[0], x_grid_limits[1], nx).astype(np.float32)},
+            y={'data': np.linspace(y_grid_limits[0], y_grid_limits[1], ny).astype(np.float32)},
+            z={'data': np.array([0.0], dtype=np.float32)}
+        )
+        
+        # Generar GeoTIFF numérico warped con PyART (para cache de stats)
         temp_numeric_tif = Path(output_dir) / f"numeric_{uuid.uuid4().hex}.tif"
+        
+        # Generar GeoTIFF numérico warped (sin colormap)
         pyart.io.write_grid_geotiff(
-            grid=grid_fake,
+            grid=grid_temp,
             filename=str(temp_numeric_tif),
             field=field_to_use,
             level=0,
-            rgb=False,  # Sin colormap, valores numéricos
+            rgb=False,
             warp_to_mercator=True
         )
-        
+
         # Leer el GeoTIFF numérico warped para stats
         with rasterio.open(temp_numeric_tif) as src_numeric:
             arr_warped = src_numeric.read(1, masked=True)
             transform_warped = src_numeric.transform
             crs_warped = src_numeric.crs.to_wkt()
             
-            # Agregar versión warped al cache (mantiene arr local para GeoTIFFs)
+            # Enmascarar valores extremadamente bajos (ruido de interpolación en bordes)
+            if not np.ma.is_masked(arr_warped):
+                arr_warped = np.ma.array(arr_warped, mask=np.zeros_like(arr_warped, dtype=bool))
+            arr_warped = np.ma.masked_less(arr_warped, vmin)
+            
+            # Agregar versión warped al cache
             pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
             pkg_cached["transform_warped"] = transform_warped
             pkg_cached["crs_warped"] = crs_warped
@@ -652,12 +809,12 @@ def process_radar_to_cog(
         except OSError:
             pass
         
-        # Generar versiones warped de campos QC para que coincidan con arr_warped
+        # Generar versiones warped de campos QC usando el mismo grid
         qc_dict = pkg_cached.get("qc", {}) or {}
         qc_warped = {}
         
         for qc_field_name, qc_arr2d in qc_dict.items():
-            # Crear grid temporal con este campo QC
+            # Crear grid temporal con campo QC
             grid_qc = pyart.core.Grid(
                 time={'data': np.array([0])},
                 fields={qc_field_name: {'data': qc_arr2d[np.newaxis, :, :], '_FillValue': -9999.0}},
@@ -665,8 +822,8 @@ def process_radar_to_cog(
                 origin_latitude={'data': radar_to_use.latitude['data']},
                 origin_longitude={'data': radar_to_use.longitude['data']},
                 origin_altitude={'data': radar_to_use.altitude['data']},
-                x={'data': grid_fake.x['data']},
-                y={'data': grid_fake.y['data']},
+                x={'data': grid_temp.x['data']},
+                y={'data': grid_temp.y['data']},
                 z={'data': np.array([0.0], dtype=np.float32)}
             )
             
@@ -692,14 +849,21 @@ def process_radar_to_cog(
         
         pkg_cached["qc_warped"] = qc_warped
         GRID2D_CACHE[cache_key] = pkg_cached
-
-    # Convertir a COG (Cloud Optimized GeoTIFF)
-    _ = convert_to_cog(tiff_path, cog_path)
-
-     # Limpiar el GeoTIFF temporal (queda SOLO el COG)
-    try:
-        tiff_path.unlink()
-    except OSError:
-        pass
+    
+    # Obtener array warped cacheado (ya procesado por PyART)
+    arr_warped = pkg_cached["arr_warped"]
+    transform_warped = pkg_cached["transform_warped"]
+    crs_warped = pkg_cached["crs_warped"]
+    
+    # Crear COG RGB desde el array warped cacheado usando la función optimizada
+    create_cog_from_warped_array(
+        data_warped=arr_warped,
+        output_path=cog_path,
+        transform=transform_warped,
+        crs=crs_warped,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax
+    )
 
     return summary
