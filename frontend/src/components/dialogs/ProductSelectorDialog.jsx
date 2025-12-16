@@ -195,6 +195,13 @@ export default function ProductSelectorDialog({
     setSelectedVolumes(volumes);
   }, [volumes]);
 
+  // Reset height to default when product changes from/to CAPPI
+  useEffect(() => {
+    if (product !== 'cappi') {
+      setHeight(initialCappiHeight);
+    }
+  }, [product, initialCappiHeight]);
+
   useEffect(() => {
     // Cap default selection to MAX_RADARS to avoid overloading UI/backend
     setSelectedRadars(Array.isArray(radars) ? radars.slice(0, MAX_RADARS) : []);
