@@ -77,6 +77,8 @@ def colormap_for(field_key: str, override_cmap: Optional[str] = None):
     Devuelve defaults (cmap, vmin, vmax, cmap_key) según FIELD_RENDER.
     Si override_cmap se provee, lo usa en lugar del default.
     """
+    import matplotlib.pyplot as plt
+    
     spec = FIELD_RENDER.get(field_key.upper(), {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
     vmin, vmax = spec["vmin"], spec["vmax"]
     cmap_key = override_cmap if override_cmap else spec["cmap"]
@@ -86,11 +88,20 @@ def colormap_for(field_key: str, override_cmap: Optional[str] = None):
         # Colormap personalizado del módulo colores
         cmap = getattr(colores, f"get_cmap_{cmap_key}")()
     elif cmap_key.startswith("pyart_"):
-        # Colormap de pyart (remover prefijo)
-        cmap = cmap_key.replace("pyart_", "")
+        # Colormap de pyart (obtener objeto colormap real)
+        cmap_name = cmap_key.replace("pyart_", "")
+        try:
+            cmap = pyart.graph.cm.get_colormap(cmap_name)
+        except (AttributeError, KeyError):
+            # Fallback: intentar como colormap estándar de matplotlib
+            cmap = plt.get_cmap(cmap_name)
     else:
         # Colormap estándar de matplotlib/pyart (NWSVel, Theodore16, etc)
-        cmap = cmap_key
+        # Intentar primero de PyART, luego matplotlib
+        try:
+            cmap = pyart.graph.cm.get_colormap(cmap_key)
+        except (AttributeError, KeyError):
+            cmap = plt.get_cmap(cmap_key)
     
     return cmap, vmin, vmax, cmap_key
 
