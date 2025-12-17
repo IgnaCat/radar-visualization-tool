@@ -42,11 +42,20 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
         # Colormap personalizado del módulo colores
         cmap = getattr(colores, f"get_cmap_{cmap_key}")()
     elif cmap_key.startswith("pyart_"):
-        # Colormap de pyart (remover prefijo)
-        cmap = cmap_key.replace("pyart_", "")
+        # Colormap de pyart (obtener objeto colormap real)
+        cmap_name = cmap_key.replace("pyart_", "")
+        try:
+            cmap = pyart.graph.cm.get_colormap(cmap_name)
+        except (AttributeError, KeyError):
+            # Fallback: intentar como colormap estándar de matplotlib
+            cmap = plt.get_cmap(cmap_name)
     else:
         # Colormap estándar de matplotlib/pyart (NWSVel, Theodore16, etc)
-        cmap = cmap_key
+        # Intentar primero de PyART, luego matplotlib
+        try:
+            cmap = pyart.graph.cm.get_colormap(cmap_key)
+        except (AttributeError, KeyError):
+            cmap = plt.get_cmap(cmap_key)
 
     # Enmascarar datos inválidos
     # radar.fields[field_used]['data'] = np.ma.masked_invalid(radar.fields[field_used]['data'])
