@@ -1,5 +1,7 @@
 import pyproj
 import numpy as np
+import os
+from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from shapely.geometry import shape, box, mapping
@@ -7,6 +9,7 @@ from shapely.ops import transform as shp_transform
 from rasterio.features import geometry_mask
 from typing import Optional, List
 from ..core.cache import GRID2D_CACHE
+from ..core.config import settings
 from ..schemas import RadarStatsRequest, RadarStatsResponse
 from ..utils.helpers import extract_volume_from_filename
 from ..services.radar_common import (
@@ -38,14 +41,20 @@ async def radar_stats(payload: RadarStatsRequest):
         )
 
     polygon_gj_4326: dict = payload.polygon_geojson
-    filepath = payload.filepath
+    filepath_name = payload.filepath
     product = payload.product
     field = payload.field
+
+    # Construir path completo del archivo
+    UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+    if payload.session_id:
+        UPLOAD_DIR = UPLOAD_DIR / payload.session_id
+    filepath = str(UPLOAD_DIR / filepath_name)
 
     if (product.upper() == "CAPPI"): field = "cappi"
     if (product.upper() == "COLMAX" and field.upper() == "DBZH"): field = "composite_reflectivity"
     
-    volume = extract_volume_from_filename(filepath)
+    volume = extract_volume_from_filename(filepath_name)
     cache_key = get_cache_key_for_radar_stats(
         filepath=filepath,
         product=product,

@@ -6,7 +6,9 @@ class Settings(BaseSettings):
     APP_NAME: str = "Radar Visualization"
     BASE_URL: str = "http://localhost:8000"
     FRONTEND_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
-    IMAGES_DIR: str = "app/storage/tmp"
+
+    # Storage directories (set via env vars in Docker, defaults for local)
+    IMAGES_DIR: str = "/app/storage/tmp"
     UPLOAD_DIR: str = os.path.join(os.getcwd(), "app/storage/uploads")
     DATA_DIR: str = os.path.join(os.getcwd(), "app/storage/data")
     ALLOWED_PRODUCTS: List[str] = ["PPI", "RHI", "CAPPI", "COLMAX"]

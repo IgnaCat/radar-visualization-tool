@@ -45,16 +45,18 @@ RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
     pip install --no-cache-dir -r requirements-docker.txt
 
 # Copy application code
+# This creates /app/app/ structure which is correct for the package imports
 COPY ./app ./app
 
 # Create necessary directories for storage
-RUN mkdir -p /app/app/storage/uploads \
-    /app/app/storage/tmp \
-    /app/app/storage/cache \
-    /app/app/storage/data
+# Note: these will be overridden by docker-compose volumes in development
+RUN mkdir -p /app/storage/uploads \
+    /app/storage/tmp \
+    /app/storage/cache \
+    /app/storage/data
 
 # Set permissions
-RUN chmod -R 755 /app/app/storage
+RUN chmod -R 755 /app/storage
 
 # Expose port
 EXPOSE 8000
@@ -65,3 +67,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 
 # Run uvicorn
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+

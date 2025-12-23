@@ -1,7 +1,5 @@
 from fileinput import filename
 from fastapi import APIRouter, HTTPException, status
-from fastapi.concurrency import run_in_threadpool
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import List
 from math import ceil
@@ -124,24 +122,26 @@ async def process_file(payload: ProcessRequest):
         radar, _, vol, _ = helpers.extract_metadata_from_filename(Path(f).name)
         items.append((f, fp_abs, ts, vol, radar))
 
-    # Lanzamos todo en paralelo: (archivo × campo)
-    future_to_meta = {}
-    max_workers = min(max(4, (os.cpu_count() or 4) * 2), len(items) * max(1, len(fields)))
+    # Crear directorio de salida temporal para la sesión ANTES del procesamiento paralelo
+    # Esto evita race conditions cuando múltiples threads intentan crear el directorio
+    if payload.session_id:
+        session_tmp_dir = Path(settings.IMAGES_DIR) / payload.session_id
+        os.makedirs(session_tmp_dir, exist_ok=True)
+
     # Agrupación: radar -> { timestamp -> [LayerResult, ...] }
     results_by_radar = {}
     warnings_by_radar = {}
-
-
     # Para trackear campos y volúmenes por radar
     fields_by_radar = {}
     volumes_by_radar = {}
 
+    # Procesamiento secuencial - PyART/GDAL/NetCDF4 no son thread-safe
+    # ThreadPoolExecutor causa corrupción de memoria (malloc errors) incluso sin volúmenes montados
     try:
-        with ThreadPoolExecutor(max_workers=max_workers) as ex:
-            for (f_rel, f_abs, ts, vol, radar) in items:
-                for idx, field in enumerate(fields):
-                    fut = ex.submit(
-                        radar_processor.process_radar_to_cog,
+        for (f_rel, f_abs, ts, vol, radar) in items:
+            for idx, field in enumerate(fields):
+                try:
+                    result_dict = radar_processor.process_radar_to_cog(
                         filepath=f_abs,
                         product=product,
                         field_requested=field,
@@ -152,12 +152,6 @@ async def process_file(payload: ProcessRequest):
                         colormap_overrides=payload.colormap_overrides,
                         session_id=payload.session_id
                     )
-                    future_to_meta[fut] = (f_rel, ts, idx, field, radar, vol)
-
-            for fut in as_completed(future_to_meta):
-                f_rel, ts, idx, field, radar, vol = future_to_meta[fut]
-                try:
-                    result_dict = fut.result()
                     result_dict["timestamp"] = ts
                     result_dict["order"] = idx
                     # Agrupar por radar y timestamp
@@ -171,11 +165,9 @@ async def process_file(payload: ProcessRequest):
                     if vol:
                         volumes_by_radar.setdefault(radar, set()).add(vol)
                 except Exception as e:
-                    print(f"Error procesando {field}: {e}")
                     if radar not in warnings_by_radar:
                         warnings_by_radar[radar] = []
                     warnings_by_radar[radar].append(f"{Path(f_rel).name}: {e}")
-
 
         # Calcular warnings por campos/volúmenes faltantes
         all_fields = set()

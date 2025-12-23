@@ -538,7 +538,7 @@ def process_radar_to_cog(
         cappi_height=4000, 
         elevation=0, 
         filters=[], 
-        output_dir="app/storage/tmp",
+        output_dir=None,  # Will use settings.IMAGES_DIR if None
         volume=None,
         colormap_overrides=None,
         session_id=None
@@ -552,6 +552,10 @@ def process_radar_to_cog(
         colormap_overrides: dict opcional {field: cmap_key} para personalizar paletas
         session_id: Identificador de sesión para aislar archivos y cache
     """
+    # Use settings.IMAGES_DIR if output_dir not specified
+    if output_dir is None:
+        output_dir = settings.IMAGES_DIR
+    
     # Crear subdirectorio por sesión si se provee session_id
     if session_id:
         output_dir = str(Path(output_dir) / session_id)
@@ -573,6 +577,10 @@ def process_radar_to_cog(
         return summary
 
     # Si no existe, lo procesamos...
+    if not Path(filepath).exists():
+        raise ValueError(f"Archivo no encontrado: {filepath}")
+    
+    # Leer archivo NetCDF con PyART
     radar = pyart.io.read(filepath)
 
     try:
