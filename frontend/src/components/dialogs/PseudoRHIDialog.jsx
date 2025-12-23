@@ -21,8 +21,10 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import DownloadIcon from "@mui/icons-material/Download";
 import Draggable from "react-draggable";
 import RadarFilterControls from "../controls/RadarFilterControls";
+import ElevationChart from "../ui/ElevationChart";
 import { useDownloads } from "../../hooks/useDownloads";
 import { useSnackbar } from "notistack";
+import { generateElevationProfile } from "../../api/backend";
 
 const FIELD_OPTIONS = ["DBZH", "KDP", "RHOHV", "ZDR"];
 
@@ -70,6 +72,8 @@ export default function PseudoRHIDialog({
   const [maxLengthKm, setMaxLengthKm] = useState(240);
   const [maxHeightKm, setMaxHeightKm] = useState(20);
   const [expandedImage, setExpandedImage] = useState(null);
+  const [elevationProfile, setElevationProfile] = useState(null);
+  const [expandedElevation, setExpandedElevation] = useState(false);
 
   const { downloadImage, generateFilename } = useDownloads();
   const { enqueueSnackbar } = useSnackbar();
@@ -111,8 +115,50 @@ export default function PseudoRHIDialog({
       setStartLon(radarSite.lon.toFixed(6));
       setResultImgs([]);
       setError("");
+      setElevationProfile(null);
     }
   };
+
+  // Generar perfil de elevación cuando cambien los puntos
+  useEffect(() => {
+    const fetchElevationProfile = async () => {
+      const hasStart = startLat !== "" && startLon !== "";
+      const hasEnd = endLat !== "" && endLon !== "";
+
+      if (!hasEnd) {
+        setElevationProfile(null);
+        return;
+      }
+
+      // Determinar punto de inicio (explícito o radar site)
+      const start = hasStart
+        ? { lat: Number(startLat), lon: Number(startLon) }
+        : radarSite
+          ? { lat: radarSite.lat, lon: radarSite.lon }
+          : null;
+
+      if (!start) {
+        setElevationProfile(null);
+        return;
+      }
+
+      const end = { lat: Number(endLat), lon: Number(endLon) };
+
+      try {
+        const response = await generateElevationProfile({
+          coordinates: [start, end],
+          interpolate: true,
+          points_per_km: 10,
+        });
+        setElevationProfile(response.data);
+      } catch (error) {
+        console.error("Error generando perfil de elevación:", error);
+        setElevationProfile(null);
+      }
+    };
+
+    fetchElevationProfile();
+  }, [startLat, startLon, endLat, endLon, radarSite]);
 
   // Map click handling: automatic chaining start -> end
   useEffect(() => {
@@ -497,6 +543,27 @@ export default function PseudoRHIDialog({
                   </Box>
                 ))}
               </Box>
+
+              {/* Perfil de elevación del terreno */}
+              {elevationProfile?.profile && elevationProfile.profile.length > 0 && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" mb={2}>
+                      Perfil de elevación del terreno
+                    </Typography>
+                    <ElevationChart
+                      profileData={elevationProfile.profile}
+                      height={200}
+                      clickable={true}
+                      onClick={() => setExpandedElevation(true)}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                      Haz clic en el gráfico para verlo más grande
+                    </Typography>
+                  </Box>
+                </>
+              )}
             </>
           )}
 
@@ -560,6 +627,34 @@ export default function PseudoRHIDialog({
             </Button>
           )}
           <Button onClick={() => setExpandedImage(null)} variant="contained">
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal para ver gráfico de elevación expandido */}
+      <Dialog
+        open={expandedElevation}
+        onClose={() => setExpandedElevation(false)}
+        maxWidth="xl"
+        fullWidth
+      >
+        <DialogTitle>
+          Perfil de elevación del terreno
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ minHeight: "60vh", py: 2 }}>
+            {elevationProfile?.profile && (
+              <ElevationChart
+                profileData={elevationProfile.profile}
+                height={500}
+                clickable={false}
+              />
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExpandedElevation(false)} variant="contained">
             Cerrar
           </Button>
         </DialogActions>
