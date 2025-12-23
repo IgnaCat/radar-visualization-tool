@@ -764,11 +764,12 @@ def process_radar_to_cog(
         z={'data': np.array([0.0], dtype=np.float32)}
     )
 
-    # ACTUALIZAR CACHE: Generar GeoTIFF numérico warped con PyART si no existe
-    # (solo se hace una vez por cache_key, luego se reutiliza)
-    # Usamos PyART para mantener consistencia con transformaciones/interpolaciones internas
-    if pkg_cached.get("arr_warped") is None:
-        # Crear grid PyART temporal
+    # WARPING: Si hay filtros activos, debemos warpear el array FILTRADO (masked)
+    # Si no hay filtros, podemos reusar el warp cacheado
+    has_filters = bool(visual_filters or qc_filters)
+    
+    if has_filters or pkg_cached.get("arr_warped") is None:
+        # Crear grid PyART temporal con el array FILTRADO (masked)
         ny, nx = masked.shape
         grid_temp = pyart.core.Grid(
             time={'data': np.array([0])},
@@ -782,10 +783,9 @@ def process_radar_to_cog(
             z={'data': np.array([0.0], dtype=np.float32)}
         )
         
-        # Generar GeoTIFF numérico warped con PyART (para cache de stats)
+        # Generar GeoTIFF numérico warped con PyART
         temp_numeric_tif = Path(output_dir) / f"numeric_{uuid.uuid4().hex}.tif"
         
-        # Generar GeoTIFF numérico warped (sin colormap)
         pyart.io.write_grid_geotiff(
             grid=grid_temp,
             filename=str(temp_numeric_tif),
@@ -795,7 +795,7 @@ def process_radar_to_cog(
             warp_to_mercator=True
         )
 
-        # Leer el GeoTIFF numérico warped para stats
+        # Leer el GeoTIFF numérico warped
         with rasterio.open(temp_numeric_tif) as src_numeric:
             arr_warped = src_numeric.read(1, masked=True)
             transform_warped = src_numeric.transform
@@ -806,62 +806,63 @@ def process_radar_to_cog(
                 arr_warped = np.ma.array(arr_warped, mask=np.zeros_like(arr_warped, dtype=bool))
             arr_warped = np.ma.masked_less(arr_warped, vmin)
             
-            # Agregar versión warped al cache
-            pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
-            pkg_cached["transform_warped"] = transform_warped
-            pkg_cached["crs_warped"] = crs_warped
+            # SOLO cachear si NO hay filtros (cache sin filtros para reutilizar)
+            if not has_filters:
+                pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
+                pkg_cached["transform_warped"] = transform_warped
+                pkg_cached["crs_warped"] = crs_warped
+                
+                # Generar versiones warped de campos QC usando el mismo grid
+                qc_dict = pkg_cached.get("qc", {}) or {}
+                qc_warped = {}
+                
+                for qc_field_name, qc_arr2d in qc_dict.items():
+                    # Crear grid temporal con campo QC
+                    grid_qc = pyart.core.Grid(
+                        time={'data': np.array([0])},
+                        fields={qc_field_name: {'data': qc_arr2d[np.newaxis, :, :], '_FillValue': -9999.0}},
+                        metadata={'instrument_name': 'RADAR'},
+                        origin_latitude={'data': radar_to_use.latitude['data']},
+                        origin_longitude={'data': radar_to_use.longitude['data']},
+                        origin_altitude={'data': radar_to_use.altitude['data']},
+                        x={'data': grid_temp.x['data']},
+                        y={'data': grid_temp.y['data']},
+                        z={'data': np.array([0.0], dtype=np.float32)}
+                    )
+                    
+                    temp_qc_tif = Path(output_dir) / f"qc_{qc_field_name}_{uuid.uuid4().hex}.tif"
+                    pyart.io.write_grid_geotiff(
+                        grid=grid_qc,
+                        filename=str(temp_qc_tif),
+                        field=qc_field_name,
+                        level=0,
+                        rgb=False,
+                        warp_to_mercator=True
+                    )
+                    
+                    # Leer versión warped
+                    with rasterio.open(temp_qc_tif) as src_qc:
+                        qc_warped[qc_field_name] = src_qc.read(1, masked=True).astype(np.float32)
+                    
+                    # Limpiar temporal
+                    try:
+                        temp_qc_tif.unlink()
+                    except OSError:
+                        pass
+                
+                pkg_cached["qc_warped"] = qc_warped
+                GRID2D_CACHE[cache_key] = pkg_cached
         
         # Limpiar GeoTIFF numérico temporal
         try:
             temp_numeric_tif.unlink()
         except OSError:
             pass
-        
-        # Generar versiones warped de campos QC usando el mismo grid
-        qc_dict = pkg_cached.get("qc", {}) or {}
-        qc_warped = {}
-        
-        for qc_field_name, qc_arr2d in qc_dict.items():
-            # Crear grid temporal con campo QC
-            grid_qc = pyart.core.Grid(
-                time={'data': np.array([0])},
-                fields={qc_field_name: {'data': qc_arr2d[np.newaxis, :, :], '_FillValue': -9999.0}},
-                metadata={'instrument_name': 'RADAR'},
-                origin_latitude={'data': radar_to_use.latitude['data']},
-                origin_longitude={'data': radar_to_use.longitude['data']},
-                origin_altitude={'data': radar_to_use.altitude['data']},
-                x={'data': grid_temp.x['data']},
-                y={'data': grid_temp.y['data']},
-                z={'data': np.array([0.0], dtype=np.float32)}
-            )
-            
-            temp_qc_tif = Path(output_dir) / f"qc_{qc_field_name}_{uuid.uuid4().hex}.tif"
-            pyart.io.write_grid_geotiff(
-                grid=grid_qc,
-                filename=str(temp_qc_tif),
-                field=qc_field_name,
-                level=0,
-                rgb=False,
-                warp_to_mercator=True
-            )
-            
-            # Leer versión warped
-            with rasterio.open(temp_qc_tif) as src_qc:
-                qc_warped[qc_field_name] = src_qc.read(1, masked=True).astype(np.float32)
-            
-            # Limpiar temporal
-            try:
-                temp_qc_tif.unlink()
-            except OSError:
-                pass
-        
-        pkg_cached["qc_warped"] = qc_warped
-        GRID2D_CACHE[cache_key] = pkg_cached
-    
-    # Obtener array warped cacheado (ya procesado por PyART)
-    arr_warped = pkg_cached["arr_warped"]
-    transform_warped = pkg_cached["transform_warped"]
-    crs_warped = pkg_cached["crs_warped"]
+    else:
+        # Sin filtros: usar el warp cacheado
+        arr_warped = pkg_cached["arr_warped"]
+        transform_warped = pkg_cached["transform_warped"]
+        crs_warped = pkg_cached["crs_warped"]
     
     # Crear COG RGB desde el array warped cacheado usando la función optimizada
     create_cog_from_warped_array(
