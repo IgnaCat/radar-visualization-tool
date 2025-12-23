@@ -4,20 +4,14 @@ from pydantic import BaseModel
 from typing import Optional, List, Any, Dict
 import numpy as np
 import pyproj
-<<<<<<< HEAD
-=======
 import os
 from pathlib import Path
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
 from pyproj import Transformer
 from affine import Affine
 from rasterio.transform import rowcol, xy
 
 from ..core.cache import GRID2D_CACHE
-<<<<<<< HEAD
-=======
 from ..core.config import settings
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
 from ..schemas import RadarPixelRequest, RadarPixelResponse
 from ..utils.helpers import extract_volume_from_filename
 from ..services.radar_common import (
@@ -88,16 +82,6 @@ def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
             detail="El campo 'filepath' es obligatorio."
         )
 
-<<<<<<< HEAD
-    filepath = p.filepath
-    product = p.product
-    field = p.field
-
-    if (product.upper() == "CAPPI"): field = "cappi"
-    if (product.upper() == "COLMAX" and field.upper() == "DBZH"): field = "composite_reflectivity"
-    
-    volume = extract_volume_from_filename(filepath)
-=======
     filepath_name = p.filepath
     product = p.product
     field = p.field
@@ -112,7 +96,6 @@ def _pixel_stat_impl(p: RadarPixelRequest) -> RadarPixelResponse:
     if (product.upper() == "COLMAX" and field.upper() == "DBZH"): field = "composite_reflectivity"
     
     volume = extract_volume_from_filename(filepath_name)
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
     cache_key = get_cache_key_for_radar_stats(
         filepath=filepath,
         product=product,

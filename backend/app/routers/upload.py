@@ -64,11 +64,7 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
                 if radar is not None:
                     radars.add(radar)
                 saved_files.append({
-<<<<<<< HEAD
-                    "filepath": str(target),
-=======
                     "filepath": unique_name,  # Solo el nombre del archivo, no el path completo
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
                     "filename": file.filename,
                     "size_bytes": os.path.getsize(target) if target.exists() else None,
                     "metadata": meta,
@@ -95,13 +91,10 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
                             detail=f"'{file.filename}' excede {settings.MAX_UPLOAD_MB} MB"
                         )
                     out.write(chunk)
-<<<<<<< HEAD
-=======
                 
                 # Asegurar que el archivo está completamente escrito al disco
                 out.flush()
                 os.fsync(out.fileno())
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
 
             if size == 0:
                 try:
@@ -110,11 +103,7 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
                     pass
                 raise HTTPException(status_code=400, detail=f"'{file.filename}' está vacío.")
 
-<<<<<<< HEAD
-            # Extraer radar metadata (modular)
-=======
             # Extraer radar metadata
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
             meta = extract_radar_metadata(str(target))
 
             # Extraer volumen/radar del nombre de archivo
@@ -125,11 +114,7 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
                 radars.add(radar)
 
             saved_files.append({
-<<<<<<< HEAD
-                "filepath": str(target),
-=======
                 "filepath": unique_name,  # Solo el nombre del archivo, no el path completo
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
                 "filename": file.filename,
                 "size_bytes": size,
                 "metadata": meta,

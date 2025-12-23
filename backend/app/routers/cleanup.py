@@ -16,12 +16,6 @@ TMP_DIR = Path(settings.IMAGES_DIR).resolve()          # app/storage/tmp
 BASE_DIR = Path("app/storage").resolve()
 
 
-<<<<<<< HEAD
-def _first_safe_under(path_str: str, roots: Iterable[Path]) -> Path | None:
-    """
-    Normaliza una ruta (absoluta o relativa) y devuelve la primera que
-    caiga bajo alguno de los roots permitidos. Si no matchea, devuelve None.
-=======
 def _first_safe_under(path_str: str, roots: Iterable[Path], session_id: str | None = None) -> Path | None:
     """
     Normaliza una ruta (absoluta o relativa) y devuelve la primera que
@@ -31,7 +25,6 @@ def _first_safe_under(path_str: str, roots: Iterable[Path], session_id: str | No
         path_str: Ruta del archivo (puede ser solo nombre o path completo)
         roots: Directorios raíz permitidos
         session_id: ID de sesión opcional para buscar en subdirectorios de sesión
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
     """
     s = str(path_str).replace("\\", "/").strip()
     candidates: list[Path] = []
@@ -55,9 +48,6 @@ def _first_safe_under(path_str: str, roots: Iterable[Path], session_id: str | No
             candidates.append(TMP_DIR / rel)
         else:
             # fallback: tratarla como relativa a las carpetas conocidas
-<<<<<<< HEAD
-            candidates.extend([UPLOAD_DIR / s, TMP_DIR / s, BASE_DIR / s])
-=======
             # Si hay session_id, agregar candidatos con subdirectorio de sesión primero
             if session_id:
                 candidates.extend([
@@ -69,7 +59,6 @@ def _first_safe_under(path_str: str, roots: Iterable[Path], session_id: str | No
                 ])
             else:
                 candidates.extend([UPLOAD_DIR / s, TMP_DIR / s, BASE_DIR / s])
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
 
     # resolver y verificar que quede dentro de un root permitido
     for cand in candidates:
@@ -125,11 +114,7 @@ def cleanup_close(req: CleanupRequest):
 
     # uploads (NetCDF subidos / temporales del usuario)
     for s in req.uploads:
-<<<<<<< HEAD
-        rp = _first_safe_under(s, [UPLOAD_DIR, TMP_DIR, BASE_DIR])
-=======
         rp = _first_safe_under(s, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=req.session_id)
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
         if rp and rp.exists():
             # Guardar nombre del archivo para limpieza de cache
             upload_filenames.add(rp.name)
