@@ -221,10 +221,14 @@ export default function ProductSelectorDialog({
   const limits = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
 
   const [activeRange, setActiveRange] = useState([limits.min, limits.max]);
+
   useEffect(() => {
     const lim = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
-    setActiveRange([lim.min, lim.max]);
-  }, [activeField]);
+    // Si el filtro other está habilitado, mantener sus valores, sino resetear a los límites del campo
+    if (!filters.other?.enabled) {
+      setActiveRange([lim.min, lim.max]);
+    }
+  }, [activeField, filters.other?.enabled]);
 
   const isCAPPI = product === "cappi";
   const isPPI = product === "ppi";
@@ -237,17 +241,21 @@ export default function ProductSelectorDialog({
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
   const handleAccept = () => {
-    const [amin, amax] = activeRange;
-    const filtersOut = [
-      {
+    const filtersOut = [];
+
+    // Filtro de rango de variable activa (solo si está habilitado)
+    if (filters.other?.enabled) {
+      const [amin, amax] = activeRange;
+      filtersOut.push({
         field: activeField,
         type: "range",
         min: amin,
         max: amax,
         enabled: true,
-      },
-    ];
+      });
+    }
 
+    // Filtro RHOHV
     if (filters.rhohv?.enabled) {
       let min = clamp01(filters.rhohv.min ?? 0);
       let max = clamp01(filters.rhohv.max ?? 1);
@@ -560,19 +568,22 @@ export default function ProductSelectorDialog({
             </Box>
 
             {/* Filtros de variable seleccionada */}
-            <Box
-              mt={2}
-              mb={2}
-              display="flex"
-              alignItems="center"
-              gap={2}
-              pl={5}
-              sx={{ flexWrap: "wrap" }}
-            >
-              <Typography variant="subtitle1" sx={{ mt: 2 }}>
-                Rango de {activeField}
-              </Typography>
-              <Box px={1} display="flex" alignItems="center" gap={2}>
+            <Box mt={2} mb={2}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!filters.other?.enabled}
+                    onChange={(e) => setOther({ enabled: e.target.checked })}
+                  />
+                }
+                label={`Rango de ${activeField}`}
+              />
+              <Box
+                display="flex"
+                alignItems="center"
+                gap={1}
+                pl={5}
+              >
                 <Slider
                   value={activeRange}
                   onChange={(_, v) => setActiveRange(v)}
@@ -580,7 +591,8 @@ export default function ProductSelectorDialog({
                   min={limits.min}
                   max={limits.max}
                   valueLabelDisplay="auto"
-                  sx={{ flex: 1, minWidth: 220, mr: 1 }}
+                  disabled={!filters.other?.enabled}
+                  sx={{ flex: 1, minWidth: 180 }}
                 />
                 <TextField
                   size="small"
@@ -590,6 +602,8 @@ export default function ProductSelectorDialog({
                   onChange={(e) =>
                     setActiveRange(([_, b]) => [Number(e.target.value), b])
                   }
+                  disabled={!filters.other?.enabled}
+                  sx={{ width: 80 }}
                 />
                 <TextField
                   size="small"
@@ -599,6 +613,8 @@ export default function ProductSelectorDialog({
                   onChange={(e) =>
                     setActiveRange(([a, _]) => [a, Number(e.target.value)])
                   }
+                  disabled={!filters.other?.enabled}
+                  sx={{ width: 80 }}
                 />
               </Box>
             </Box>
