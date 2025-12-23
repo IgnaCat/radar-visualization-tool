@@ -105,6 +105,15 @@ export default function PseudoRHIDialog({
     onAutoClose?.();
   };
 
+  const handleUseRadarOrigin = () => {
+    if (radarSite) {
+      setStartLat(radarSite.lat.toFixed(6));
+      setStartLon(radarSite.lon.toFixed(6));
+      setResultImgs([]);
+      setError("");
+    }
+  };
+
   // Map click handling: automatic chaining start -> end
   useEffect(() => {
     if (pickedPoint && pickTarget) {
@@ -313,7 +322,7 @@ export default function PseudoRHIDialog({
             </Box>
 
             <Typography variant="subtitle2">Punto de inicio</Typography>
-            <Box display="grid" gridTemplateColumns="1fr 1fr auto" gap={2}>
+            <Box display="grid" gridTemplateColumns="1fr 1fr auto auto" gap={2}>
               <TextField
                 size="small"
                 label="Latitud inicio"
@@ -334,6 +343,14 @@ export default function PseudoRHIDialog({
                 disabled={pickTarget === "end"}
               >
                 Elegir en mapa
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleUseRadarOrigin}
+                disabled={pickTarget === "end" || !radarSite}
+                size="small"
+              >
+                Usar origen
               </Button>
             </Box>
             {pickTarget === "end" && startLat !== "" && startLon !== "" && (
