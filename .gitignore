@@ -11,6 +11,7 @@ __pycache__/
 .venv/
 env/
 venv/
+venv311/
 
 # Otros
 .DS_Store
@@ -26,3 +27,4 @@ storage/
 biribiri/
 curso-radar-meteo/
 backend-flask/
+*.whl
