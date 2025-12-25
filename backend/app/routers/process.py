@@ -122,8 +122,7 @@ async def process_file(payload: ProcessRequest):
         radar, _, vol, _ = helpers.extract_metadata_from_filename(Path(f).name)
         items.append((f, fp_abs, ts, vol, radar))
 
-    # Crear directorio de salida temporal para la sesión ANTES del procesamiento paralelo
-    # Esto evita race conditions cuando múltiples threads intentan crear el directorio
+    # Crear directorio de salida temporal para la sesión ANTES del procesamiento
     if payload.session_id:
         session_tmp_dir = Path(settings.IMAGES_DIR) / payload.session_id
         os.makedirs(session_tmp_dir, exist_ok=True)
@@ -138,7 +137,7 @@ async def process_file(payload: ProcessRequest):
     # Procesamiento secuencial - PyART/GDAL/NetCDF4 no son thread-safe
     # ThreadPoolExecutor causa corrupción de memoria (malloc errors) incluso sin volúmenes montados
     try:
-        for (f_rel, f_abs, ts, vol, radar) in items:
+        for item_idx, (f_rel, f_abs, ts, vol, radar) in enumerate(items):
             for idx, field in enumerate(fields):
                 try:
                     result_dict = radar_processor.process_radar_to_cog(

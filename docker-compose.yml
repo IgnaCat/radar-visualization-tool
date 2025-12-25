@@ -15,37 +15,14 @@ services:
       - FRONTEND_ORIGINS=["http://localhost:3000","http://localhost"]
 
       # Directories (absolute paths in container)
-<<<<<<< HEAD
-      - UPLOAD_DIR=/app/app/storage/uploads
-      - DATA_DIR=/app/app/storage/data
-      - IMAGES_DIR=app/storage/tmp
-=======
       - UPLOAD_DIR=/app/storage/uploads
       - DATA_DIR=/app/storage/data
       - IMAGES_DIR=/app/storage/tmp
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
 
       # Upload rules
       - MAX_UPLOAD_MB=500
 
       # GDAL optimizations
-<<<<<<< HEAD
-      - GDAL_CACHEMAX=512
-      - GDAL_NUM_THREADS=ALL_CPUS
-      - VSI_CACHE=TRUE
-      - VSI_CACHE_SIZE=262144000
-      - GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
-      - GDAL_MAX_DATASET_POOL_SIZE=450
-      - GDAL_FORCE_CACHING=YES
-      - PROJ_NETWORK=OFF
-    volumes:
-      # Mount storage directories for persistence during development
-      # For production, these would be ephemeral (no volumes)
-      - ./backend/app/storage/uploads:/app/app/storage/uploads
-      - ./backend/app/storage/tmp:/app/app/storage/tmp
-      - ./backend/app/storage/cache:/app/app/storage/cache
-      - ./backend/app/storage/data:/app/app/storage/data
-=======
       - GDAL_CACHEMAX=256
       - GDAL_NUM_THREADS=4
       - VSI_CACHE=TRUE
@@ -54,7 +31,6 @@ services:
       - GDAL_MAX_DATASET_POOL_SIZE=100
       - GDAL_FORCE_CACHING=NO
       - PROJ_NETWORK=OFF
->>>>>>> 14ecc66fede379e1713e30b02a21c905ba0baad7
     networks:
       - radar-network
     restart: unless-stopped
