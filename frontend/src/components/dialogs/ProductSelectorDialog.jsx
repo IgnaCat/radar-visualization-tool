@@ -16,7 +16,11 @@ import {
   InputAdornment,
   Checkbox,
   Divider,
+  IconButton,
+  Collapse,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import LayerControlList from "../controls/LayerControlList";
 
 const MARKS_01 = [
@@ -125,6 +129,7 @@ export default function ProductSelectorDialog({
 
   const [elevationIdx, setElevationIdx] = useState(initialElevationIndex);
   const [filters, setFilters] = useState(structuredClone(initialFilters));
+  const [showFilters, setShowFilters] = useState(false);
 
   // Actualizar capas preservando el orden del usuario cuando cambian los campos disponibles
   useEffect(() => {
@@ -216,10 +221,14 @@ export default function ProductSelectorDialog({
   const limits = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
 
   const [activeRange, setActiveRange] = useState([limits.min, limits.max]);
+
   useEffect(() => {
     const lim = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
-    setActiveRange([lim.min, lim.max]);
-  }, [activeField]);
+    // Si el filtro other está habilitado, mantener sus valores, sino resetear a los límites del campo
+    if (!filters.other?.enabled) {
+      setActiveRange([lim.min, lim.max]);
+    }
+  }, [activeField, filters.other?.enabled]);
 
   const isCAPPI = product === "cappi";
   const isPPI = product === "ppi";
@@ -232,17 +241,21 @@ export default function ProductSelectorDialog({
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
   const handleAccept = () => {
-    const [amin, amax] = activeRange;
-    const filtersOut = [
-      {
+    const filtersOut = [];
+
+    // Filtro de rango de variable activa (solo si está habilitado)
+    if (filters.other?.enabled) {
+      const [amin, amax] = activeRange;
+      filtersOut.push({
         field: activeField,
         type: "range",
         min: amin,
         max: amax,
         enabled: true,
-      },
-    ];
+      });
+    }
 
+    // Filtro RHOHV
     if (filters.rhohv?.enabled) {
       let min = clamp01(filters.rhohv.min ?? 0);
       let max = clamp01(filters.rhohv.max ?? 1);
@@ -256,8 +269,13 @@ export default function ProductSelectorDialog({
       });
     }
 
+    // Para COLMAX, forzar DBZH como única capa
+    const finalLayers = product === "colmax"
+      ? [{ id: "dbzh", label: "DBZH", field: "DBZH", enabled: true, opacity: 1 }]
+      : layers;
+
     onConfirm({
-      layers,
+      layers: finalLayers,
       product,
       height: isCAPPI ? height : undefined,
       elevation: isPPI ? elevationIdx : undefined,
@@ -295,132 +313,141 @@ export default function ProductSelectorDialog({
       <DialogTitle>Opciones de Visualización</DialogTitle>
 
       <DialogContent dividers>
-        <Typography variant="subtitle1" gutterBottom>
-          Seleccionar Producto
-        </Typography>
-        <FormControl component="fieldset" fullWidth>
-          <RadioGroup
-            value={product}
-            onChange={(e) => setProduct(e.target.value)}
-          >
-            <FormControlLabel value="ppi" control={<Radio />} label="PPI" />
-            <FormControlLabel
-              value="colmax"
-              control={<Radio />}
-              label="COLMAX"
-            />
-            <FormControlLabel value="cappi" control={<Radio />} label="CAPPI" />
-          </RadioGroup>
-        </FormControl>
-
-        <Divider sx={{ my: 2 }} />
-
-        {/* Selección de volúmenes */}
-        {Array.isArray(volumes) && volumes.length > 0 && (
-          <Box mt={2} mb={2}>
-            <Typography variant="subtitle1" mb={2} gutterBottom>
-              Seleccionar volúmenes
+        {/* Grid layout: Vista a la izquierda, Volúmenes y Radares a la derecha */}
+        <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
+          {/* Columna izquierda: Seleccionar Vista */}
+          <Box>
+            <Typography variant="subtitle1" gutterBottom>
+              Seleccionar Vista
             </Typography>
-            <Box display="flex" flexWrap="wrap" gap={1}>
-              {volumes.map((vol, idx) => {
-                const isSelected = selectedVolumes.includes(vol);
-                return (
-                  <Button
-                    key={vol}
-                    variant={isSelected ? "contained" : "outlined"}
-                    onClick={() => {
-                      setSelectedVolumes((prev) =>
-                        prev.includes(vol)
-                          ? prev.filter((v) => v !== vol)
-                          : [...prev, vol]
-                      );
-                    }}
-                    sx={{
-                      borderRadius: 999,
-                      backgroundColor: isSelected ? "#888" : "#eee",
-                      color: isSelected ? "#fff" : "#333",
-                      fontWeight: 500,
-                      textTransform: "none",
-                      boxShadow: isSelected ? 2 : 0,
-                      transition: "all 0.2s",
-                      "&:hover": {
-                        backgroundColor: isSelected ? "#555" : "#ccc",
-                        color: isSelected ? "#fff" : "#111",
-                      },
-                      minWidth: 90,
-                      px: 2,
-                      py: 1,
-                    }}
-                  >
-                    {`Volumen ${vol}`}
-                  </Button>
-                );
-              })}
-            </Box>
+            <FormControl component="fieldset" fullWidth>
+              <RadioGroup
+                value={product}
+                onChange={(e) => setProduct(e.target.value)}
+              >
+                <FormControlLabel value="ppi" control={<Radio />} label="PPI" />
+                <FormControlLabel
+                  value="colmax"
+                  control={<Radio />}
+                  label="COLMAX"
+                />
+                <FormControlLabel value="cappi" control={<Radio />} label="CAPPI" />
+              </RadioGroup>
+            </FormControl>
           </Box>
-        )}
 
-        {/* Selección de radares */}
-        {Array.isArray(radars) && radars.length > 0 && (
-          <Box mt={2} mb={2}>
-            <Typography variant="subtitle1" mb={2} gutterBottom>
-              Seleccionar radares
-            </Typography>
-            <Box display="flex" flexWrap="wrap" gap={1}>
-              {radars.map((site) => {
-                const isSelected = selectedRadars.includes(site);
-                const atMax =
-                  !isSelected && selectedRadars.length >= MAX_RADARS;
-                return (
-                  <Button
-                    key={site}
-                    variant={isSelected ? "contained" : "outlined"}
-                    disabled={atMax}
-                    onClick={() => {
-                      setSelectedRadars((prev) => {
-                        const already = prev.includes(site);
-                        if (already) return prev.filter((s) => s !== site);
-                        if (prev.length >= MAX_RADARS) return prev; // ignore if at limit
-                        return [...prev, site];
-                      });
-                    }}
-                    sx={{
-                      borderRadius: 999,
-                      backgroundColor: isSelected ? "#888" : "#eee",
-                      color: isSelected ? "#fff" : "#333",
-                      fontWeight: 500,
-                      textTransform: "none",
-                      boxShadow: isSelected ? 2 : 0,
-                      transition: "all 0.2s",
-                      "&:hover": {
-                        backgroundColor: isSelected ? "#555" : "#ccc",
-                        color: isSelected ? "#fff" : "#111",
-                      },
-                      minWidth: 90,
-                      px: 2,
-                      py: 1,
-                    }}
-                  >
-                    {String(site)}
-                  </Button>
-                );
-              })}
-            </Box>
-            <Typography
-              variant="caption"
-              sx={{ opacity: 0.7, display: "block", mt: 0.5 }}
-            >
-              Máximo {MAX_RADARS} radares a la vez.
-            </Typography>
+          {/* Columna derecha: Volúmenes y Radares apilados */}
+          <Box display="flex" flexDirection="column" gap={2}>
+            {/* Selección de volúmenes */}
+            {Array.isArray(volumes) && volumes.length > 0 && (
+              <Box>
+                <Typography variant="subtitle1" mb={2} gutterBottom>
+                  Seleccionar volúmenes
+                </Typography>
+                <Box display="flex" flexWrap="wrap" gap={1}>
+                  {volumes.map((vol, idx) => {
+                    const isSelected = selectedVolumes.includes(vol);
+                    return (
+                      <Button
+                        key={vol}
+                        variant={isSelected ? "contained" : "outlined"}
+                        onClick={() => {
+                          setSelectedVolumes((prev) =>
+                            prev.includes(vol)
+                              ? prev.filter((v) => v !== vol)
+                              : [...prev, vol]
+                          );
+                        }}
+                        sx={{
+                          borderRadius: 999,
+                          backgroundColor: isSelected ? "#888" : "#eee",
+                          color: isSelected ? "#fff" : "#333",
+                          fontWeight: 500,
+                          textTransform: "none",
+                          boxShadow: isSelected ? 2 : 0,
+                          transition: "all 0.2s",
+                          "&:hover": {
+                            backgroundColor: isSelected ? "#555" : "#ccc",
+                            color: isSelected ? "#fff" : "#111",
+                          },
+                          minWidth: 90,
+                          px: 2,
+                          py: 1,
+                        }}
+                      >
+                        {`Volumen ${vol}`}
+                      </Button>
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
+
+            {/* Selección de radares */}
+            {Array.isArray(radars) && radars.length > 0 && (
+              <Box>
+                <Typography variant="subtitle1" mb={2} gutterBottom>
+                  Seleccionar radares
+                </Typography>
+                <Box display="flex" flexWrap="wrap" gap={1}>
+                  {radars.map((site) => {
+                    const isSelected = selectedRadars.includes(site);
+                    const atMax =
+                      !isSelected && selectedRadars.length >= MAX_RADARS;
+                    return (
+                      <Button
+                        key={site}
+                        variant={isSelected ? "contained" : "outlined"}
+                        disabled={atMax}
+                        onClick={() => {
+                          setSelectedRadars((prev) => {
+                            const already = prev.includes(site);
+                            if (already) return prev.filter((s) => s !== site);
+                            if (prev.length >= MAX_RADARS) return prev; // ignore if at limit
+                            return [...prev, site];
+                          });
+                        }}
+                        sx={{
+                          borderRadius: 999,
+                          backgroundColor: isSelected ? "#888" : "#eee",
+                          color: isSelected ? "#fff" : "#333",
+                          fontWeight: 500,
+                          textTransform: "none",
+                          boxShadow: isSelected ? 2 : 0,
+                          transition: "all 0.2s",
+                          "&:hover": {
+                            backgroundColor: isSelected ? "#555" : "#ccc",
+                            color: isSelected ? "#fff" : "#111",
+                          },
+                          minWidth: 90,
+                          px: 2,
+                          py: 1,
+                        }}
+                      >
+                        {String(site)}
+                      </Button>
+                    );
+                  })}
+                </Box>
+                <Typography
+                  variant="caption"
+                  sx={{ opacity: 0.7, display: "block", mt: 0.5 }}
+                >
+                  Máximo {MAX_RADARS} radares a la vez.
+                </Typography>
+              </Box>
+            )}
           </Box>
-        )}
-
-        <Divider sx={{ my: 2 }} />
-
-        {/* Variables reales del archivo */}
-        <Box mt={2}>
-          <LayerControlList items={layers} onChange={setLayers} />
         </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        {/* Variables reales del archivo - Ocultar para COLMAX */}
+        {product !== "colmax" && (
+          <Box mt={2}>
+            <LayerControlList items={layers} onChange={setLayers} />
+          </Box>
+        )}
 
         {isPPI && (
           <Box mt={2}>
@@ -470,108 +497,128 @@ export default function ProductSelectorDialog({
         {(isPPI || isCAPPI) && <Divider sx={{ my: 2 }} />}
 
         {/* ---- Filtros por rango ---- */}
-        <Typography variant="subtitle1" gutterBottom mt={2}>
-          Filtros
-        </Typography>
-
-        {/* RHOHV */}
-        <Box mt={1} px={1}>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={!!filters.rhohv?.enabled}
-                onChange={(e) => setRhohv({ enabled: e.target.checked })}
+        <Box mt={2}>
+          <Box display="flex" alignItems="center" gap={1}>
+            <IconButton
+              size="small"
+              onClick={() => setShowFilters((v) => !v)}
+              aria-label={showFilters ? "Ocultar filtros" : "Mostrar filtros"}
+            >
+              {showFilters ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+            <Typography variant="subtitle1" sx={{ userSelect: "none" }}>
+              Filtros
+            </Typography>
+          </Box>
+          <Collapse in={showFilters} timeout="auto" unmountOnExit>
+            {/* RHOHV */}
+            <Box mt={1} px={1}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!filters.rhohv?.enabled}
+                    onChange={(e) => setRhohv({ enabled: e.target.checked })}
+                  />
+                }
+                label="RHOHV"
               />
-            }
-            label="RHOHV"
-          />
-          <Box
-            display="flex"
-            alignItems="center"
-            gap={2}
-            pl={5}
-            sx={{ flexWrap: "wrap" }}
-          >
-            <Slider
-              value={[
-                Number(filters.rhohv?.min ?? 0),
-                Number(filters.rhohv?.max ?? 1),
-              ]}
-              onChange={(_, v) => {
-                const [min, max] = v;
-                setRhohv({ min, max });
-              }}
-              step={0.01}
-              min={0}
-              max={1}
-              marks={MARKS_01}
-              valueLabelDisplay="auto"
-              disabled={!filters.rhohv?.enabled}
-              sx={{ flex: 1, minWidth: 220 }}
-            />
-            <TextField
-              type="number"
-              size="small"
-              label="Min"
-              value={Number(filters.rhohv?.min ?? 0)}
-              onChange={(e) => setRhohv({ min: clamp01(e.target.value) })}
-              inputProps={{ step: 0.01, min: 0, max: 1 }}
-              disabled={!filters.rhohv?.enabled}
-            />
-            <TextField
-              type="number"
-              size="small"
-              label="Max"
-              value={Number(filters.rhohv?.max ?? 1)}
-              onChange={(e) => setRhohv({ max: clamp01(e.target.value) })}
-              inputProps={{ step: 0.01, min: 0, max: 1 }}
-              disabled={!filters.rhohv?.enabled}
-            />
-          </Box>
-        </Box>
+              <Box
+                display="flex"
+                alignItems="center"
+                gap={2}
+                pl={5}
+                sx={{ flexWrap: "wrap" }}
+              >
+                <Slider
+                  value={[
+                    Number(filters.rhohv?.min ?? 0),
+                    Number(filters.rhohv?.max ?? 1),
+                  ]}
+                  onChange={(_, v) => {
+                    const [min, max] = v;
+                    setRhohv({ min, max });
+                  }}
+                  step={0.01}
+                  min={0}
+                  max={1}
+                  marks={MARKS_01}
+                  valueLabelDisplay="auto"
+                  disabled={!filters.rhohv?.enabled}
+                  sx={{ flex: 1, minWidth: 220 }}
+                />
+                <TextField
+                  type="number"
+                  size="small"
+                  label="Min"
+                  value={Number(filters.rhohv?.min ?? 0)}
+                  onChange={(e) => setRhohv({ min: clamp01(e.target.value) })}
+                  inputProps={{ step: 0.01, min: 0, max: 1 }}
+                  disabled={!filters.rhohv?.enabled}
+                />
+                <TextField
+                  type="number"
+                  size="small"
+                  label="Max"
+                  value={Number(filters.rhohv?.max ?? 1)}
+                  onChange={(e) => setRhohv({ max: clamp01(e.target.value) })}
+                  inputProps={{ step: 0.01, min: 0, max: 1 }}
+                  disabled={!filters.rhohv?.enabled}
+                />
+              </Box>
+            </Box>
 
-        {/* Filtros de variable seleccionada */}
-        <Box
-          mt={2}
-          mb={4}
-          display="flex"
-          alignItems="center"
-          gap={2}
-          pl={5}
-          sx={{ flexWrap: "wrap" }}
-        >
-          <Typography variant="subtitle1" sx={{ mt: 2 }}>
-            Rango de {activeField}
-          </Typography>
-          <Box px={1} display="flex" alignItems="center" gap={2}>
-            <Slider
-              value={activeRange}
-              onChange={(_, v) => setActiveRange(v)}
-              step={0.1}
-              min={limits.min}
-              max={limits.max}
-              valueLabelDisplay="auto"
-              sx={{ flex: 1, minWidth: 220, mr: 1 }}
-            />
-            <TextField
-              size="small"
-              type="number"
-              label="Min"
-              value={activeRange[0]}
-              onChange={(e) =>
-                setActiveRange(([_, b]) => [Number(e.target.value), b])
-              }
-            />
-            <TextField
-              size="small"
-              type="number"
-              label="Max"
-              value={activeRange[1]}
-              onChange={(e) =>
-                setActiveRange(([a, _]) => [a, Number(e.target.value)])
-              }
-            />
-          </Box>
+            {/* Filtros de variable seleccionada */}
+            <Box mt={2} mb={2}>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!filters.other?.enabled}
+                    onChange={(e) => setOther({ enabled: e.target.checked })}
+                  />
+                }
+                label={`Rango de ${activeField}`}
+              />
+              <Box
+                display="flex"
+                alignItems="center"
+                gap={1}
+                pl={5}
+              >
+                <Slider
+                  value={activeRange}
+                  onChange={(_, v) => setActiveRange(v)}
+                  step={0.1}
+                  min={limits.min}
+                  max={limits.max}
+                  valueLabelDisplay="auto"
+                  disabled={!filters.other?.enabled}
+                  sx={{ flex: 1, minWidth: 180 }}
+                />
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Min"
+                  value={activeRange[0]}
+                  onChange={(e) =>
+                    setActiveRange(([_, b]) => [Number(e.target.value), b])
+                  }
+                  disabled={!filters.other?.enabled}
+                  sx={{ width: 80 }}
+                />
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Max"
+                  value={activeRange[1]}
+                  onChange={(e) =>
+                    setActiveRange(([a, _]) => [a, Number(e.target.value)])
+                  }
+                  disabled={!filters.other?.enabled}
+                  sx={{ width: 80 }}
+                />
+              </Box>
+            </Box>
+          </Collapse>
         </Box>
       </DialogContent>
 

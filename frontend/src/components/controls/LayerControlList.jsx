@@ -26,12 +26,37 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
  *
  * onChange(nextItems) -> devuelve lista actualizada (orden/estado/opacity)
  */
-function LayerControlList({ title = "Productos de Radar", items, onChange, initialVisible = 3 }) {
+function LayerControlList({ title = "Variables de Radar", items, onChange, initialVisible = 4 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
+  // Reordenar items para priorizar DBZH, ZDR, RHOHV, KDP
+  const priorityFields = ['DBZH', 'ZDR', 'RHOHV', 'KDP'];
+  const sortedItems = React.useMemo(() => {
+    const priority = [];
+    const rest = [];
+
+    items.forEach(item => {
+      const fieldName = item.field || item.label.toUpperCase();
+      if (priorityFields.includes(fieldName)) {
+        priority.push(item);
+      } else {
+        rest.push(item);
+      }
+    });
+
+    // Ordenar priority según el orden en priorityFields
+    priority.sort((a, b) => {
+      const aField = a.field || a.label.toUpperCase();
+      const bField = b.field || b.label.toUpperCase();
+      return priorityFields.indexOf(aField) - priorityFields.indexOf(bField);
+    });
+
+    return [...priority, ...rest];
+  }, [items]);
+
   // Determinar qué elementos mostrar
-  const visibleItems = isExpanded ? items : items.slice(0, initialVisible);
-  const hasMoreItems = items.length > initialVisible;
+  const visibleItems = isExpanded ? sortedItems : sortedItems.slice(0, initialVisible);
+  const hasMoreItems = sortedItems.length > initialVisible;
 
   // --- Drag & Drop (HTML5 nativo) ---
   const onDragStart = useCallback((e, fromIdx) => {
@@ -55,16 +80,16 @@ function LayerControlList({ title = "Productos de Radar", items, onChange, initi
         return;
       }
 
-      const next = items.slice();
+      const next = sortedItems.slice();
       const [moved] = next.splice(fromIdx, 1);
       next.splice(toIdx, 0, moved);
       onChange(next);
     },
-    [items, onChange, isExpanded, initialVisible]
+    [sortedItems, onChange, isExpanded, initialVisible]
   );
 
   const toggleEnabled = (idx) => {
-    const next = items.slice();
+    const next = sortedItems.slice();
     const currentEnabledCount = next.filter((l) => l.enabled).length;
 
     // Si intenta habilitar y ya hay 3 habilitadas no permitir
@@ -78,7 +103,7 @@ function LayerControlList({ title = "Productos de Radar", items, onChange, initi
   };
 
   const changeOpacity = (idx, value) => {
-    const next = items.slice();
+    const next = sortedItems.slice();
     next[idx] = { ...next[idx], opacity: value };
     onChange(next);
   };
@@ -102,10 +127,10 @@ function LayerControlList({ title = "Productos de Radar", items, onChange, initi
       )}
 
       <List disablePadding>
-        {items.length > 0 &&
+        {sortedItems.length > 0 &&
           visibleItems.map((it, displayIdx) => {
             // El índice real en el array completo
-            const actualIdx = items.findIndex(item => item.id === it.id);
+            const actualIdx = sortedItems.findIndex(item => item.id === it.id);
 
             return (
               <Box
@@ -115,29 +140,26 @@ function LayerControlList({ title = "Productos de Radar", items, onChange, initi
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, actualIdx)}
                 sx={{
-                  p: 1,
-                  mb: 1,
+                  px: 1,
+                  py: 0.5,
                   width: "90%",
                   bgcolor: "background.paper",
                 }}
               >
-                {/* Nombre arriba */}
-                <ListItem disableGutters sx={{ py: 0 }}>
-                  <ListItemText
-                    primary={<Typography variant="body1">{it.label}</Typography>}
-                  />
-                </ListItem>
-
-                {/* Abajo: checkbox + slider + manija de arrastre */}
+                {/* Checkbox + Nombre + Slider + Manija en una sola línea */}
                 <Box display="flex" alignItems="center" gap={1}>
                   <Checkbox
                     checked={!!it.enabled}
                     onChange={() => toggleEnabled(actualIdx)}
                     disabled={
-                      !it.enabled && items.filter((l) => l.enabled).length >= 3
+                      !it.enabled && sortedItems.filter((l) => l.enabled).length >= 3
                     }
                     inputProps={{ "aria-label": `activar ${it.label}` }}
                   />
+
+                  <Typography variant="body2" sx={{ minWidth: 80 }}>
+                    {it.label}
+                  </Typography>
 
                   <Slider
                     value={Number(it.opacity ?? 1)}
@@ -171,7 +193,7 @@ function LayerControlList({ title = "Productos de Radar", items, onChange, initi
           >
             {isExpanded
               ? "Mostrar menos"
-              : `Mostrar ${items.length - initialVisible} más`}
+              : `Mostrar ${sortedItems.length - initialVisible} más`}
           </Button>
         </Box>
       )}

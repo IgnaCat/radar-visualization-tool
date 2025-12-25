@@ -20,6 +20,7 @@ venv311/
 static/
 uploads/
 storage/
+data/
 
 .vite/
 

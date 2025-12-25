@@ -3,6 +3,7 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
+  DialogActions,
   Button,
   Box,
   Typography,
@@ -12,17 +13,7 @@ import {
 } from "@mui/material";
 import { Close as CloseIcon, Add as AddIcon } from "@mui/icons-material";
 import Draggable from "react-draggable";
-import {
-  AreaChart,
-  Line,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceDot,
-} from "recharts";
+import ElevationChart from "../ui/ElevationChart";
 
 function PaperComponent(props) {
   const nodeRef = useRef(null);
@@ -35,35 +26,6 @@ function PaperComponent(props) {
       <Paper {...props} ref={nodeRef} />
     </Draggable>
   );
-}
-
-/**
- * Custom tooltip para mostrar información detallada al hacer hover
- */
-function CustomTooltip({ active, payload }) {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
-    return (
-      <Paper
-        sx={{
-          padding: 1.5,
-          backgroundColor: "rgba(255, 255, 255, 0.95)",
-          border: "1px solid #ccc",
-        }}
-      >
-        <Typography variant="body2" sx={{ fontWeight: "bold" }}>
-          Distancia: {data.distance.toFixed(2)} km
-        </Typography>
-        <Typography variant="body2" color="primary">
-          Altura: {data.elevation.toFixed(0)} m
-        </Typography>
-        <Typography variant="caption" color="textSecondary">
-          Lat: {data.lat.toFixed(4)}°, Lon: {data.lon.toFixed(4)}°
-        </Typography>
-      </Paper>
-    );
-  }
-  return null;
 }
 
 /**
@@ -90,15 +52,14 @@ export default function ElevationProfileDialog({
   const [loading, setLoading] = useState(false);
   const [profileData, setProfileData] = useState(null);
   const [error, setError] = useState("");
-  const [hoveredPoint, setHoveredPoint] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
+  const [expandedChart, setExpandedChart] = useState(false);
 
   // Limpiar al cerrar
   const handleClose = () => {
     setProfileData(null);
     setError("");
-    setHoveredPoint(null);
     setIsDrawing(false);
     setIsMinimized(false);
     onClearDrawing?.();
@@ -142,17 +103,8 @@ export default function ElevationProfileDialog({
   }, [drawingFinished, drawnCoordinates, onGenerate, onProfileGenerated]);
 
   // Manejar hover en el gráfico
-  const handleMouseMove = (e) => {
-    if (e && e.activePayload && e.activePayload.length > 0) {
-      const point = e.activePayload[0].payload;
-      setHoveredPoint(point);
-      onHighlightPoint?.(point.lat, point.lon);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setHoveredPoint(null);
-    onHighlightPoint?.(null, null);
+  const handleHover = (point) => {
+    onHighlightPoint?.(point?.lat || null, point?.lon || null);
   };
 
   // Calcular ancho dinámico basado en la distancia total
@@ -171,220 +123,129 @@ export default function ElevationProfileDialog({
   };
 
   return (
-    <Dialog
-      open={open && !isMinimized}
-      onClose={handleClose}
-      fullWidth
-      maxWidth={calculateDialogWidth()}
-      hideBackdrop
-      disableEnforceFocus
-      disableAutoFocus
-      disableRestoreFocus
-      disableScrollLock
-      slotProps={{
-        root: { sx: { pointerEvents: "none" } },
-      }}
-      PaperProps={{
-        sx: { pointerEvents: "auto", minHeight: "320px" },
-      }}
-      PaperComponent={PaperComponent}
-      aria-labelledby="draggable-dialog-title"
-    >
-      <DialogTitle
-        id="draggable-dialog-title"
-        sx={{
-          cursor: "move",
-          backgroundColor: "#f5f5f5",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          paddingRight: 0.5,
-          paddingTop: 0.5,
-          paddingBottom: 0.5,
+    <>
+      <Dialog
+        open={open && !isMinimized}
+        onClose={handleClose}
+        fullWidth
+        maxWidth={calculateDialogWidth()}
+        hideBackdrop
+        disableEnforceFocus
+        disableAutoFocus
+        disableRestoreFocus
+        disableScrollLock
+        slotProps={{
+          root: { sx: { pointerEvents: "none" } },
         }}
+        PaperProps={{
+          sx: { pointerEvents: "auto", minHeight: "320px" },
+        }}
+        PaperComponent={PaperComponent}
+        aria-labelledby="draggable-dialog-title"
       >
-        <Typography
-          variant="subtitle2"
-          component="span"
-          sx={{ fontWeight: 600 }}
+        <DialogTitle
+          id="draggable-dialog-title"
+          sx={{
+            cursor: "move",
+            backgroundColor: "#f5f5f5",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            paddingRight: 0.5,
+            paddingTop: 0.5,
+            paddingBottom: 0.5,
+          }}
         >
-          Perfil de Elevación
-        </Typography>
-        <Box sx={{ display: "flex", gap: 0.5 }}>
-          {profileData && (
+          <Typography
+            variant="subtitle2"
+            component="span"
+            sx={{ fontWeight: 600 }}
+          >
+            Perfil de Elevación
+          </Typography>
+          <Box sx={{ display: "flex", gap: 0.5 }}>
+            {profileData && (
+              <IconButton
+                onClick={handleStartDrawing}
+                color="primary"
+                size="small"
+                title="Dibujar nueva línea"
+                sx={{
+                  "& .MuiSvgIcon-root": {
+                    fontSize: "1.25rem",
+                  },
+                }}
+              >
+                <AddIcon />
+              </IconButton>
+            )}
             <IconButton
-              onClick={handleStartDrawing}
-              color="primary"
+              onClick={handleClose}
+              color="secondary"
               size="small"
-              title="Dibujar nueva línea"
+              title="Cerrar"
               sx={{
                 "& .MuiSvgIcon-root": {
                   fontSize: "1.25rem",
                 },
               }}
             >
-              <AddIcon />
+              <CloseIcon />
             </IconButton>
-          )}
-          <IconButton
-            onClick={handleClose}
-            color="secondary"
-            size="small"
-            title="Cerrar"
-            sx={{
-              "& .MuiSvgIcon-root": {
-                fontSize: "1.25rem",
-              },
-            }}
-          >
-            <CloseIcon />
-          </IconButton>
-        </Box>
-      </DialogTitle>
+          </Box>
+        </DialogTitle>
 
-      <DialogContent dividers sx={{ minHeight: "250px" }}>
-        {!profileData && !loading && !error && (
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              minHeight: "220px",
-            }}
-          >
-            <Typography variant="body1" sx={{ mb: 2 }}>
-              {isDrawing
-                ? "Haz click en el mapa para agregar puntos. Click en el cuadrado blanco para terminar."
-                : "Dibuja una línea en el mapa para generar el perfil de elevación."}
-            </Typography>
-            {!isDrawing && (
-              <Button variant="contained" onClick={handleStartDrawing}>
-                Comenzar a dibujar
-              </Button>
-            )}
-            <Typography
-              variant="caption"
-              sx={{ mt: 2, color: "text.secondary" }}
+        <DialogContent dividers sx={{ minHeight: "250px" }}>
+          {!profileData && !loading && !error && (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                minHeight: "220px",
+              }}
             >
-              Atajos: ESC para cancelar, Enter para terminar, Delete para borrar
-              último punto
-            </Typography>
-          </Box>
-        )}
-
-        {loading && (
-          <Box
-            sx={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              minHeight: "220px",
-            }}
-          >
-            <CircularProgress />
-            <Typography sx={{ mt: 2 }}>
-              Generando perfil de elevación...
-            </Typography>
-          </Box>
-        )}
-
-        {error && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-            }}
-          >
-            <Typography color="error">{error}</Typography>
-          </Box>
-        )}
-
-        {profileData &&
-          profileData.profile &&
-          profileData.profile.length > 0 && (
-            <Box>
-              <ResponsiveContainer width="100%" height={250}>
-                <AreaChart
-                  data={profileData.profile}
-                  onMouseMove={handleMouseMove}
-                  onMouseLeave={handleMouseLeave}
-                  margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-                >
-                  <defs>
-                    <linearGradient
-                      id="elevationGradient"
-                      x1="0"
-                      y1="0"
-                      x2="0"
-                      y2="1"
-                    >
-                      <stop offset="0%" stopColor="#ff6b35" stopOpacity={0.9} />
-                      <stop
-                        offset="95%"
-                        stopColor="#ff6b35"
-                        stopOpacity={0.1}
-                      />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis
-                    dataKey="distance"
-                    label={{
-                      value: "Distancia (km)",
-                      position: "insideBottom",
-                      offset: -5,
-                    }}
-                    interval="preserveStartEnd"
-                    minTickGap={40}
-                    tickFormatter={(value) => Math.round(value)}
-                  />
-                  <YAxis
-                    label={{
-                      value: "Altura (m)",
-                      angle: -90,
-                      position: "insideLeft",
-                    }}
-                    tickFormatter={(value) => value.toFixed(0)}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Area
-                    type="monotone"
-                    dataKey="elevation"
-                    stroke="none"
-                    fill="url(#elevationGradient)"
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="elevation"
-                    stroke="#ff6b35"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 6 }}
-                  />
-                  {hoveredPoint && (
-                    <ReferenceDot
-                      x={hoveredPoint.distance}
-                      y={hoveredPoint.elevation}
-                      r={8}
-                      fill="#ff0000"
-                      stroke="#fff"
-                      strokeWidth={2}
-                    />
-                  )}
-                </AreaChart>
-              </ResponsiveContainer>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {isDrawing
+                  ? "Haz click en el mapa para agregar puntos. Click en el cuadrado blanco para terminar."
+                  : "Dibuja una línea en el mapa para generar el perfil de elevación."}
+              </Typography>
+              {!isDrawing && (
+                <Button variant="contained" onClick={handleStartDrawing}>
+                  Comenzar a dibujar
+                </Button>
+              )}
+              <Typography
+                variant="caption"
+                sx={{ mt: 2, color: "text.secondary" }}
+              >
+                Atajos: ESC para cancelar, Enter para terminar, Delete para borrar
+                último punto
+              </Typography>
             </Box>
           )}
 
-        {profileData &&
-          profileData.profile &&
-          profileData.profile.length === 0 && (
+          {loading && (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                height: "100%",
+                minHeight: "220px",
+              }}
+            >
+              <CircularProgress />
+              <Typography sx={{ mt: 2 }}>
+                Generando perfil de elevación...
+              </Typography>
+            </Box>
+          )}
+
+          {error && (
             <Box
               sx={{
                 display: "flex",
@@ -393,12 +254,76 @@ export default function ElevationProfileDialog({
                 height: "100%",
               }}
             >
-              <Typography>
-                No se pudo obtener datos de elevación para la línea dibujada.
-              </Typography>
+              <Typography color="error">{error}</Typography>
             </Box>
           )}
-      </DialogContent>
-    </Dialog>
+
+          {profileData &&
+            profileData.profile &&
+            profileData.profile.length > 0 && (
+              <Box>
+                <ElevationChart
+                  profileData={profileData.profile}
+                  height={250}
+                  onHover={handleHover}
+                  clickable={true}
+                  onClick={() => setExpandedChart(true)}
+                />
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ mt: 1, display: "block", textAlign: "center" }}
+                >
+                  Haz clic en el gráfico para verlo más grande
+                </Typography>
+              </Box>
+            )}
+
+          {profileData &&
+            profileData.profile &&
+            profileData.profile.length === 0 && (
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  height: "100%",
+                }}
+              >
+                <Typography>
+                  No se pudo obtener datos de elevación para la línea dibujada.
+                </Typography>
+              </Box>
+            )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para ver gráfico expandido */}
+      <Dialog
+        open={expandedChart}
+        onClose={() => setExpandedChart(false)}
+        maxWidth="xl"
+        fullWidth
+      >
+        <DialogTitle>Perfil de elevación del terreno (expandido)</DialogTitle>
+        <DialogContent>
+          <Box sx={{ minHeight: "58vh", py: 2 }}>
+            {profileData?.profile && (
+              <ElevationChart
+                profileData={profileData.profile}
+                height={500}
+                onHover={handleHover}
+                clickable={false}
+              />
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExpandedChart(false)} variant="contained">
+            Cerrar
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
