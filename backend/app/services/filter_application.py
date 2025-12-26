@@ -6,7 +6,7 @@ Separa filtros QC (campos auxiliares como RHOHV) de filtros visuales (mismo camp
 import numpy as np
 from typing import List
 from ..core.constants import AFFECTS_INTERP_FIELDS
-from ..schemas import RangeFilter
+from ..models import RangeFilter
 
 
 def separate_filters(filters: List[RangeFilter], field_to_use: str) -> tuple[List, List]:

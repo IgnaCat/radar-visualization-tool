@@ -9,7 +9,7 @@ from pyproj import Geod
 
 from ..utils import colores
 from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS
-from ..schemas import RangeFilter
+from ..models import RangeFilter
 
 
 # ------------------------------

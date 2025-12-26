@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
-from ..schemas import ElevationProfileRequest, ElevationProfileResponse
+from ..models import ElevationProfileRequest, ElevationProfileResponse
 from ..services.elevation_profile import extract_elevation_profile
 from ..core.config import settings
 

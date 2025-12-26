@@ -15,7 +15,7 @@ from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
 from ..core.cache import GRID3D_CACHE
 
-from ..schemas import RangeFilter
+from ..models import RangeFilter
 from ..services.grid_geometry import beam_height_max_km
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,

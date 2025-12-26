@@ -6,7 +6,7 @@ import os
 
 from ..core.config import settings
 from ..core.cache import GRID2D_CACHE, GRID3D_CACHE
-from ..schemas import CleanupRequest
+from ..models import CleanupRequest
 
 router = APIRouter(prefix="/cleanup", tags=["cleanup"])
 

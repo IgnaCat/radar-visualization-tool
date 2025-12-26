@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
-from ..schemas import PseudoRHIRequest, PseudoRHIResponse, RangeFilter
+from ..models import PseudoRHIRequest, PseudoRHIResponse, RangeFilter
 from ..services.pseudo_rhi import generate_pseudo_rhi_png
 from ..core.config import settings
 from ..utils import helpers
