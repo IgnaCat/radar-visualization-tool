@@ -232,11 +232,10 @@ def process_radar_to_cog(
     pkg_cached = GRID2D_CACHE.get(cache_key)
 
     if pkg_cached is None:
-        # Construir o recuperar grilla 3D cacheada
+        # Construir o recuperar grilla 3D multi-campo cacheada
 
         grid = get_or_build_grid3d(
             radar_to_use=radar_to_use,
-            field_to_use=field_to_use,
             file_hash=file_hash,
             volume=volume,
             qc_filters=qc_filters,
@@ -247,6 +246,11 @@ def process_radar_to_cog(
             grid_resolution_z=grid_resolution_z,
             session_id=session_id,
         )
+
+        # Verificar que el campo solicitado existe en la grilla
+        if field_to_use not in grid.fields:
+            available = list(grid.fields.keys())
+            raise ValueError(f"Campo '{field_to_use}' no encontrado en grilla. Disponibles: {available}")
 
         # Guardamos niveles z completos antes de colapsar el campo principal
         z_levels_full = grid.z['data'].copy()

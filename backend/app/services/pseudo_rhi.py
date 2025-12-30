@@ -430,14 +430,13 @@ def _generate_segment_transect_png(
     hmax_km = beam_height_max_km(range_max_m, elev_deg)
     z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen (igual que PPI en radar_processor)
     
-    # Generar cache key para buscar la grilla 3D
+    # Generar cache key para buscar la grilla 3D multi-campo
     qc_sig = qc_signature(qc_filters)
     grid_resolution_xy = 300 if volume == '03' else 1200
     grid_resolution_z = 300  # Siempre 300m en Z (debe coincidir con radar_processor)
     
     cache_key = grid3d_cache_key(
         file_hash=file_hash,
-        field_to_use=field_name,
         volume=volume,
         qc_sig=qc_sig,
         grid_res_xy=grid_resolution_xy,
@@ -455,23 +454,22 @@ def _generate_segment_transect_png(
             detail="No se encontró grilla 3D en cache. Debe procesarse primero un producto 2D (PPI/CAPPI/COLMAX) para generar la grilla 3D."
         )
     
-    # Reconstruir Grid desde cache
-    cached_field_name = pkg_cached.get("field_name", field_name)
-    field_metadata = pkg_cached.get("field_metadata", {})
+    # Reconstruir Grid multi-campo desde cache
+    fields_dict = {}
+    for fname, fdata in pkg_cached["fields"].items():
+        field_dict = fdata["metadata"].copy()
+        field_dict['data'] = fdata["data"]
+        fields_dict[fname] = field_dict
     
-    # Restaurar el campo completo con todos sus metadatos
-    field_dict = field_metadata.copy()
-    field_dict['data'] = pkg_cached["arr3d"]
+    # Verificar que el campo solicitado existe en la cache
+    if field_name not in fields_dict:
+        available = list(fields_dict.keys())
+        raise HTTPException(
+            status_code=400,
+            detail=f"Campo '{field_name}' no encontrado en grilla cacheada. Disponibles: {available}"
+        )
     
-    # Asegurar metadatos mínimos si no existen en cache
-    if 'units' not in field_dict:
-        field_dict['units'] = 'unknown'
-    if '_FillValue' not in field_dict:
-        field_dict['_FillValue'] = -9999.0
-    if 'long_name' not in field_dict:
-        field_dict['long_name'] = cached_field_name
-    
-    # Crear Grid con metadatos completos incluyendo time['units']
+    # Crear Grid con TODOS los campos cacheados
     grid = pyart.core.Grid(
         time={
             'data': np.array([0]),
@@ -479,7 +477,7 @@ def _generate_segment_transect_png(
             'calendar': 'gregorian',
             'standard_name': 'time'
         },
-        fields={cached_field_name: field_dict},
+        fields=fields_dict,
         metadata={'instrument_name': 'RADAR'},
         origin_latitude={'data': radar.latitude['data']},
         origin_longitude={'data': radar.longitude['data']},
@@ -492,7 +490,7 @@ def _generate_segment_transect_png(
 
     # DEBUG: verificar que la grilla sea verdaderamente 3D
     try:
-        arr3d = grid.fields[cached_field_name]['data']
+        arr3d = grid.fields[field_name]['data']
         zvals = grid.z['data']
         print(f"DEBUG grid field shape: {getattr(arr3d, 'shape', None)}, z shape: {getattr(zvals, 'shape', None)}")
         print(f"DEBUG z range (m): min={float(np.nanmin(zvals))}, max={float(np.nanmax(zvals))}")
@@ -523,7 +521,7 @@ def _generate_segment_transect_png(
     # IMPORTANTE: Usar cached_field_name (el que está en el grid) no field_name
     try:
         display.plot_cross_section(
-            cached_field_name,  # Usar el nombre del campo que realmente está en el grid
+            field_name,  # Usar el nombre del campo que realmente está en el grid
             (start_lat, start_lon),
             (end_lat_eff, end_lon_eff),
             ax=ax,

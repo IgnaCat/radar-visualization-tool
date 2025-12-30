@@ -256,19 +256,20 @@ def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
     return "g2d_" + _hash_of(payload)
 
 
-def grid3d_cache_key(*, file_hash: str, field_to_use: str,
+def grid3d_cache_key(*, file_hash: str,
                      volume: str | None, qc_sig, grid_res_xy: float,
                      grid_res_z: float, z_top_m: float, session_id=None) -> str:
     """
-    Genera cache key para grilla 3D con soporte para aislamiento por sesión.
+    Genera cache key para grilla 3D multi-campo con soporte para aislamiento por sesión.
+    CAMBIO: Ya no depende de field_to_use - una grilla sirve para todos los campos.
     
     Args:
         session_id: Identificador único de sesión (None = compartido globalmente)
     """
     payload = {
-        "v": 2,  # versión incrementada para session support
+        "v": 3,  # versión incrementada para multi-campo (incompatible con v2)
         "file": file_hash,
-        "field": str(field_to_use).upper(),
+        # "field": ELIMINADO - grideamos todos los campos
         "vol": str(volume) if volume is not None else None,
         "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple)) else qc_sig,
         "gxy": float(grid_res_xy),

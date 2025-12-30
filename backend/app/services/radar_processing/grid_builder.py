@@ -16,7 +16,6 @@ from ..grid_geometry import calculate_grid_points
 
 def get_or_build_grid3d(
     radar_to_use: pyart.core.Radar,
-    field_to_use: str,
     file_hash: str,
     volume: str | None,
     qc_filters,
@@ -28,11 +27,11 @@ def get_or_build_grid3d(
     session_id: str | None = None,
 ) -> pyart.core.Grid:
     """
-    Función para obtener o construir una grilla 3D cacheada.
+    Función para obtener o construir una grilla 3D multi-campo cacheada.
+    CAMBIO: Ya no recibe field_to_use - griddea TODOS los campos disponibles.
     
     Args:
         radar_to_use: Objeto radar de PyART
-        field_to_use: Nombre del campo a procesar
         file_hash: Hash del archivo para cache key
         volume: Volumen del radar (afecta resolución)
         qc_filters: Filtros QC a aplicar durante interpolación
@@ -44,13 +43,12 @@ def get_or_build_grid3d(
         session_id: Identificador de sesión para aislar cache
     
     Returns:
-        pyart.core.Grid con la grilla 3D construida o recuperada de cache
+        pyart.core.Grid con la grilla 3D multi-campo construida o recuperada de cache
     """
-    # Generar cache key con session_id
+    # Generar cache key sin field_to_use
     qc_sig = qc_signature(qc_filters)
     cache_key = grid3d_cache_key(
         file_hash=file_hash,
-        field_to_use=field_to_use,
         volume=volume,
         qc_sig=qc_sig,
         grid_res_xy=grid_resolution_xy,
@@ -63,23 +61,14 @@ def get_or_build_grid3d(
     pkg_cached = GRID3D_CACHE.get(cache_key)
     
     if pkg_cached is not None:
-        # Reconstruir Grid desde cache con todos los metadatos del campo
-        cached_field_name = pkg_cached.get("field_name", field_to_use)
-        field_metadata = pkg_cached.get("field_metadata", {})
+        # Reconstruir Grid multi-campo desde cache
+        fields_dict = {}
+        for fname, fdata in pkg_cached["fields"].items():
+            field_dict = fdata["metadata"].copy()
+            field_dict['data'] = fdata["data"]
+            fields_dict[fname] = field_dict
         
-        # Restaurar el campo completo con todos sus metadatos
-        field_dict = field_metadata.copy()
-        field_dict['data'] = pkg_cached["arr3d"]
-        
-        # Asegurar metadatos mínimos si no existen en cache
-        if 'units' not in field_dict:
-            field_dict['units'] = 'unknown'
-        if '_FillValue' not in field_dict:
-            field_dict['_FillValue'] = -9999.0
-        if 'long_name' not in field_dict:
-            field_dict['long_name'] = cached_field_name
-        
-        # Crear Grid con metadatos completos a partir del array cacheado
+        # Crear Grid con TODOS los campos cacheados
         grid = pyart.core.Grid(
             time={
                 'data': np.array([0]),
@@ -87,7 +76,7 @@ def get_or_build_grid3d(
                 'calendar': 'gregorian',
                 'standard_name': 'time'
             },
-            fields={cached_field_name: field_dict},
+            fields=fields_dict,
             metadata={'instrument_name': 'RADAR'},
             origin_latitude={'data': radar_to_use.latitude['data']},
             origin_longitude={'data': radar_to_use.longitude['data']},
@@ -99,8 +88,12 @@ def get_or_build_grid3d(
         grid.projection = pkg_cached["projection"]
         return grid
     
-    # Construir grilla 3D desde radar
-    gf = build_gatefilter(radar_to_use, field_to_use, qc_filters, is_rhi=False)
+    # Construir grilla 3D con TODOS los campos del radar
+    all_fields = list(radar_to_use.fields.keys())
+    
+    # Usar primer campo disponible para gatefilter (aplica a todos)
+    first_field = all_fields[0] if all_fields else None
+    gf = build_gatefilter(radar_to_use, first_field, qc_filters, is_rhi=False)
     
     grid_origin = (
         float(radar_to_use.latitude['data'][0]),
@@ -119,12 +112,8 @@ def get_or_build_grid3d(
         grid_resolution_z, grid_resolution_xy
     )
     
-    # Campos a incluir en la grilla: principal + todos los campos de filtrado QC (ej. RHOHV)
-    fields_for_grid = {field_to_use}
-    for qc_name in AFFECTS_INTERP_FIELDS:
-        if qc_name in radar_to_use.fields:
-            fields_for_grid.add(qc_name)
-    fields_for_grid = list(fields_for_grid)
+    # CAMBIO: Gridear TODOS los campos disponibles en el radar
+    fields_for_grid = all_fields
     
     grid = pyart.map.grid_from_radars(
         radar_to_use,
@@ -140,18 +129,20 @@ def get_or_build_grid3d(
     )
     grid.to_xarray()
     
-    # Guardamos en caché el 3D grid completo, antes de colapsar.
-    # Guardar todos los metadatos del campo excepto 'data'
-    field_metadata = {k: v for k, v in grid.fields[field_to_use].items() if k != 'data'}
+    # Cachear TODOS los campos en estructura multi-campo
+    fields_to_cache = {}
+    for fname in grid.fields.keys():
+        fields_to_cache[fname] = {
+            "data": grid.fields[fname]['data'].copy(),
+            "metadata": {k: v for k, v in grid.fields[fname].items() if k != 'data'}
+        }
     
     pkg_to_cache = {
-        "arr3d": grid.fields[field_to_use]['data'].copy(),
+        "fields": fields_to_cache,  # Dict con todos los campos
         "x": grid.x['data'].copy(),
         "y": grid.y['data'].copy(),
         "z": grid.z['data'].copy(),
         "projection": dict(getattr(grid, "projection", {}) or {}),
-        "field_name": field_to_use,
-        "field_metadata": field_metadata,
     }
     GRID3D_CACHE[cache_key] = pkg_to_cache
     
