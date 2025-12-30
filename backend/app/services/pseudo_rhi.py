@@ -92,7 +92,7 @@ def variable_radar_cross_section(
     - gf: GateFilter para enmascarar datos (opcional).
     """
     ######################################################################
-    tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
+    tif_path = Path(settings.DATA_DIR) / "mosaico_argentina_2.tif"
 
     radial_angle = calcule_radial_angle(start_lat, start_lon, end_lat, end_lon)
 
@@ -551,7 +551,7 @@ def _generate_segment_transect_png(
         print(f"WARNING: No se pudo ajustar límites verticales: {e}")
     
     # 5) Agregar perfil de terreno
-    tif_path = Path("app/storage/data/mosaico_argentina_2.tif")
+    tif_path = Path(settings.DATA_DIR) / "mosaico_argentina_2.tif"
     try:
         # Samplear terreno a lo largo de la línea
         step_m = 500.0  # puntos cada 500m
