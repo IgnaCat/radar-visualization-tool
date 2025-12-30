@@ -107,11 +107,6 @@ docker compose up --build
 docker compose down
 ```
 
-### Persistencia de archivos
-
-- Por defecto, los archivos subidos y temporales se guardan en tu PC (carpetas backend/app/storage/\*).
-- Si quieres que sean efímeros (solo en RAM del contenedor), elimina la sección `volumes:` del backend en `docker-compose.yml`.
-
 ### Variables de entorno
 
 - Copia `.env.example` a `.env` y ajusta según tu entorno.
