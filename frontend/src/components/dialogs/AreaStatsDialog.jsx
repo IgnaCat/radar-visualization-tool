@@ -16,6 +16,11 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Menu,
+  MenuItem,
+  Checkbox,
+  ListItemText,
+  CircularProgress,
 } from "@mui/material";
 import {
   TrendingDown,
@@ -26,6 +31,7 @@ import {
   BarChart as BarChartIcon,
   CheckCircle,
   Add as AddIcon,
+  Close as CloseIcon,
 } from "@mui/icons-material";
 import Draggable from "react-draggable";
 
@@ -75,10 +81,77 @@ function PaperComponent(props) {
  * - requestFn: (payload) => Promise<{ noCoverage?: boolean, stats?: {min,max,mean,median,std,count,valid_pct}, hist?: {bins:number[],counts:number[]} }>
  * - payload: { filepath, field, product, elevation?, height?, filters?, polygon }
  */
-export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
+export default function AreaStatsDialog({
+  open,
+  onClose,
+  requestFn,
+  payload,
+  fields_present,
+}) {
   const [loading, setLoading] = useState(false);
   const [resp, setResp] = useState(null);
   const [error, setError] = useState("");
+
+  // Estado para el selector de variables adicionales
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [selectedFields, setSelectedFields] = useState([]);
+  const [additionalStats, setAdditionalStats] = useState({});
+  const [loadingFields, setLoadingFields] = useState(new Set());
+
+  const handleOpenFieldSelector = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseFieldSelector = () => {
+    setAnchorEl(null);
+  };
+
+  const handleToggleField = async (field) => {
+    if (field === currentField) return; // No agregar la variable actual
+
+    const isSelected = selectedFields.includes(field);
+
+    if (isSelected) {
+      // Remover el campo
+      setError("");
+      setSelectedFields((prev) => prev.filter((f) => f !== field));
+      setAdditionalStats((prev) => {
+        const newStats = { ...prev };
+        delete newStats[field];
+        return newStats;
+      });
+    } else {
+      // Agregar el campo y cargar sus estadísticas
+      setSelectedFields((prev) => [...prev, field]);
+      setLoadingFields((prev) => new Set(prev).add(field));
+
+      try {
+        const fieldPayload = { ...payload, field };
+        console.log(
+          "Cargando estadísticas para campo adicional:",
+          field,
+          fieldPayload
+        );
+        const result = await requestFn(fieldPayload);
+        console.log(`Estadísticas cargadas para ${field}:`, result.stats);
+
+        setError("");
+        setAdditionalStats((prev) => ({
+          ...prev,
+          [field]: result.stats || null,
+        }));
+      } catch (e) {
+        console.error(`Error cargando estadísticas para ${field}:`, e);
+        setError(e?.response?.data?.detail || String(e));
+      } finally {
+        setLoadingFields((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(field);
+          return newSet;
+        });
+      }
+    }
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -178,7 +251,9 @@ export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
       <DialogContent sx={{ p: 3 }}>
         {loading && (
           <Box sx={{ textAlign: "center", py: 4 }}>
-            <Typography color="text.secondary">Calculando estadísticas...</Typography>
+            <Typography color="text.secondary">
+              Calculando estadísticas...
+            </Typography>
           </Box>
         )}
 
@@ -205,7 +280,9 @@ export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
               textAlign: "center",
             }}
           >
-            <Typography>No hay cobertura de datos en el polígono seleccionado.</Typography>
+            <Typography>
+              No hay cobertura de datos en el polígono seleccionado.
+            </Typography>
           </Box>
         )}
 
@@ -226,7 +303,8 @@ export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
                 Variable analizada
               </Typography>
               <Typography variant="subtitle1" fontWeight="bold">
-                {FIELD_LABELS[currentField] || currentField}
+                {FIELD_LABELS[currentField] + " - " + currentField ||
+                  currentField}
               </Typography>
               {/* {currentUnit && (
                 <Chip
@@ -297,16 +375,16 @@ export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
 
             {/* Sección para agregar más variables (placeholder visual) */}
             <Box>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <Typography variant="subtitle1" fontWeight="medium">
                   Comparar con otras variables
                 </Typography>
-                <Tooltip title="Próximamente: agregar más variables para comparar">
+                <Tooltip title="Agregar variables para comparar">
                   <IconButton
                     size="small"
-                    disabled
+                    onClick={handleOpenFieldSelector}
                     sx={{
-                      border: "2px dashed",
+                      border: "2px solid",
                       borderColor: "divider",
                     }}
                   >
@@ -315,21 +393,97 @@ export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
                 </Tooltip>
               </Box>
 
-              {/* Vista previa de cómo se verían múltiples variables */}
-              <Box
-                sx={{
-                  p: 2,
-                  bgcolor: "action.hover",
-                  borderRadius: 1,
-                  border: "2px dashed",
-                  borderColor: "divider",
+              {/* Menú selector de variables */}
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleCloseFieldSelector}
+                PaperProps={{
+                  sx: { maxHeight: 400, minWidth: 250 },
                 }}
               >
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: "block" }}>
-                  💡 Ejemplo de visualización con múltiples variables:
-                </Typography>
+                <Box
+                  sx={{
+                    px: 2,
+                    py: 1,
+                    borderBottom: "1px solid",
+                    borderColor: "divider",
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    Selecciona variables para comparar
+                  </Typography>
+                </Box>
+                {fields_present && fields_present.length > 0 ? (
+                  fields_present.map((field) => {
+                    const isCurrentField = field === currentField;
+                    const isSelected = selectedFields.includes(field);
+                    const isLoading = loadingFields.has(field);
 
-                {/* Mockup de tabla comparativa */}
+                    return (
+                      <MenuItem
+                        key={field}
+                        onClick={() =>
+                          !isCurrentField && handleToggleField(field)
+                        }
+                        disabled={isCurrentField || isLoading}
+                        sx={{
+                          opacity: isCurrentField ? 0.5 : 1,
+                          bgcolor: isCurrentField
+                            ? "action.selected"
+                            : "inherit",
+                        }}
+                      >
+                        <Checkbox
+                          checked={isSelected || isCurrentField}
+                          disabled={isCurrentField}
+                          sx={{ mr: 1 }}
+                        />
+                        <ListItemText
+                          primary={field}
+                          secondary={
+                            isCurrentField ? "(Variable actual)" : null
+                          }
+                        />
+                        {isLoading && (
+                          <CircularProgress size={20} sx={{ ml: 1 }} />
+                        )}
+                      </MenuItem>
+                    );
+                  })
+                ) : (
+                  <MenuItem disabled>
+                    <ListItemText primary="No hay variables disponibles" />
+                  </MenuItem>
+                )}
+              </Menu>
+
+              {/* Chips de variables seleccionadas */}
+              {selectedFields.length > 0 && (
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1,
+                    flexWrap: "wrap",
+                    mb: 2,
+                  }}
+                >
+                  {selectedFields.map((field) => (
+                    <Chip
+                      key={field}
+                      label={field}
+                      size="small"
+                      onDelete={() => handleToggleField(field)}
+                      deleteIcon={<CloseIcon />}
+                      color="primary"
+                      variant="outlined"
+                    />
+                  ))}
+                </Box>
+              )}
+
+              {/* Tabla comparativa real con datos */}
+              {selectedFields.length > 0 && (
                 <Box sx={{ overflowX: "auto" }}>
                   <Box
                     component="table"
@@ -337,15 +491,33 @@ export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
                       width: "100%",
                       borderCollapse: "separate",
                       borderSpacing: "8px 4px",
-                      opacity: 0.6,
                     }}
                   >
                     <thead>
                       <tr>
-                        <Box component="th" sx={{ textAlign: "left", fontSize: "0.75rem", pb: 1 }}>
+                        <Box
+                          component="th"
+                          sx={{ textAlign: "left", fontSize: "0.75rem", pb: 1 }}
+                        >
                           Estadística
                         </Box>
-                        {["DBZH", "ZDR", "RHOHV"].map((field) => (
+                        <Box
+                          component="th"
+                          sx={{
+                            textAlign: "center",
+                            fontSize: "0.75rem",
+                            pb: 1,
+                            px: 1,
+                          }}
+                        >
+                          <Chip
+                            label={currentField}
+                            size="small"
+                            color="primary"
+                            sx={{ fontSize: "0.7rem", height: "20px" }}
+                          />
+                        </Box>
+                        {selectedFields.map((field) => (
                           <Box
                             key={field}
                             component="th"
@@ -368,47 +540,176 @@ export default function AreaStatsDialog({ open, onClose, requestFn, payload }) {
                     </thead>
                     <tbody>
                       {[
-                        { label: "Mín", values: ["-12.5", "-2.1", "0.85"] },
-                        { label: "Máx", values: ["58.3", "8.2", "0.99"] },
-                        { label: "Media", values: ["32.4", "1.8", "0.95"] },
-                        { label: "Mediana", values: ["34.1", "1.5", "0.96"] },
+                        { label: "Mínimo", key: "min" },
+                        { label: "Máximo", key: "max" },
+                        { label: "Media", key: "mean" },
+                        { label: "Mediana", key: "median" },
+                        { label: "Desv. Est.", key: "std" },
                       ].map((row, idx) => (
                         <tr key={idx}>
-                          <Box component="td" sx={{ fontSize: "0.7rem", fontWeight: "bold" }}>
+                          <Box
+                            component="td"
+                            sx={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                          >
                             {row.label}
                           </Box>
-                          {row.values.map((val, i) => (
-                            <Box
-                              key={i}
-                              component="td"
-                              sx={{
-                                textAlign: "center",
-                                fontSize: "0.75rem",
-                                bgcolor: "background.paper",
-                                borderRadius: 0.5,
-                                px: 1,
-                                py: 0.5,
-                              }}
-                            >
-                              {val}
-                            </Box>
-                          ))}
+                          <Box
+                            component="td"
+                            sx={{
+                              textAlign: "center",
+                              fontSize: "0.75rem",
+                              bgcolor: "primary.light",
+                              color: "primary.contrastText",
+                              borderRadius: 0.5,
+                              px: 1,
+                              py: 0.5,
+                              fontWeight: "bold",
+                            }}
+                          >
+                            {resp?.stats?.[row.key]?.toFixed(2) || "-"}
+                          </Box>
+                          {selectedFields.map((field) => {
+                            const stats = additionalStats[field];
+                            const isLoading = loadingFields.has(field);
+
+                            return (
+                              <Box
+                                key={field}
+                                component="td"
+                                sx={{
+                                  textAlign: "center",
+                                  fontSize: "0.75rem",
+                                  bgcolor: "background.paper",
+                                  borderRadius: 0.5,
+                                  px: 1,
+                                  py: 0.5,
+                                }}
+                              >
+                                {isLoading ? (
+                                  <CircularProgress size={12} />
+                                ) : (
+                                  stats?.[row.key]?.toFixed(2) || "-"
+                                )}
+                              </Box>
+                            );
+                          })}
                         </tr>
                       ))}
                     </tbody>
                   </Box>
                 </Box>
+              )}
 
-                <Typography variant="caption" color="text.secondary" sx={{ mt: 1.5, display: "block", fontStyle: "italic" }}>
-                  Al agregar variables, las estadísticas se mostrarían en columnas para fácil comparación
-                </Typography>
-              </Box>
+              {/* Vista previa de cómo se verían múltiples variables - solo mostrar si NO hay variables seleccionadas */}
+              {selectedFields.length === 0 && (
+                <Box
+                  sx={{
+                    p: 2,
+                    bgcolor: "action.hover",
+                    borderRadius: 1,
+                    border: "2px solid",
+                    borderColor: "divider",
+                    mt: 2,
+                  }}
+                >
+                  {/* Mockup de tabla comparativa */}
+                  <Box sx={{ overflowX: "auto" }}>
+                    <Box
+                      component="table"
+                      sx={{
+                        width: "100%",
+                        borderCollapse: "separate",
+                        borderSpacing: "8px 4px",
+                        opacity: 0.6,
+                      }}
+                    >
+                      <thead>
+                        <tr>
+                          <Box
+                            component="th"
+                            sx={{
+                              textAlign: "left",
+                              fontSize: "0.75rem",
+                              pb: 1,
+                            }}
+                          >
+                            Estadística
+                          </Box>
+                          {["DBZH", "ZDR", "RHOHV"].map((field) => (
+                            <Box
+                              key={field}
+                              component="th"
+                              sx={{
+                                textAlign: "center",
+                                fontSize: "0.75rem",
+                                pb: 1,
+                                px: 1,
+                              }}
+                            >
+                              <Chip
+                                label={field}
+                                size="small"
+                                variant="outlined"
+                                sx={{ fontSize: "0.7rem", height: "20px" }}
+                              />
+                            </Box>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[
+                          { label: "Mín", values: ["-", "-", "-"] },
+                          { label: "Máx", values: ["-", "-", "-"] },
+                          { label: "Media", values: ["-", "-", "-"] },
+                          { label: "Mediana", values: ["-", "-", "-"] },
+                        ].map((row, idx) => (
+                          <tr key={idx}>
+                            <Box
+                              component="td"
+                              sx={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                            >
+                              {row.label}
+                            </Box>
+                            {row.values.map((val, i) => (
+                              <Box
+                                key={i}
+                                component="td"
+                                sx={{
+                                  textAlign: "center",
+                                  fontSize: "0.75rem",
+                                  bgcolor: "background.paper",
+                                  borderRadius: 0.5,
+                                  px: 1,
+                                  py: 0.5,
+                                }}
+                              >
+                                {val}
+                              </Box>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </Box>
+                  </Box>
+
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ mt: 1.5, display: "block", fontStyle: "italic" }}
+                  >
+                    Agrega variables, las estadísticas se mostrarían en columnas
+                    para fácil comparación
+                  </Typography>
+                </Box>
+              )}
             </Box>
           </Box>
         )}
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, borderTop: "1px solid", borderColor: "divider" }}>
+      <DialogActions
+        sx={{ p: 2, borderTop: "1px solid", borderColor: "divider" }}
+      >
         <Button onClick={onClose} variant="contained">
           Cerrar
         </Button>

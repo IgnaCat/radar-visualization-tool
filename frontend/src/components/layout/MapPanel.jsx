@@ -409,6 +409,11 @@ export default function MapPanel({
           filters: filtersUsed,
           polygon: areaPolygon,
         }}
+        fields_present={
+          Array.from(
+            new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
+          ) || ["DBZH", "KDP", "RHOHV", "ZDR"]
+        }
       />
 
       <ElevationProfileDialog

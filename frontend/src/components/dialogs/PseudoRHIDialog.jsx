@@ -134,8 +134,8 @@ export default function PseudoRHIDialog({
       const start = hasStart
         ? { lat: Number(startLat), lon: Number(startLon) }
         : radarSite
-          ? { lat: radarSite.lat, lon: radarSite.lon }
-          : null;
+        ? { lat: radarSite.lat, lon: radarSite.lon }
+        : null;
 
       if (!start) {
         setElevationProfile(null);
@@ -332,10 +332,6 @@ export default function PseudoRHIDialog({
           Pseudo-RHI (corte vertical)
         </DialogTitle>
         <DialogContent id="draggable-dialog-title" dividers>
-          <Typography variant="body2" gutterBottom>
-            Seleccioná los puntos en el mapa
-          </Typography>
-
           <Box display="grid" gridTemplateColumns="1fr" gap={2} mt={2}>
             <Box display="grid" gridTemplateColumns="1fr" gap={1}>
               <Autocomplete
@@ -359,7 +355,12 @@ export default function PseudoRHIDialog({
                   value.map((option, index) => {
                     const { key, ...tagProps } = getTagProps({ index });
                     return (
-                      <Chip key={key} label={option} size="small" {...tagProps} />
+                      <Chip
+                        key={key}
+                        label={option}
+                        size="small"
+                        {...tagProps}
+                      />
                     );
                   })
                 }
@@ -433,8 +434,9 @@ export default function PseudoRHIDialog({
 
           {radarSite && (
             <Typography variant="caption" sx={{ opacity: 0.7 }}>
-              Centro del radar: lat {radarSite.lat.toFixed?.(4) ?? radarSite.lat},
-              lon {radarSite.lon.toFixed?.(4) ?? radarSite.lon}
+              Centro del radar: lat{" "}
+              {radarSite.lat.toFixed?.(4) ?? radarSite.lat}, lon{" "}
+              {radarSite.lon.toFixed?.(4) ?? radarSite.lon}
             </Typography>
           )}
 
@@ -459,7 +461,12 @@ export default function PseudoRHIDialog({
                   onFiltersChange={setFilters}
                   showVariableFilterDefault={true}
                 />
-                <Box mt={2} display="grid" gridTemplateColumns="1fr 1fr" gap={2}>
+                <Box
+                  mt={2}
+                  display="grid"
+                  gridTemplateColumns="1fr 1fr"
+                  gap={2}
+                >
                   <TextField
                     size="small"
                     label="Distancia máx (km)"
@@ -528,10 +535,10 @@ export default function PseudoRHIDialog({
                             maxWidth: "100%",
                             borderRadius: 8,
                             cursor: "pointer",
-                            transition: "opacity 0.2s"
+                            transition: "opacity 0.2s",
                           }}
-                          onMouseOver={(e) => e.target.style.opacity = "0.8"}
-                          onMouseOut={(e) => e.target.style.opacity = "1"}
+                          onMouseOver={(e) => (e.target.style.opacity = "0.8")}
+                          onMouseOut={(e) => (e.target.style.opacity = "1")}
                           onClick={() => setExpandedImage(result)}
                         />
                       </Box>
@@ -545,25 +552,34 @@ export default function PseudoRHIDialog({
               </Box>
 
               {/* Perfil de elevación del terreno */}
-              {elevationProfile?.profile && elevationProfile.profile.length > 0 && (
-                <>
-                  <Divider sx={{ my: 2 }} />
-                  <Box>
-                    <Typography variant="subtitle2" color="text.secondary" mb={2}>
-                      Perfil de elevación del terreno
-                    </Typography>
-                    <ElevationChart
-                      profileData={elevationProfile.profile}
-                      height={200}
-                      clickable={true}
-                      onClick={() => setExpandedElevation(true)}
-                    />
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                      Haz clic en el gráfico para verlo más grande
-                    </Typography>
-                  </Box>
-                </>
-              )}
+              {elevationProfile?.profile &&
+                elevationProfile.profile.length > 0 && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Box>
+                      <Typography
+                        variant="subtitle2"
+                        color="text.secondary"
+                        mb={2}
+                      >
+                        Perfil de elevación del terreno
+                      </Typography>
+                      <ElevationChart
+                        profileData={elevationProfile.profile}
+                        height={200}
+                        clickable={true}
+                        onClick={() => setExpandedElevation(true)}
+                      />
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ mt: 1, display: "block" }}
+                      >
+                        Haz clic en el gráfico para verlo más grande
+                      </Typography>
+                    </Box>
+                  </>
+                )}
             </>
           )}
 
@@ -578,7 +594,11 @@ export default function PseudoRHIDialog({
           <Button onClick={handleClose} color="secondary">
             Cerrar
           </Button>
-          <Button onClick={handleGenerate} variant="contained" disabled={loading}>
+          <Button
+            onClick={handleGenerate}
+            variant="contained"
+            disabled={loading}
+          >
             {loading ? "Generando..." : "Generar corte"}
           </Button>
         </DialogActions>
@@ -591,9 +611,7 @@ export default function PseudoRHIDialog({
         maxWidth="lg"
         fullWidth
       >
-        <DialogTitle>
-          Pseudo-RHI - Campo: {expandedImage?.field}
-        </DialogTitle>
+        <DialogTitle>Pseudo-RHI - Campo: {expandedImage?.field}</DialogTitle>
         <DialogContent>
           <Box
             display="flex"
@@ -608,7 +626,7 @@ export default function PseudoRHIDialog({
                 style={{
                   maxWidth: "100%",
                   maxHeight: "80vh",
-                  objectFit: "contain"
+                  objectFit: "contain",
                 }}
               />
             )}
@@ -639,9 +657,7 @@ export default function PseudoRHIDialog({
         maxWidth="xl"
         fullWidth
       >
-        <DialogTitle>
-          Perfil de elevación del terreno
-        </DialogTitle>
+        <DialogTitle>Perfil de elevación del terreno</DialogTitle>
         <DialogContent>
           <Box sx={{ minHeight: "60vh", py: 2 }}>
             {elevationProfile?.profile && (
@@ -654,7 +670,10 @@ export default function PseudoRHIDialog({
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setExpandedElevation(false)} variant="contained">
+          <Button
+            onClick={() => setExpandedElevation(false)}
+            variant="contained"
+          >
             Cerrar
           </Button>
         </DialogActions>
