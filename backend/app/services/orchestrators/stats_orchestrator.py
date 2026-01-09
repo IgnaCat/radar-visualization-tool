@@ -2,6 +2,7 @@
 Orchestrator para cálculo de estadísticas sobre áreas de radar.
 Contiene la lógica de negocio previamente en el router radar_stats.py.
 """
+import pyart
 import pyproj
 import numpy as np
 from pathlib import Path
@@ -23,6 +24,7 @@ from ..filter_application import (
     apply_visual_filters,
     apply_qc_filters,
 )
+from ..grid_generator import generate_grid2d_on_demand
 
 
 ALLOWED_GEOMS = {"Polygon", "MultiPolygon"}
@@ -289,6 +291,103 @@ class StatsOrchestrator:
         }
 
     @staticmethod
+    def compute_stats_from_generated_grid(
+        filepath: str,
+        field_requested: str,
+        product: str,
+        elevation: Optional[int],
+        cappi_height: Optional[int],
+        volume: Optional[str],
+        polygon_gj_4326: dict,
+        filters: List,
+        session_id: Optional[str] = None,
+    ) -> Dict:
+        """
+        Genera grilla 2D bajo demanda cuando no está en cache y calcula estadísticas.
+        No cachea el resultado - solo para uso temporal en stats.
+        
+        Args:
+            filepath: Path al archivo NetCDF
+            field_requested: Campo solicitado
+            product: Tipo de producto (PPI, CAPPI, COLMAX)
+            elevation: Índice de elevación
+            cappi_height: Altura CAPPI
+            volume: Volumen del radar
+            polygon_gj_4326: Polígono GeoJSON en EPSG:4326
+            filters: Filtros a aplicar
+            session_id: ID de sesión
+        
+        Returns:
+            Dict con stats, noCoverage y reason
+        """
+        # Leer radar desde disco
+        radar = pyart.io.read(filepath)
+        
+        # Generar hash del archivo
+        file_hash = md5_file(filepath)[:12]
+        
+        # Generar grilla 2D bajo demanda (reutiliza grilla 3D cacheada con todos los campos QC)
+        pkg = generate_grid2d_on_demand(
+            radar=radar,
+            field_requested=field_requested,
+            product=product,
+            file_hash=file_hash,
+            volume=volume,
+            elevation=elevation,
+            cappi_height=cappi_height,
+            filters=filters,
+            session_id=session_id,
+        )
+        
+        # Extraer datos de la grilla generada
+        arr = pkg["arr"]
+        transform = pkg["transform"]
+        crs_wkt = pkg["crs"]
+        qc_dict = pkg["qc"]
+        
+        # Aplicar filtros dinámicamente (visual y QC)
+        field_upper = field_requested.upper()
+        qc_filters, visual_filters = separate_filters(filters, field_upper)
+        
+        arr = apply_visual_filters(arr, visual_filters, field_upper)
+        if qc_filters:
+            arr = apply_qc_filters(arr, qc_filters, qc_dict)
+        
+        # Reproyectar polígono al CRS de la grilla
+        crs = pyproj.CRS.from_wkt(crs_wkt)
+        gj_dst = StatsOrchestrator.reproject_polygon(polygon_gj_4326, crs)
+        g_dst = shape(gj_dst)
+        
+        # Límites del raster
+        ny, nx = arr.shape
+        xmin, ymax = transform * (0, 0)
+        xmax, ymin = transform * (nx, ny)
+        
+        # Verificar intersección
+        if not g_dst.intersects(box(xmin, ymin, xmax, ymax)):
+            return {"noCoverage": True, "reason": "Afuera de limites"}
+        
+        # Máscara del polígono sobre la grilla
+        poly_mask = geometry_mask(
+            [gj_dst],
+            invert=True,
+            out_shape=arr.shape,
+            transform=transform
+        )
+        
+        # Calcular estadísticas
+        stats = StatsOrchestrator.calculate_stats(arr, poly_mask)
+        
+        if stats is None:
+            return {"noCoverage": True, "reason": "Selección vacia"}
+        
+        return {
+            "stats": stats,
+            "noCoverage": False,
+            "reason": None,
+        }
+
+    @staticmethod
     def process_stats_request(payload: RadarStatsRequest) -> RadarStatsResponse:
         """
         Método principal que orquesta el cálculo de estadísticas.
@@ -323,7 +422,7 @@ class StatsOrchestrator:
             session_id=payload.session_id,
         )
 
-        # 5. Calcular estadísticas desde cache
+        # 5. Intentar calcular estadísticas desde cache
         stats_result = StatsOrchestrator.compute_stats_from_cache(
             cache_key,
             payload.polygon_geojson,
@@ -331,9 +430,23 @@ class StatsOrchestrator:
             field
         )
 
-        # 6. Verificar cobertura
+        # 6. Si no está cacheado, generar grilla bajo demanda
+        if stats_result.get("noCoverage") and stats_result.get("reason") == "No cacheado":
+            stats_result = StatsOrchestrator.compute_stats_from_generated_grid(
+                filepath=filepath,
+                field_requested=payload.field,
+                product=payload.product,
+                elevation=payload.elevation,
+                cappi_height=payload.height,
+                volume=volume,
+                polygon_gj_4326=payload.polygon_geojson,
+                filters=payload.filters or [],
+                session_id=payload.session_id,
+            )
+
+        # 7. Verificar cobertura final
         if stats_result.get("noCoverage"):
             raise ValueError(stats_result.get("reason", "No hay cobertura"))
 
-        # 7. Retornar respuesta
+        # 8. Retornar respuesta
         return RadarStatsResponse(**stats_result)
