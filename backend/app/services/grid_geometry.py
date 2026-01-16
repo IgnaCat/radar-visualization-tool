@@ -27,7 +27,6 @@ def beam_height_max_km(range_max_m: float, elev_deg: float, antenna_alt_m: float
 
 
 def calculate_z_limits(
-    product: str,
     range_max_m: float,
     elevation: int = 0,
     cappi_height: float = 4000,
@@ -37,7 +36,6 @@ def calculate_z_limits(
     Calcula límites verticales (z_min, z_max) según el tipo de producto.
     
     Args:
-        product: Tipo de producto ('PPI', 'CAPPI', 'COLMAX')
         range_max_m: Rango máximo del radar en metros
         elevation: Índice de elevación (para PPI)
         cappi_height: Altura CAPPI en metros (para CAPPI)
@@ -49,19 +47,18 @@ def calculate_z_limits(
             - z_max: Altura máxima en metros
             - elev_deg: Ángulo de elevación usado (None para CAPPI)
     """
-    product_upper = product.upper()
+    # if product_upper == "CAPPI":
+    #     z_top_m = cappi_height + 2000  # +2 km de margen
+    #     elev_deg = None
+    # No hago diferenciacion por vista para manejar siempre la misma grilla 3d
+        
+
+    if radar_fixed_angles is None:
+        raise ValueError("radar_fixed_angles requerido para PPI/COLMAX")
     
-    if product_upper == "CAPPI":
-        z_top_m = cappi_height + 2000  # +2 km de margen
-        elev_deg = None
-        
-    else:  # PPI o COLMAX
-        if radar_fixed_angles is None:
-            raise ValueError("radar_fixed_angles requerido para PPI/COLMAX")
-        
-        elev_deg = float(radar_fixed_angles[elevation])
-        hmax_km = beam_height_max_km(range_max_m, elev_deg)
-        z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen
+    elev_deg = float(radar_fixed_angles[elevation])
+    hmax_km = beam_height_max_km(range_max_m, elev_deg)
+    z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen
     
     return (0.0, z_top_m, elev_deg)
 

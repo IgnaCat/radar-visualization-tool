@@ -41,6 +41,7 @@ def generate_grid2d_on_demand(
     """
     Genera una grilla 2D bajo demanda SIN cachearla.
     Reutiliza get_or_build_grid3d (que cachea la 3D con TODOS los campos) y luego colapsa.
+    (Mas q nada utilizada para estadísticas cuando el campo no está cacheado)
     
     Args:
         radar: Objeto radar de PyART
@@ -77,7 +78,6 @@ def generate_grid2d_on_demand(
     
     # Calcular límites y resolución de grilla con todos los parámetros necesarios
     z_min, z_max, elev_deg_used = calculate_z_limits(
-        product=product_upper,
         range_max_m=range_max_m,
         elevation=elevation,
         cappi_height=cappi_height,

@@ -197,7 +197,7 @@ def process_radar_to_cog(
 
     # Calcular límites Z según producto
     z_min, z_max, elev_deg = calculate_z_limits(
-        product, range_max_m, elevation, cappi_height, radar.fixed_angle['data']
+        range_max_m, elevation, cappi_height, radar.fixed_angle['data']
     )
     z_grid_limits = (z_min, z_max)
     y_grid_limits = (-range_max_m, range_max_m)
