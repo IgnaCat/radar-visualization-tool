@@ -24,6 +24,7 @@ from .radar_common import (
 from .grid_geometry import (
     calculate_z_limits,
     calculate_grid_resolution,
+    calculate_grid_points
 )
 from .product_preparation import (
     prepare_radar_for_product,
@@ -35,7 +36,7 @@ from .filter_application import (
     apply_qc_filters
 )
 from .radar_processing import (
-    get_or_build_grid3d,
+    get_or_build_grid3d_with_operator,
     collapse_grid_to_2d,
     create_cog_from_warped_array
 )
@@ -171,6 +172,12 @@ def process_radar_to_cog(
     cmap_override = (colormap_overrides or {}).get(field_requested, None)
     cmap, vmin, vmax, cmap_key = colormap_for(field_key, override_cmap=cmap_override)
 
+    # Calcular límites Z según producto ANTES de prepare_radar_for_product
+    range_max_m = safe_range_max_m(radar)
+    z_min, z_max, elev_deg = calculate_z_limits(
+        range_max_m, elevation, cappi_height, radar.fixed_angle['data']
+    )
+
     # Preparar radar según producto (PPI/CAPPI/COLMAX)
     field_name = fill_dbzh_if_needed(radar, field_name, product)
     radar_to_use, field_to_use = prepare_radar_for_product(
@@ -193,26 +200,28 @@ def process_radar_to_cog(
 
     # Creamos la grilla
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
-    range_max_m = safe_range_max_m(radar)
 
-    # Calcular límites Z según producto
-    z_min, z_max, elev_deg = calculate_z_limits(
-        range_max_m, elevation, cappi_height, radar.fixed_angle['data']
-    )
-    z_grid_limits = (z_min, z_max)
-    y_grid_limits = (-range_max_m, range_max_m)
-    x_grid_limits = (-range_max_m, range_max_m)
+    # Método de interpolación para grilla
+    interp = 'Barnes2'
 
     # Calculamos la cantidad de puntos en cada dimensión
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
+    z_grid_limits = (z_min, z_max)
+    y_grid_limits = (-range_max_m, range_max_m)
+    x_grid_limits = (-range_max_m, range_max_m)
+    grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
 
-    interp = 'nearest'
+    # Calcular puntos de grilla
+    z_points, y_points, x_points = calculate_grid_points(
+        grid_limits[0], grid_limits[1], grid_limits[2],
+        grid_resolution_z, grid_resolution_xy
+    )
+    grid_shape = (z_points, y_points, x_points)
 
     # Separar filtros QC (RHOHV) vs otros (todos se aplicarán post-grid como máscaras 2D)
     # Ya no forzamos regridding por filtros: la grilla se genera UNA sola vez
     qc_filters, visual_filters = separate_filters(filters, field_to_use)
-
     # No usamos needs_regrid ni qc_sig (el cache ignora filtros para regridding)
 
     # Intentamos cachear la 2D colapsada
@@ -233,17 +242,16 @@ def process_radar_to_cog(
 
     if pkg_cached is None:
         # Construir o recuperar grilla 3D multi-campo cacheada
-
-        grid = get_or_build_grid3d(
+        grid = get_or_build_grid3d_with_operator(
             radar_to_use=radar_to_use,
             file_hash=file_hash,
             volume=volume,
-            qc_filters=qc_filters,
-            z_grid_limits=z_grid_limits,
-            y_grid_limits=y_grid_limits,
-            x_grid_limits=x_grid_limits,
+            range_max_m=range_max_m,
+            grid_limits=grid_limits,
+            grid_shape=grid_shape,
             grid_resolution_xy=grid_resolution_xy,
             grid_resolution_z=grid_resolution_z,
+            weight_func=interp,
             session_id=session_id,
         )
 

@@ -316,6 +316,11 @@ def collapse_field_3d_to_2d(data3d, product, *,
     """Versión no destructiva para colapsar un solo campo 3D a 2D.
     No modifica el objeto Grid, sólo recibe los arrays necesarios.
     """
+    # PyART Grid puede tener dimensión temporal (time, z, y, x)
+    # Eliminar dimensión temporal si existe
+    if data3d.ndim == 4:
+        data3d = data3d[0, :, :, :]  # Tomar primer (y único) timestep
+    
     if data3d.ndim == 2:
         arr2d = data3d
     else:

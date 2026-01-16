@@ -25,6 +25,12 @@ def collapse_grid_to_2d(grid, field, product, *,
     Modifica grid in-place, colapsando el campo 3D a 2D.
     """
     data3d = grid.fields[field]['data']
+    
+    # PyART Grid puede tener dimensión temporal (time, z, y, x)
+    # Eliminar dimensión temporal si existe
+    if data3d.ndim == 4:
+        data3d = data3d[0, :, :, :]  # Tomar primer (y único) timestep
+    
     z = grid.z['data']
     x = grid.x['data']
     y = grid.y['data']

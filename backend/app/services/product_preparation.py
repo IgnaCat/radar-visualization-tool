@@ -35,6 +35,11 @@ def prepare_radar_for_product(
     if product_upper == "PPI":
         # PPI: Extraer solo el sweep de elevación especificado
         radar_to_use = radar.extract_sweeps([elevation])
+
+        # Forzar la inicialización de las coordenadas de puerta después de extract_sweeps
+        # extract_sweeps crea un nuevo objeto radar pero las coordenadas pueden no estar inicializadas
+        _ = radar_to_use.init_gate_x_y_z()
+            
         field_to_use = field_name
         
     elif product_upper == "CAPPI":
