@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from titiler.core.factory import TilerFactory
 
 from .core.config import settings
-from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap
+from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin
 
 app = FastAPI(title=settings.APP_NAME)
 
@@ -52,8 +52,17 @@ app.include_router(radar_stats.router)
 app.include_router(radar_pixel.router)
 app.include_router(elevation_profile.router)
 app.include_router(colormap.router)
+app.include_router(admin.router)
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
+
+@app.get("/cache")
+def cache_public_dashboard():
+    """
+    Dashboard público de estadísticas de cache.
+    Accesible en: http://localhost:8000/cache
+    """
+    return admin.cache_dashboard()
