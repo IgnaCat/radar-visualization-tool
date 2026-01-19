@@ -14,7 +14,7 @@ from rasterio.features import geometry_mask
 from ...models import RadarStatsRequest, RadarStatsResponse
 from ...core.cache import GRID2D_CACHE
 from ...core.config import settings
-from ...utils.helpers import extract_volume_from_filename
+from ...utils.helpers import extract_metadata_from_filename
 from ..radar_common import (
     grid2d_cache_key,
     md5_file,
@@ -94,7 +94,7 @@ class StatsOrchestrator:
         """
         product_upper = product.upper()
         field_to_use = field.upper()
-        interp = "nearest"
+        interp = "Barnes2"
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
@@ -297,6 +297,8 @@ class StatsOrchestrator:
         product: str,
         elevation: Optional[int],
         cappi_height: Optional[int],
+        radar_name: str,
+        estrategia: Optional[str],
         volume: Optional[str],
         polygon_gj_4326: dict,
         filters: List,
@@ -312,6 +314,8 @@ class StatsOrchestrator:
             product: Tipo de producto (PPI, CAPPI, COLMAX)
             elevation: Índice de elevación
             cappi_height: Altura CAPPI
+            radar_name: Nombre del radar
+            estrategia: Estrategia de procesamiento
             volume: Volumen del radar
             polygon_gj_4326: Polígono GeoJSON en EPSG:4326
             filters: Filtros a aplicar
@@ -332,6 +336,8 @@ class StatsOrchestrator:
             field_requested=field_requested,
             product=product,
             file_hash=file_hash,
+            radar_name=radar_name,
+            estrategia=estrategia,
             volume=volume,
             elevation=elevation,
             cappi_height=cappi_height,
@@ -411,7 +417,7 @@ class StatsOrchestrator:
         field = StatsOrchestrator.resolve_field_name(payload.product, payload.field)
 
         # 4. Generar cache key
-        volume = extract_volume_from_filename(payload.filepath)
+        radar_name, estrategia, volume, _ = extract_metadata_from_filename(payload.filepath)
         cache_key = StatsOrchestrator.generate_cache_key(
             filepath=filepath,
             product=payload.product,
@@ -438,6 +444,8 @@ class StatsOrchestrator:
                 product=payload.product,
                 elevation=payload.elevation,
                 cappi_height=payload.height,
+                radar_name=radar_name,
+                estrategia=estrategia,
                 volume=volume,
                 polygon_gj_4326=payload.polygon_geojson,
                 filters=payload.filters or [],

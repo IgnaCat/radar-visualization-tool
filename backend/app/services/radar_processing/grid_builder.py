@@ -1,22 +1,29 @@
 """
-Construcción y caché de grillas 3D de radar.
+Construcción y caché de grillas 3D de radar usando operador disperso W.
 """
 import time
+import logging
 import numpy as np
 import pyart
 from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
 
-from ...core.cache import GRID3D_CACHE
+from ...core.cache import (
+    W_OPERATOR_CACHE,
+    save_w_operator_to_disk,
+    load_w_operator_from_disk
+)
 from ...core.constants import AFFECTS_INTERP_FIELDS
 from ..radar_common import (
     build_gatefilter,
     qc_signature,
-    grid3d_cache_key,
+    w_operator_cache_key,
 )
 from ..grid_geometry import (
     calculate_grid_points
 )
+
+logger = logging.getLogger(__name__)
 
 
 def get_gate_xyz_coords(radar, edges=False):
@@ -182,12 +189,15 @@ def build_W_operator(
     Returns:
         W: scipy.sparse.csr_matrix shape (Nvoxels, Ngates)
     """
+    t_start = time.time()
     gates_xyz = np.asarray(gates_xyz, dtype=np.float32)
     voxels_xyz = np.asarray(voxels_xyz, dtype=np.float32)
 
     ngates = gates_xyz.shape[0]
     nvoxels = voxels_xyz.shape[0]
     roi = float(constant_roi)
+
+    logger.info(f"Construyendo operador W: {nvoxels} voxels, {ngates} gates, ROI={roi:.1f}m")
 
     # Construir KDTree de gates (una sola vez)
     tree = cKDTree(gates_xyz)
@@ -293,10 +303,10 @@ def build_W_operator(
 
     if len(rows_chunks) == 0:
         # No hubo vecinos para ningún voxel
+        logger.warning("Operador W vacío (sin vecinos)")
         return csr_matrix((nvoxels, ngates), dtype=dtype_val)
 
     # Concatenar chunks
-    t0 = time.time()
     rows_all = np.concatenate(rows_chunks)
     cols_all = np.concatenate(cols_chunks)
     vals_all = np.concatenate(vals_chunks)
@@ -307,6 +317,119 @@ def build_W_operator(
     W.sum_duplicates()
     W.sort_indices()
 
+    t_elapsed = time.time() - t_start
+    logger.info(
+        f"Operador W construido: {W.nnz} elementos no-cero, "
+        f"{voxels_with_data}/{nvoxels} voxels con datos, "
+        f"tiempo={t_elapsed:.2f}s"
+    )
+
+    return W
+
+
+def get_or_build_W_operator(
+    radar_to_use: pyart.core.Radar,
+    radar: str,
+    estrategia: str,
+    volumen: str,
+    grid_shape: tuple,
+    grid_limits: tuple,
+    constant_roi: float,
+    weight_func: str = 'Barnes2',
+    max_neighbors: int | None = None,
+) -> csr_matrix:
+    """
+    Obtiene operador W desde caché (RAM o disco) o lo construye.
+    
+    Flujo:
+    1. Verifica cache RAM (compartida)
+    2. Si no está, verifica cache disco y carga a RAM
+    3. Si no existe, construye, guarda en disco y RAM
+    
+    Args:
+        radar_to_use: Objeto radar PyART (para obtener coordenadas gates)
+        radar: Código del radar (ej: RMA1)
+        estrategia: Estrategia de escaneo (ej: 0315)
+        volumen: Número de volumen (ej: 01)
+        grid_shape: (nz, ny, nx)
+        grid_limits: ((z_min, z_max), (y_min, y_max), (x_min, x_max))
+        constant_roi: Radio de influencia en metros
+        weight_func: Función de ponderación
+        max_neighbors: Máximo número de vecinos
+    
+    Returns:
+        scipy.sparse.csr_matrix: Operador W
+    """
+    # Generar cache key (sin session_id - compartido globalmente)
+    cache_key = w_operator_cache_key(
+        radar=radar,
+        estrategia=estrategia,
+        volumen=volumen,
+        grid_shape=grid_shape,
+        grid_limits=grid_limits,
+        constant_roi=constant_roi,
+        weight_func=weight_func,
+        max_neighbors=max_neighbors,
+    )
+    
+    # 1. Verificar cache RAM
+    cached_pkg = W_OPERATOR_CACHE.get(cache_key)
+    if cached_pkg is not None:
+        logger.info(f"Operador W recuperado de cache RAM: {cache_key[:16]}...")
+        return cached_pkg["W"]
+    
+    # 2. Verificar cache disco
+    disk_result = load_w_operator_from_disk(cache_key)
+    if disk_result is not None:
+        W, metadata = disk_result
+        logger.info(f"Operador W cargado desde disco: {cache_key[:16]}...")
+        
+        # Guardar en cache RAM para próximos usos
+        W_OPERATOR_CACHE[cache_key] = {
+            "W": W,
+            "metadata": metadata
+        }
+        
+        return W
+    
+    # 3. Construir operador W
+    logger.info(f"Construyendo operador W: {radar}_{estrategia}_{volumen}")
+    
+    gates_xyz = get_gate_xyz_coords(radar_to_use, edges=False)
+    voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
+    
+    W = build_W_operator(
+        gates_xyz=gates_xyz,
+        voxels_xyz=voxels_xyz,
+        constant_roi=constant_roi,
+        weight_func=weight_func,
+        max_neighbors=max_neighbors
+    )
+    
+    # Metadata para referencia
+    metadata = {
+        "radar": radar,
+        "estrategia": estrategia,
+        "volumen": volumen,
+        "grid_shape": grid_shape,
+        "grid_limits": grid_limits,
+        "constant_roi": constant_roi,
+        "weight_func": weight_func,
+        "max_neighbors": max_neighbors,
+        "nnz": W.nnz,
+        "shape": W.shape,
+        "created_at": time.time(),
+    }
+    
+    # Guardar en disco
+    save_w_operator_to_disk(cache_key, W, metadata)
+    
+    # Guardar en cache RAM
+    W_OPERATOR_CACHE[cache_key] = {
+        "W": W,
+        "metadata": metadata
+    }
+    
     return W
 
 
@@ -369,24 +492,29 @@ def apply_operator(W, field_data, grid_shape, handle_mask=True):
 def get_or_build_grid3d_with_operator(
     radar_to_use: pyart.core.Radar,
     file_hash: str,
-    volume: str | None,
+    radar: str,
+    estrategia: str,
+    volume: str,
     range_max_m: float,
     grid_limits: tuple, 
     grid_shape: tuple,
     grid_resolution_xy: float,
     grid_resolution_z: float,
-    weight_func: str = 'nearest',
+    weight_func: str = 'Barnes2',
     session_id: str | None = None,
 ) -> pyart.core.Grid:
     """
-    Construye grilla 3D usando operador disperso W (sin caché por ahora).
+    Construye grilla 3D usando operador disperso W con caché persistente.
     
     Args:
         radar_to_use: Objeto radar de PyART
         file_hash: Hash del archivo para identificación
-        volume: Volumen del radar (afecta resolución)
+        radar: Código del radar (ej: RMA1)
+        estrategia: Estrategia de escaneo (ej: 0315)
+        volume: Volumen del radar
         range_max_m: Rango máximo en metros (afecta ROI)
         grid_limits: Límites de la grilla ((z_min, z_max), (y_min, y_max), (x_min, x_max))
+        grid_shape: (nz, ny, nx)
         grid_resolution_xy: Resolución horizontal en metros
         grid_resolution_z: Resolución vertical en metros
         weight_func: Función de ponderación para el operador W
@@ -401,17 +529,17 @@ def get_or_build_grid3d_with_operator(
         800 + (range_max_m / 100000) * 400
     )
     
-    # Obtener coordenadas de gates y voxels
-    gates_xyz = get_gate_xyz_coords(radar_to_use, edges=False)
-    voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
-    
-    # Construir operador W
-    W = build_W_operator(
-        gates_xyz=gates_xyz,
-        voxels_xyz=voxels_xyz,
+    # Obtener operador W (con caché completo: RAM -> Disco -> Build)
+    W = get_or_build_W_operator(
+        radar_to_use=radar_to_use,
+        radar=radar,
+        estrategia=estrategia,
+        volumen=volume,
+        grid_shape=grid_shape,
+        grid_limits=grid_limits,
         constant_roi=constant_roi,
         weight_func=weight_func,
-        max_neighbors=None
+        max_neighbors=None,
     )
     
     # Aplicar a todos los campos disponibles
@@ -471,141 +599,5 @@ def get_or_build_grid3d_with_operator(
         'lon_0': grid_origin[1],
         '_include_lon_0_lat_0': True,
     }
-    
-    return grid
-
-
-# Mantenemos función original para compatibilidad
-def get_or_build_grid3d(
-    radar_to_use: pyart.core.Radar,
-    file_hash: str,
-    volume: str | None,
-    qc_filters,
-    z_grid_limits: tuple,
-    y_grid_limits: tuple,
-    x_grid_limits: tuple,
-    grid_resolution_xy: float,
-    grid_resolution_z: float,
-    session_id: str | None = None,
-) -> pyart.core.Grid:
-    """
-    Función para obtener o construir una grilla 3D multi-campo cacheada.
-    CAMBIO: Ya no recibe field_to_use - gridea TODOS los campos disponibles.
-    
-    Args:
-        radar_to_use: Objeto radar de PyART
-        file_hash: Hash del archivo para cache key
-        volume: Volumen del radar (afecta resolución)
-        qc_filters: Filtros QC a aplicar durante interpolación
-        z_grid_limits: Límites en Z (altura) de la grilla
-        y_grid_limits: Límites en Y de la grilla
-        x_grid_limits: Límites en X de la grilla
-        grid_resolution_xy: Resolución horizontal en metros
-        grid_resolution_z: Resolución vertical en metros
-        session_id: Identificador de sesión para aislar cache
-    
-    Returns:
-        pyart.core.Grid con la grilla 3D multi-campo construida o recuperada de cache
-    """
-    # Generar cache key sin field_to_use
-    qc_sig = qc_signature(qc_filters)
-    cache_key = grid3d_cache_key(
-        file_hash=file_hash,
-        volume=volume,
-        qc_sig=qc_sig,
-        grid_res_xy=grid_resolution_xy,
-        grid_res_z=grid_resolution_z,
-        z_top_m=z_grid_limits[1],
-        session_id=session_id,
-    )
-    
-    # Verificar cache 3D
-    pkg_cached = GRID3D_CACHE.get(cache_key)
-    
-    if pkg_cached is not None:
-        # Reconstruir Grid multi-campo desde cache
-        fields_dict = {}
-        for fname, fdata in pkg_cached["fields"].items():
-            field_dict = fdata["metadata"].copy()
-            field_dict['data'] = fdata["data"]
-            fields_dict[fname] = field_dict
-        
-        # Crear Grid con TODOS los campos cacheados
-        grid = pyart.core.Grid(
-            time={
-                'data': np.array([0]),
-                'units': 'seconds since 2000-01-01T00:00:00Z',
-                'calendar': 'gregorian',
-                'standard_name': 'time'
-            },
-            fields=fields_dict,
-            metadata={'instrument_name': 'RADAR'},
-            origin_latitude={'data': radar_to_use.latitude['data']},
-            origin_longitude={'data': radar_to_use.longitude['data']},
-            origin_altitude={'data': radar_to_use.altitude['data']},
-            x={'data': pkg_cached["x"]},
-            y={'data': pkg_cached["y"]},
-            z={'data': pkg_cached["z"]},
-        )
-        grid.projection = pkg_cached["projection"]
-        return grid
-    
-    # Construir grilla 3D con TODOS los campos del radar
-    all_fields = list(radar_to_use.fields.keys())
-    
-    # Usar primer campo disponible para gatefilter (aplica a todos)
-    first_field = all_fields[0] if all_fields else None
-    gf = build_gatefilter(radar_to_use, first_field, qc_filters, is_rhi=False)
-    
-    grid_origin = (
-        float(radar_to_use.latitude['data'][0]),
-        float(radar_to_use.longitude['data'][0]),
-    )
-    
-    range_max_m = (y_grid_limits[1] - y_grid_limits[0]) / 2
-    constant_roi = max(
-        grid_resolution_xy * 1.5,
-        800 + (range_max_m / 100000) * 400
-    )
-    
-    # Calcular puntos de grilla usando la función del módulo grid_geometry
-    z_points, y_points, x_points = calculate_grid_points(
-        z_grid_limits, y_grid_limits, x_grid_limits,
-        grid_resolution_z, grid_resolution_xy
-    )
-    
-    # CAMBIO: Gridear TODOS los campos disponibles en el radar
-    fields_for_grid = all_fields
-    
-    grid = pyart.map.grid_from_radars(
-        radar_to_use,
-        grid_shape=(z_points, y_points, x_points),
-        grid_limits=(z_grid_limits, y_grid_limits, x_grid_limits),
-        gridding_algo="map_gates_to_grid",
-        grid_origin=grid_origin,
-        fields=fields_for_grid,
-        weighting_function='nearest',
-        gatefilters=gf,
-        roi_func="constant",
-        constant_roi=constant_roi,
-    )
-    grid.to_xarray()
-    
-    # Cachear TODOS los campos en estructura multi-campo
-    fields_to_cache = {}
-    for fname in grid.fields.keys():
-        fields_to_cache[fname] = {
-            "data": grid.fields[fname]['data'].copy(),
-            "metadata": {k: v for k, v in grid.fields[fname].items() if k != 'data'}
-        }
-    
-    pkg_to_cache = {
-        "fields": fields_to_cache,  # Dict con todos los campos
-        "x": grid.x['data'].copy(),
-        "y": grid.y['data'].copy(),
-        "z": grid.z['data'].copy(),
-        "projection": dict(getattr(grid, "projection", {}) or {}),
-    }
-    GRID3D_CACHE[cache_key] = pkg_to_cache
     
     return grid

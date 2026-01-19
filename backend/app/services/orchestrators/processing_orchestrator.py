@@ -89,7 +89,9 @@ class ProcessingOrchestrator:
         warnings = []
         
         if not selected_volumes:
-            warnings.append("No se seleccionaron volúmenes, procesando todo.")
+            msg = "No se seleccionaron volúmenes, procesando todo."
+            warnings.append(msg)
+            print(f"{msg}")
             return filepaths, warnings
         
         filtered_filepaths = []
@@ -99,13 +101,17 @@ class ProcessingOrchestrator:
             
             # Validar volumen 03 con producto PPI
             if vol == '03' and product.upper() == 'PPI':
-                warnings.append(f"{filename}: El volumen '03' no es válido para el producto PPI.")
+                msg = f"{filename}: El volumen '03' no es válido para el producto PPI."
+                warnings.append(msg)
+                print(f"{msg}")
                 continue
             
             if vol in selected_volumes:
                 filtered_filepaths.append(f)
             else:
-                warnings.append(f"{filename}: Volumen '{vol}' no seleccionado, se omite.")
+                msg = f"{filename}: Volumen '{vol}' no seleccionado, se omite."
+                warnings.append(msg)
+                print(f"{msg}")
         
         return filtered_filepaths, warnings
 
@@ -133,7 +139,9 @@ class ProcessingOrchestrator:
             if radar and radar in selected_radars:
                 filtered_filepaths.append(f)
             else:
-                warnings.append(f"{Path(f).name}: Radar '{radar}' no seleccionado, se omite.")
+                msg = f"{Path(f).name}: Radar '{radar}' no seleccionado, se omite."
+                warnings.append(msg)
+                print(f"{msg}")
         
         return filtered_filepaths, warnings
 
@@ -153,17 +161,17 @@ class ProcessingOrchestrator:
     def prepare_items(
         filepaths: List[str],
         upload_dir: Path
-    ) -> List[Tuple[str, str, Optional[datetime], str, str]]:
+    ) -> List[Tuple[str, str, Optional[datetime], str, str, str]]:
         """
         Prepara la lista de items para procesar.
-        Returns: List of (filepath_rel, filepath_abs, timestamp, volume, radar)
+        Returns: List of (filepath_rel, filepath_abs, timestamp, volume, radar, estrategia)
         """
         items = []
         for f in filepaths:
             fp_abs = str(upload_dir / f)
             ts = ProcessingOrchestrator.extract_timestamp(f)
-            radar, _, vol, _ = helpers.extract_metadata_from_filename(Path(f).name)
-            items.append((f, fp_abs, ts, vol, radar))
+            radar, estrategia, vol, _ = helpers.extract_metadata_from_filename(Path(f).name)
+            items.append((f, fp_abs, ts, vol, radar, estrategia))
         return items
 
     @staticmethod
@@ -196,7 +204,7 @@ class ProcessingOrchestrator:
         volumes_by_radar = {}
 
         # Procesamiento secuencial - PyART/GDAL/NetCDF4 no son thread-safe
-        for item_idx, (f_rel, f_abs, ts, vol, radar) in enumerate(items):
+        for item_idx, (f_rel, f_abs, ts, vol, radar, estrategia) in enumerate(items):
             for idx, field in enumerate(fields):
                 try:
                     result_dict = radar_processor.process_radar_to_cog(
@@ -206,6 +214,8 @@ class ProcessingOrchestrator:
                         cappi_height=height,
                         elevation=elevation,
                         filters=filters,
+                        radar_name=radar,
+                        estrategia=estrategia,
                         volume=vol,
                         colormap_overrides=colormap_overrides,
                         session_id=session_id
@@ -228,7 +238,9 @@ class ProcessingOrchestrator:
                 except Exception as e:
                     if radar not in warnings_by_radar:
                         warnings_by_radar[radar] = []
-                    warnings_by_radar[radar].append(f"{Path(f_rel).name}: {e}")
+                    msg = f"{Path(f_rel).name}: {e}"
+                    warnings_by_radar[radar].append(msg)
+                    print(f"{radar}: {msg}")
 
         return results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar
 
@@ -257,13 +269,13 @@ class ProcessingOrchestrator:
             missing_vols = all_volumes - volumes_by_radar.get(radar, set())
             
             if missing_fields:
-                warnings_by_radar.setdefault(radar, []).append(
-                    f"El radar {radar} no tiene los siguientes campos: {', '.join(sorted(missing_fields))}"
-                )
+                msg = f"El radar {radar} no tiene los siguientes campos: {', '.join(sorted(missing_fields))}"
+                warnings_by_radar.setdefault(radar, []).append(msg)
+                print(f"{msg}")
             if missing_vols:
-                warnings_by_radar.setdefault(radar, []).append(
-                    f"El radar {radar} no tiene los siguientes volúmenes: {', '.join(sorted(missing_vols))}"
-                )
+                msg = f"El radar {radar} no tiene los siguientes volúmenes: {', '.join(sorted(missing_vols))}"
+                warnings_by_radar.setdefault(radar, []).append(msg)
+                print(f"{msg}")
 
     @staticmethod
     def build_radar_results(
@@ -300,7 +312,9 @@ class ProcessingOrchestrator:
             ))
 
         if not radar_results:
-            all_warnings.append("No se generaron imágenes de salida.")
+            msg = "No se generaron imágenes de salida."
+            all_warnings.append(msg)
+            print(f"{msg}")
 
         return radar_results, all_warnings
 

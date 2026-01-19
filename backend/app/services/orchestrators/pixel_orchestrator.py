@@ -91,7 +91,7 @@ class PixelOrchestrator:
         """
         product_upper = product.upper()
         field_to_use = field.upper()
-        interp = "nearest"
+        interp = "Barnes2"
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]

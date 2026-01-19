@@ -116,6 +116,8 @@ def process_radar_to_cog(
         elevation=0, 
         filters=[], 
         output_dir=None,  # Will use settings.IMAGES_DIR if None
+        radar_name=None,
+        estrategia=None,
         volume=None,
         colormap_overrides=None,
         session_id=None
@@ -245,14 +247,15 @@ def process_radar_to_cog(
         grid = get_or_build_grid3d_with_operator(
             radar_to_use=radar_to_use,
             file_hash=file_hash,
+            radar=radar_name,
+            estrategia=estrategia,
             volume=volume,
             range_max_m=range_max_m,
             grid_limits=grid_limits,
             grid_shape=grid_shape,
             grid_resolution_xy=grid_resolution_xy,
             grid_resolution_z=grid_resolution_z,
-            weight_func=interp,
-            session_id=session_id,
+            weight_func=interp
         )
 
         # Verificar que el campo solicitado existe en la grilla

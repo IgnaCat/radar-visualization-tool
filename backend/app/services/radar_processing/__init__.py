@@ -8,13 +8,12 @@ Estructura:
 - cog_generator: Generación de COG (Cloud Optimized GeoTIFF)
 """
 
-from .grid_builder import get_or_build_grid3d, get_or_build_grid3d_with_operator
+from .grid_builder import get_or_build_grid3d_with_operator
 from .field_processor import collapse_grid_to_2d
 from .warping import warp_array_to_mercator
 from .cog_generator import convert_to_cog, create_cog_from_warped_array
 
 __all__ = [
-    'get_or_build_grid3d',
     'get_or_build_grid3d_with_operator',
     'collapse_grid_to_2d',
     'warp_array_to_mercator',

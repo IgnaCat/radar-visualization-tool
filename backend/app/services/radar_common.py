@@ -255,29 +255,52 @@ def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
     }
     return "g2d_" + _hash_of(payload)
 
-
-def grid3d_cache_key(*, file_hash: str,
-                     volume: str | None, qc_sig, grid_res_xy: float,
-                     grid_res_z: float, z_top_m: float, session_id=None) -> str:
+def w_operator_cache_key(
+    *,
+    radar: str,
+    estrategia: str,
+    volumen: str,
+    grid_shape: tuple,
+    grid_limits: tuple,
+    constant_roi: float,
+    weight_func: str,
+    max_neighbors: int | None = None,
+) -> str:
     """
-    Genera cache key para grilla 3D multi-campo con soporte para aislamiento por sesión.
-    CAMBIO: Ya no depende de field_to_use - una grilla sirve para todos los campos.
+    Genera cache key para operador W basado en:
+    - Identificación del radar (radar_estrategia_volumen)
+    - Geometría de grilla (shape, limits)
+    - Parámetros de interpolación (ROI, weight_func, max_neighbors)
+    
+    NOTA: Cache W es COMPARTIDO entre sesiones - el operador depende solo
+    de la geometría del radar, no de datos específicos del archivo.
     
     Args:
-        session_id: Identificador único de sesión (None = compartido globalmente)
+        radar: Código del radar (ej: RMA1)
+        estrategia: Estrategia de escaneo (ej: 0315)
+        volumen: Número de volumen (ej: 01)
+        grid_shape: (nz, ny, nx)
+        grid_limits: ((z_min, z_max), (y_min, y_max), (x_min, x_max))
+        constant_roi: Radio de influencia en metros
+        weight_func: Función de ponderación ('Barnes', 'Cressman', 'nearest')
+        max_neighbors: Máximo número de vecinos (None = todos)
     """
     payload = {
-        "v": 3,  # versión incrementada para multi-campo (incompatible con v2)
-        "file": file_hash,
-        # "field": ELIMINADO - grideamos todos los campos
-        "vol": str(volume) if volume is not None else None,
-        "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple)) else qc_sig,
-        "gxy": float(grid_res_xy),
-        "gz": float(grid_res_z),
-        "ztop": float(z_top_m),
-        "sess": str(session_id) if session_id else None,  # Aislar por sesión
+        "v": 1,  # versión del formato
+        "radar": str(radar),
+        "strat": str(estrategia),
+        "vol": str(volumen),
+        "shape": list(grid_shape),
+        "limits": [
+            [float(grid_limits[0][0]), float(grid_limits[0][1])],
+            [float(grid_limits[1][0]), float(grid_limits[1][1])],
+            [float(grid_limits[2][0]), float(grid_limits[2][1])],
+        ],
+        "roi": float(constant_roi),
+        "wfunc": str(weight_func),
+        "maxn": int(max_neighbors) if max_neighbors is not None else None,
     }
-    return "g3d_" + _hash_of(payload)
+    return f"W_{radar}_{estrategia}_{volumen}_{_hash_of(payload)}"
 
 def normalize_proj_dict(grid, grid_origin):
     """

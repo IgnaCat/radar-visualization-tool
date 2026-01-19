@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     IMAGES_DIR: str = os.path.join(os.getcwd(), "app/storage/tmp")
     UPLOAD_DIR: str = os.path.join(os.getcwd(), "app/storage/uploads")
     DATA_DIR: str = os.path.join(os.getcwd(), "app/storage/data")
+    CACHE_DIR: str = os.path.join(os.getcwd(), "app/storage/cache")
     ALLOWED_PRODUCTS: List[str] = ["PPI", "RHI", "CAPPI", "COLMAX"]
 
     # Reglas de upload

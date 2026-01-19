@@ -13,15 +13,15 @@ from scipy.interpolate import RegularGridInterpolator
 from rasterio.enums import Resampling
 from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
-from ..core.cache import GRID3D_CACHE
 
 from ..models import RangeFilter
-from ..services.grid_geometry import beam_height_max_km
+from ..services.grid_geometry import beam_height_max_km, calculate_grid_points
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
     safe_range_max_m, get_radar_site, md5_file, limit_line_to_range,
-    normalize_proj_dict, grid3d_cache_key, qc_signature,
+    normalize_proj_dict, qc_signature,
 )
+from .radar_processing.grid_builder import get_or_build_W_operator, apply_operator
 
 def calcule_radial_angle(radar_lat, radar_lon, punto_lat, punto_lon):
     """
@@ -384,43 +384,31 @@ def _generate_segment_transect_png(
     session_id: Optional[str] = None,
 ):
     """
-    Genera transecto vertical entre dos puntos usando GridMapDisplay.plot_cross_section
-    con grilla 3D cacheada para máxima calidad y performance.
+    Genera transecto vertical entre dos puntos usando GridMapDisplay.plot_cross_section.
+    Construye grilla 3D directamente usando operador W.
     """
     from pyproj import Geod
+    from ..utils.helpers import extract_metadata_from_filename
+    from ..core.constants import AFFECTS_INTERP_FIELDS
     
     site_lon, site_lat, _ = get_radar_site(radar)
     _geod = Geod(ellps="WGS84")
     
-    # 1) Buscar grilla 3D en cache (debe existir de process_radar_to_cog previo)
-    from ..utils.helpers import extract_metadata_from_filename
-    from ..core.constants import AFFECTS_INTERP_FIELDS
-    
-    # Extraer volumen del nombre del archivo (crítico para cache key)
+    # Extraer metadata del archivo (radar, estrategia, volumen)
     try:
-        _,_,volume,_ = extract_metadata_from_filename(Path(filepath).name)
-        if volume is None:
-            raise ValueError("No se pudo extraer volume del filename")
+        radar_name, estrategia, volume, _ = extract_metadata_from_filename(Path(filepath).name)
+        if volume is None or radar_name is None or estrategia is None:
+            raise ValueError("No se pudo extraer metadata completa del filename")
     except Exception as e:
         raise HTTPException(
             status_code=400,
             detail=f"No se pudo extraer metadata del archivo: {e}"
         )
     
-    # Separar filtros QC (igual que en radar_processor)
-    qc_filters = []
-    for f in (filters or []):
-        ffield = str(getattr(f, "field", "") or "").upper()
-        if ffield in AFFECTS_INTERP_FIELDS:
-            qc_filters.append(f)
-    
-    # Calcular range_max_m del radar (igual que en radar_processor)
+    # Calcular parámetros de grilla
     range_max_m = safe_range_max_m(radar)
     
-    # Calcular z_top_m dinámicamente (DEBE coincidir con radar_processor)
-    # Nota: Para pseudo-RHI asumimos producto tipo PPI con elevación 0
-    # Si el usuario procesó otro producto, puede no encontrar cache
-    elev_deg = 0.0  # Elevación default para pseudo-RHI
+    elev_deg = 0.0
     if radar.nsweeps > 0:
         try:
             elev_deg = float(radar.fixed_angle['data'][0])
@@ -428,48 +416,81 @@ def _generate_segment_transect_png(
             elev_deg = 0.0
     
     hmax_km = beam_height_max_km(range_max_m, elev_deg)
-    z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen (igual que PPI en radar_processor)
+    z_top_m = int((hmax_km + 3) * 1000)
     
-    # Generar cache key para buscar la grilla 3D multi-campo
-    qc_sig = qc_signature(qc_filters)
     grid_resolution_xy = 300 if volume == '03' else 1200
-    grid_resolution_z = 300  # Siempre 300m en Z (debe coincidir con radar_processor)
+    grid_resolution_z = 300
     
-    cache_key = grid3d_cache_key(
-        file_hash=file_hash,
-        volume=volume,
-        qc_sig=qc_sig,
-        grid_res_xy=grid_resolution_xy,
-        grid_res_z=grid_resolution_z,
-        z_top_m=z_top_m,
-        session_id=session_id,
+    # Calcular límites y shape de grilla
+    z_grid_limits = (0, z_top_m)
+    y_grid_limits = (-range_max_m, range_max_m)
+    x_grid_limits = (-range_max_m, range_max_m)
+    grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
+    
+    z_points, y_points, x_points = calculate_grid_points(
+        z_grid_limits, y_grid_limits, x_grid_limits,
+        grid_resolution_z, grid_resolution_xy
+    )
+    grid_shape = (z_points, y_points, x_points)
+    
+    # Calcular ROI
+    constant_roi = max(
+        grid_resolution_xy * 1.5,
+        800 + (range_max_m / 100000) * 400
     )
     
-    # Buscar en cache
-    pkg_cached = GRID3D_CACHE.get(cache_key)
+    # Construir operador W (compartido, sin session_id)
+    W = get_or_build_W_operator(
+        radar_to_use=radar,
+        radar=radar_name,
+        estrategia=estrategia,
+        volumen=volume,
+        grid_shape=grid_shape,
+        grid_limits=grid_limits,
+        constant_roi=constant_roi,
+        weight_func='Barnes2',
+        max_neighbors=None,
+    )
     
-    if pkg_cached is None:
-        raise HTTPException(
-            status_code=400,
-            detail="No se encontró grilla 3D en cache. Debe procesarse primero un producto 2D (PPI/CAPPI/COLMAX) para generar la grilla 3D."
-        )
-    
-    # Reconstruir Grid multi-campo desde cache
+    # Aplicar operador W a todos los campos del radar
+    all_fields = list(radar.fields.keys())
     fields_dict = {}
-    for fname, fdata in pkg_cached["fields"].items():
-        field_dict = fdata["metadata"].copy()
-        field_dict['data'] = fdata["data"]
+    
+    for fname in all_fields:
+        field_data = radar.fields[fname]['data']
+        
+        # Aplicar operador W
+        grid3d_field = apply_operator(W, field_data, grid_shape, handle_mask=True)
+        
+        # Guardar en formato PyART
+        field_dict = {
+            'data': grid3d_field[np.newaxis, :, :, :],
+            'long_name': radar.fields[fname].get('long_name', fname),
+            'units': radar.fields[fname].get('units', ''),
+            'standard_name': radar.fields[fname].get('standard_name', fname),
+            '_FillValue': -9999.0,
+        }
         fields_dict[fname] = field_dict
     
-    # Verificar que el campo solicitado existe en la cache
+    # Verificar que el campo solicitado existe
     if field_name not in fields_dict:
         available = list(fields_dict.keys())
         raise HTTPException(
             status_code=400,
-            detail=f"Campo '{field_name}' no encontrado en grilla cacheada. Disponibles: {available}"
+            detail=f"Campo '{field_name}' no encontrado. Disponibles: {available}"
         )
     
-    # Crear Grid con TODOS los campos cacheados
+    # Generar coordenadas de la grilla
+    x_coords = np.linspace(x_grid_limits[0], x_grid_limits[1], grid_shape[2]).astype(np.float32)
+    y_coords = np.linspace(y_grid_limits[0], y_grid_limits[1], grid_shape[1]).astype(np.float32)
+    z_coords = np.linspace(z_grid_limits[0], z_grid_limits[1], grid_shape[0]).astype(np.float32)
+    
+    # Crear Grid PyART
+    grid_origin = (
+        float(radar.latitude['data'][0]),
+        float(radar.longitude['data'][0]),
+    )
+    
     grid = pyart.core.Grid(
         time={
             'data': np.array([0]),
@@ -482,75 +503,63 @@ def _generate_segment_transect_png(
         origin_latitude={'data': radar.latitude['data']},
         origin_longitude={'data': radar.longitude['data']},
         origin_altitude={'data': radar.altitude['data']},
-        x={'data': pkg_cached["x"]},
-        y={'data': pkg_cached["y"]},
-        z={'data': pkg_cached["z"]},
+        x={'data': x_coords},
+        y={'data': y_coords},
+        z={'data': z_coords},
     )
-    grid.projection = pkg_cached["projection"]
-
-    # DEBUG: verificar que la grilla sea verdaderamente 3D
-    try:
-        arr3d = grid.fields[field_name]['data']
-        zvals = grid.z['data']
-        print(f"DEBUG grid field shape: {getattr(arr3d, 'shape', None)}, z shape: {getattr(zvals, 'shape', None)}")
-        print(f"DEBUG z range (m): min={float(np.nanmin(zvals))}, max={float(np.nanmax(zvals))}")
-        if getattr(arr3d, 'ndim', 0) != 3 or getattr(zvals, 'size', 0) <= 1:
-            raise HTTPException(
-                status_code=400,
-                detail="La grilla 3D cacheada tiene un solo nivel z o no es 3D. Procesá PPI/COLMAX primero para cachear grilla 3D."
-            )
-    except Exception as e:
-        print(f"WARNING: No se pudo verificar dimensiones de grilla: {e}")
     
-    # 2) Limitar línea a max_length_km
+    grid.projection = {
+        'proj': 'pyart_aeqd',
+        'lat_0': grid_origin[0],
+        'lon_0': grid_origin[1],
+        '_include_lon_0_lat_0': True,
+    }
+    
+    # Limitar línea a max_length_km
     end_lon_eff, end_lat_eff, length_km = limit_line_to_range(
         start_lon, start_lat, end_lon, end_lat, max_length_km
     )
     
-    # 3) Calcular distancia acumulada para eje X
+    # Calcular distancia acumulada para eje X
     _, _, dist_total_m = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
     dkm = dist_total_m / 1000.0
     
-    # 4) Usar GridMapDisplay.plot_cross_section
+    # Usar GridMapDisplay.plot_cross_section
     fig = plt.figure(figsize=[15, 5.5])
     ax = plt.subplot(1, 1, 1)
     
     display = pyart.graph.GridMapDisplay(grid)
     
     # plot_cross_section espera (start_lat, start_lon) y (end_lat, end_lon)
-    # IMPORTANTE: Usar cached_field_name (el que está en el grid) no field_name
     try:
         display.plot_cross_section(
-            field_name,  # Usar el nombre del campo que realmente está en el grid
+            field_name,
             (start_lat, start_lon),
             (end_lat_eff, end_lon_eff),
             ax=ax,
             cmap=cmap,
             vmin=vmin,
             vmax=vmax,
-            #mask_outside=False,  # No enmascarar fuera del haz para ver toda la interpolación
         )
     except Exception as e:
-        # Si falla plot_cross_section, intentar fallback manual
+        # Si falla plot_cross_section, mostrar error
         print(f"Warning: plot_cross_section falló ({e}), usando fallback")
         import traceback
         traceback.print_exc()
         ax.text(0.5, 0.5, f"Error: {str(e)}", ha="center", va="center", fontsize=12)
 
-    # Ajustar límites verticales basados en niveles z reales (m -> km) y asegurar terreno visible
+    # Ajustar límites verticales basados en niveles z reales (m -> km)
     try:
         zvals = grid.z['data']
         zmax_km = float(np.nanmax(zvals)) / 1000.0
         y_max_km = max_height_km if max_height_km else zmax_km
-        # expand slightly to include terrain curve
         y_max_km = max(0.5, min(y_max_km, max(zmax_km, 30.0)))
         ax.set_ylim(0.0, y_max_km)
         ax.set_aspect('auto')
-        print(f"DEBUG set ylim: 0.0 to {y_max_km} km (zmax_km={zmax_km})")
     except Exception as e:
         print(f"WARNING: No se pudo ajustar límites verticales: {e}")
     
-    # 5) Agregar perfil de terreno
+    # Agregar perfil de terreno
     tif_path = Path(settings.DATA_DIR) / "mosaico_argentina_2.tif"
     try:
         # Samplear terreno a lo largo de la línea
@@ -585,7 +594,7 @@ def _generate_segment_transect_png(
     except Exception as e:
         print(f"Warning: No se pudo graficar terreno: {e}")
     
-    # 6) Configurar ejes y límites
+    # Configurar ejes y límites
     ax.set_xlabel("Distancia (km)", fontsize=14)
     ax.set_ylabel("Altura (km)", fontsize=14)
     

@@ -12,17 +12,18 @@ from ..core.constants import AFFECTS_INTERP_FIELDS
 from .radar_common import (
     resolve_field, 
     safe_range_max_m, 
-    normalize_proj_dict
+    normalize_proj_dict,
 )
 from .grid_geometry import (
     calculate_z_limits,
     calculate_grid_resolution,
+    calculate_grid_points,
 )
 from .product_preparation import (
     prepare_radar_for_product,
     fill_dbzh_if_needed,
 )
-from .radar_processing import get_or_build_grid3d
+from .radar_processing import get_or_build_grid3d_with_operator
 from .radar_processing import collapse_grid_to_2d
 from .filter_application import separate_filters
 
@@ -32,15 +33,17 @@ def generate_grid2d_on_demand(
     field_requested: str,
     product: str,
     file_hash: str,
+    radar_name: str,
+    estrategia: Optional[str] = None,
     volume: Optional[str] = None,
     elevation: Optional[int] = 0,
     cappi_height: Optional[int] = 4000,
     filters: List = None,
-    session_id: Optional[str] = None,
+    interp: Optional[str] = "Barnes2",
 ) -> Dict:
     """
     Genera una grilla 2D bajo demanda SIN cachearla.
-    Reutiliza get_or_build_grid3d (que cachea la 3D con TODOS los campos) y luego colapsa.
+    Reutiliza get_or_build_grid3d_with_operator y luego colapsa.
     (Mas q nada utilizada para estadísticas cuando el campo no está cacheado)
     
     Args:
@@ -52,7 +55,9 @@ def generate_grid2d_on_demand(
         elevation: Índice de elevación (para PPI)
         cappi_height: Altura CAPPI en metros
         filters: Lista de filtros
-        session_id: Identificador de sesión
+        radar_name: Nombre del radar
+        estrategia: Estrategia de procesamiento
+        interp: Método de interpolación
     
     Returns:
         Dict con: arr (np.ma.MaskedArray), transform (Affine), crs (WKT), qc (dict)
@@ -86,22 +91,31 @@ def generate_grid2d_on_demand(
     z_grid_limits = (z_min, z_max)
     y_grid_limits = (-range_max_m, range_max_m)
     x_grid_limits = (-range_max_m, range_max_m)
+    grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
     
     # Resolución según volumen
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
+
+    # Calcular puntos de grilla
+    z_points, y_points, x_points = calculate_grid_points(
+        grid_limits[0], grid_limits[1], grid_limits[2],
+        grid_resolution_z, grid_resolution_xy
+    )
+    grid_shape = (z_points, y_points, x_points)
     
     # Obtener o construir grilla 3D (usa cache 3D multi-campo con TODOS los campos incluyendo QC)
-    grid = get_or_build_grid3d(
-        radar_to_use=radar_to_use,  # Usar radar preparado (puede ser subset para PPI)
+    grid = get_or_build_grid3d_with_operator(
+        radar_to_use=radar_to_use,
         file_hash=file_hash,
+        radar=radar_name,
+        estrategia=estrategia,
         volume=volume,
-        qc_filters=qc_filters,
-        z_grid_limits=z_grid_limits,
-        y_grid_limits=y_grid_limits,
-        x_grid_limits=x_grid_limits,
+        range_max_m=range_max_m,
+        grid_limits=grid_limits,
+        grid_shape=grid_shape,
         grid_resolution_xy=grid_resolution_xy,
         grid_resolution_z=grid_resolution_z,
-        session_id=session_id,
+        weight_func=interp
     )
     
     # Verificar que el campo existe en la grilla
