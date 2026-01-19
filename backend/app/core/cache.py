@@ -1,5 +1,12 @@
-from cachetools import LRUCache
 import numpy as np
+import pickle
+import logging
+from pathlib import Path
+from cachetools import LRUCache
+from scipy.sparse import csr_matrix, save_npz, load_npz
+from ..core.config import settings
+
+logger = logging.getLogger(__name__)
 
 def _nbytes_arr(a) -> int:
     """Calcula el tamaño en bytes de un array o MaskedArray."""
@@ -10,7 +17,10 @@ def _nbytes_arr(a) -> int:
     return getattr(a, "nbytes", 0)
 
 def _nbytes_pkg(pkg) -> int:
-    # pkg = {"arr": MaskedArray, "crs": str, "transform": Affine}
+    """
+    Calcula tamaño en bytes del paquete de datos de una grilla 2D.
+    pkg = {"arr": MaskedArray, "crs": str, "transform": Affine}
+    """
     n = 0
     a = pkg.get("arr")
     if a is not None:
@@ -20,29 +30,87 @@ def _nbytes_pkg(pkg) -> int:
 
 GRID2D_CACHE = LRUCache(maxsize=200 * 1024 * 1024, getsizeof=_nbytes_pkg)
 
-# ---- 3D Grid Cache (for vertical transects) ----
-def _nbytes_pkg3d(pkg) -> int:
+# ---- Operador W  ----
+def _nbytes_w_operator(pkg) -> int:
     """
-    Calcula tamaño en bytes de package 3D.
-    Soporta estructura multi-campo: pkg['fields'] = {field_name: {"data": arr, "metadata": dict}}
-    O estructura legacy: pkg['arr3d'] para retrocompat.
+    Calcula tamaño en bytes del operador W (matriz dispersa CSR).
+    pkg = {"W": csr_matrix, "metadata": dict}
     """
-    n = 0
+    W = pkg.get("W")
+    if W is None:
+        return 0
     
-    # Nuevo formato multi-campo
-    fields_dict = pkg.get("fields")
-    if fields_dict:
-        for fname, fdata in fields_dict.items():
-            arr = fdata.get("data")
-            if arr is not None:
-                n += _nbytes_arr(arr)
-    else:
-        # Formato legacy (retrocompat)
-        a3 = pkg.get("arr3d")
-        if a3 is not None:
-            n += _nbytes_arr(a3)
+    # Para CSR: data, indices, indptr
+    size = 0
+    if hasattr(W, 'data'):
+        size += W.data.nbytes
+    if hasattr(W, 'indices'):
+        size += W.indices.nbytes
+    if hasattr(W, 'indptr'):
+        size += W.indptr.nbytes
     
-    # x, y, z son pequeños (~KB), ignoramos
-    return n
+    return size
 
-GRID3D_CACHE = LRUCache(maxsize=600 * 1024 * 1024, getsizeof=_nbytes_pkg3d)
+# Cache RAM para operador W (300 MB)
+W_OPERATOR_CACHE = LRUCache(maxsize=300 * 1024 * 1024, getsizeof=_nbytes_w_operator)
+
+# Directorio para cache en disco
+CACHE_DIR = Path(settings.CACHE_DIR)
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+def get_w_operator_cache_path(cache_key: str) -> Path:
+    """Retorna la ruta del archivo de cache en disco para un operador W."""
+    return CACHE_DIR / f"{cache_key}.npz"
+
+def save_w_operator_to_disk(cache_key: str, W: csr_matrix, metadata: dict):
+    """
+    Guarda operador W (matriz dispersa CSR) en disco de forma eficiente.
+    
+    Args:
+        cache_key: Clave única de identificación
+        W: Matriz dispersa scipy.sparse.csr_matrix
+        metadata: Dict con información adicional (shape, roi, weight_func, etc.)
+    """
+    try:
+        cache_path = get_w_operator_cache_path(cache_key)
+        
+        # Guardar matriz dispersa usando scipy (formato .npz optimizado)
+        save_npz(cache_path, W, compressed=True)
+        
+        # Guardar metadata en archivo separado
+        metadata_path = cache_path.with_suffix('.meta.pkl')
+        with open(metadata_path, 'wb') as f:
+            pickle.dump(metadata, f, protocol=pickle.HIGHEST_PROTOCOL)
+        
+        logger.info(f"Operador W guardado en disco: {cache_path} ({W.nnz} elementos)")
+        
+    except Exception as e:
+        logger.error(f"Error guardando operador W en disco: {e}")
+
+def load_w_operator_from_disk(cache_key: str) -> tuple[csr_matrix, dict] | None:
+    """
+    Carga operador W desde disco.
+    
+    Returns:
+        tuple (W, metadata) si existe, None si no
+    """
+    try:
+        cache_path = get_w_operator_cache_path(cache_key)
+        metadata_path = cache_path.with_suffix('.meta.pkl')
+        
+        if not cache_path.exists() or not metadata_path.exists():
+            return None
+        
+        # Cargar matriz dispersa
+        W = load_npz(cache_path)
+        
+        # Cargar metadata
+        with open(metadata_path, 'rb') as f:
+            metadata = pickle.load(f)
+        
+        logger.info(f"Operador W cargado desde disco: {cache_path}")
+        return W, metadata
+        
+    except Exception as e:
+        logger.error(f"Error cargando operador W desde disco: {e}")
+        return None
