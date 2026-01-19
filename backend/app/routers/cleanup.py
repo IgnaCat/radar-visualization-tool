@@ -5,7 +5,7 @@ import shutil
 import os
 
 from ..core.config import settings
-from ..core.cache import GRID2D_CACHE, GRID3D_CACHE
+from ..core.cache import GRID2D_CACHE, W_OPERATOR_CACHE
 from ..models import CleanupRequest
 
 router = APIRouter(prefix="/cleanup", tags=["cleanup"])
@@ -226,8 +226,13 @@ def _delete_related_cogs(file_hashes: set[str], session_id: str | None = None) -
 
 def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None) -> int:
     """
-    Limpia entradas de GRID2D_CACHE y GRID3D_CACHE relacionadas con archivos específicos.
+    Limpia entradas de GRID2D_CACHE relacionadas con archivos específicos.
     Si session_id está presente, solo elimina entradas que coincidan con esa sesión.
+    
+    W_OPERATOR_CACHE NO se limpia aquí porque:
+    - Es compartido globalmente (300 MB para todas las sesiones)
+    - Se limpia automáticamente por LRU al alcanzar límite
+    - Para limpieza manual, usar /admin/clear-cache
     
     Args:
         file_hashes: Set de hashes de archivos (12 caracteres)
@@ -264,29 +269,8 @@ def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None)
         except Exception:
             pass
     
-    # Limpiar GRID3D_CACHE
-    keys_to_delete_3d = []
-    for cache_key in list(GRID3D_CACHE.keys()):
-        if isinstance(cache_key, tuple) and len(cache_key) > 0:
-            key_file_hash = cache_key[0]
-            # Misma lógica de session matching
-            if session_id:
-                key_session_id = cache_key[-1] if len(cache_key) > 1 else None
-                if key_file_hash in file_hashes and key_session_id == session_id:
-                    keys_to_delete_3d.append(cache_key)
-            else:
-                if key_file_hash in file_hashes:
-                    keys_to_delete_3d.append(cache_key)
-    
-    for key in keys_to_delete_3d:
-        try:
-            del GRID3D_CACHE[key]
-            count += 1
-        except Exception:
-            pass
-    
     if count > 0:
-        print(f"Limpiadas {count} entradas de cache relacionadas con {len(file_hashes)} hash(es)")
+        print(f"Limpiadas {count} entradas de GRID2D_CACHE relacionadas con {len(file_hashes)} hash(es)")
     
     return count
 
