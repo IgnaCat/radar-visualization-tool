@@ -18,6 +18,7 @@ services:
       - UPLOAD_DIR=/app/app/storage/uploads
       - DATA_DIR=/app/app/storage/data
       - IMAGES_DIR=/app/app/storage/tmp
+      - CACHE_DIR=/app/app/storage/cache
 
       # Upload rules
       - MAX_UPLOAD_MB=500
@@ -34,6 +35,8 @@ services:
     volumes:
       # Datos estáticos: DEMs, shapefiles (solo lectura)
       - ./backend/app/storage/data:/app/app/storage/data:ro
+      # Archivos cacheados (matriz W)
+      - ./backend/app/storage/cache:/app/app/storage/cache
     networks:
       - radar-network
     restart: unless-stopped
