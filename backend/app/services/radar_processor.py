@@ -9,7 +9,7 @@ from urllib.parse import quote
 from affine import Affine
 
 from ..core.config import settings
-from ..core.cache import GRID2D_CACHE
+from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX
 from ..core.constants import AFFECTS_INTERP_FIELDS
 
 from .radar_common import (
@@ -255,7 +255,8 @@ def process_radar_to_cog(
             grid_shape=grid_shape,
             grid_resolution_xy=grid_resolution_xy,
             grid_resolution_z=grid_resolution_z,
-            weight_func=interp
+            weight_func=interp,
+            session_id=session_id
         )
 
         # Verificar que el campo solicitado existe en la grilla
@@ -327,6 +328,12 @@ def process_radar_to_cog(
             "transform_warped": None,
         }
         GRID2D_CACHE[cache_key] = pkg_cached
+        
+        # Registrar en índice de sesión si existe session_id
+        if session_id:
+            if session_id not in SESSION_CACHE_INDEX:
+                SESSION_CACHE_INDEX[session_id] = set()
+            SESSION_CACHE_INDEX[session_id].add(cache_key)
 
     # Si hay filtros "visuales" sobre el MISMO campo, aplicar máscara post-grid
     # Regla: cualquier filtro cuyo .field == field_to_use (mismo campo) lo aplicamos como máscara 2D
@@ -443,6 +450,12 @@ def process_radar_to_cog(
                 
                 pkg_cached["qc_warped"] = qc_warped
                 GRID2D_CACHE[cache_key] = pkg_cached
+                
+                # Registrar en índice de sesión si existe session_id
+                if session_id:
+                    if session_id not in SESSION_CACHE_INDEX:
+                        SESSION_CACHE_INDEX[session_id] = set()
+                    SESSION_CACHE_INDEX[session_id].add(cache_key)
         
         # Limpiar GeoTIFF numérico temporal
         try:

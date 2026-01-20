@@ -342,7 +342,6 @@ class StatsOrchestrator:
             elevation=elevation,
             cappi_height=cappi_height,
             filters=filters,
-            session_id=session_id,
         )
         
         # Extraer datos de la grilla generada

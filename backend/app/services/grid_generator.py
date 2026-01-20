@@ -40,6 +40,7 @@ def generate_grid2d_on_demand(
     cappi_height: Optional[int] = 4000,
     filters: List = None,
     interp: Optional[str] = "Barnes2",
+    session_id: Optional[str] = None,
 ) -> Dict:
     """
     Genera una grilla 2D bajo demanda SIN cachearla.
@@ -58,6 +59,7 @@ def generate_grid2d_on_demand(
         radar_name: Nombre del radar
         estrategia: Estrategia de procesamiento
         interp: Método de interpolación
+        session_id: ID de sesión para índices de cache (opcional)
     
     Returns:
         Dict con: arr (np.ma.MaskedArray), transform (Affine), crs (WKT), qc (dict)
@@ -115,7 +117,8 @@ def generate_grid2d_on_demand(
         grid_shape=grid_shape,
         grid_resolution_xy=grid_resolution_xy,
         grid_resolution_z=grid_resolution_z,
-        weight_func=interp
+        weight_func=interp,
+        session_id=session_id
     )
     
     # Verificar que el campo existe en la grilla

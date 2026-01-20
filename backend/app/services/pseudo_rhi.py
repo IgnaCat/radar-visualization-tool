@@ -450,6 +450,7 @@ def _generate_segment_transect_png(
         constant_roi=constant_roi,
         weight_func='Barnes2',
         max_neighbors=None,
+        session_id=session_id,
     )
     
     # Aplicar operador W a todos los campos del radar

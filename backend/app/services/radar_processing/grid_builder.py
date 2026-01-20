@@ -11,7 +11,9 @@ from scipy.spatial import cKDTree
 from ...core.cache import (
     W_OPERATOR_CACHE,
     save_w_operator_to_disk,
-    load_w_operator_from_disk
+    load_w_operator_from_disk,
+    W_OPERATOR_SESSION_INDEX, 
+    W_OPERATOR_REF_COUNT
 )
 from ...core.constants import AFFECTS_INTERP_FIELDS
 from ..radar_common import (
@@ -337,6 +339,7 @@ def get_or_build_W_operator(
     constant_roi: float,
     weight_func: str = 'Barnes2',
     max_neighbors: int | None = None,
+    session_id: str | None = None,
 ) -> csr_matrix:
     """
     Obtiene operador W desde caché (RAM o disco) o lo construye.
@@ -390,6 +393,18 @@ def get_or_build_W_operator(
             "metadata": metadata
         }
         
+        # Registrar en índice de sesión si existe
+        if session_id:
+            if session_id not in W_OPERATOR_SESSION_INDEX:
+                W_OPERATOR_SESSION_INDEX[session_id] = set()
+            
+            # Solo incrementar contador si es la primera vez que esta sesión usa este operador
+            if cache_key not in W_OPERATOR_SESSION_INDEX[session_id]:
+                if cache_key not in W_OPERATOR_REF_COUNT:
+                    W_OPERATOR_REF_COUNT[cache_key] = 0
+                W_OPERATOR_REF_COUNT[cache_key] += 1
+                W_OPERATOR_SESSION_INDEX[session_id].add(cache_key)
+        
         return W
     
     # 3. Construir operador W
@@ -429,6 +444,18 @@ def get_or_build_W_operator(
         "W": W,
         "metadata": metadata
     }
+    
+    # Registrar en índice de sesión si existe
+    if session_id:
+        if session_id not in W_OPERATOR_SESSION_INDEX:
+            W_OPERATOR_SESSION_INDEX[session_id] = set()
+        
+        # Solo incrementar contador si es la primera vez que esta sesión usa este operador
+        if cache_key not in W_OPERATOR_SESSION_INDEX[session_id]:
+            if cache_key not in W_OPERATOR_REF_COUNT:
+                W_OPERATOR_REF_COUNT[cache_key] = 0
+            W_OPERATOR_REF_COUNT[cache_key] += 1
+            W_OPERATOR_SESSION_INDEX[session_id].add(cache_key)
     
     return W
 
@@ -540,6 +567,7 @@ def get_or_build_grid3d_with_operator(
         constant_roi=constant_roi,
         weight_func=weight_func,
         max_neighbors=None,
+        session_id=session_id,
     )
     
     # Aplicar a todos los campos disponibles

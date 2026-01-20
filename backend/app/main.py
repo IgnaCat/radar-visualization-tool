@@ -58,12 +58,3 @@ app.include_router(admin.router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-
-@app.get("/cache", response_class=HTMLResponse)
-def cache_public_dashboard():
-    """
-    Dashboard público de estadísticas de cache.
-    Accesible en: http://localhost:8000/cache
-    """
-    return admin.cache_dashboard()

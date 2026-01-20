@@ -5,7 +5,7 @@ import shutil
 import os
 
 from ..core.config import settings
-from ..core.cache import GRID2D_CACHE, W_OPERATOR_CACHE
+from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, W_OPERATOR_CACHE, W_OPERATOR_SESSION_INDEX, W_OPERATOR_REF_COUNT
 from ..models import CleanupRequest
 
 router = APIRouter(prefix="/cleanup", tags=["cleanup"])
@@ -136,6 +136,9 @@ def cleanup_close(req: CleanupRequest):
     # Limpiar entradas de cache en memoria relacionadas con archivos borrados
     if file_hashes:
         deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
+        
+        # Limpiar W_OPERATOR_CACHE por sesión
+        deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
     
     # Si hay session_id, verificar si la carpeta de uploads quedó vacía después de borrar archivos
     if req.session_id and deleted["uploads"] > 0:
@@ -243,34 +246,91 @@ def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None)
     """
     count = 0
     
-    # Limpiar GRID2D_CACHE
-    # Cache keys v2 tienen formato: (file_hash, product, field, ..., session_id)
-    # session_id está en la última posición de la tupla
-    keys_to_delete = []
-    for cache_key in list(GRID2D_CACHE.keys()):
-        # cache_key es una tupla, el primer elemento es file_hash
-        if isinstance(cache_key, tuple) and len(cache_key) > 0:
-            key_file_hash = cache_key[0]
-            # Si session_id está presente, verificar que coincida
-            if session_id:
-                # Última posición debería ser session_id en cache v2
-                key_session_id = cache_key[-1] if len(cache_key) > 1 else None
-                if key_file_hash in file_hashes and key_session_id == session_id:
-                    keys_to_delete.append(cache_key)
-            else:
-                # Legacy: borrar todas las entradas con ese file_hash
-                if key_file_hash in file_hashes:
-                    keys_to_delete.append(cache_key)
-    
-    for key in keys_to_delete:
-        try:
-            del GRID2D_CACHE[key]
-            count += 1
-        except Exception:
-            pass
+    if session_id and session_id in SESSION_CACHE_INDEX:
+        # Limpiar usando el índice de sesión (más eficiente)
+        keys_to_delete = list(SESSION_CACHE_INDEX[session_id])
+        
+        for cache_key in keys_to_delete:
+            try:
+                # Verificar que la key exista en la cache antes de eliminar
+                if cache_key in GRID2D_CACHE:
+                    del GRID2D_CACHE[cache_key]
+                    count += 1
+                # Eliminar del índice
+                SESSION_CACHE_INDEX[session_id].discard(cache_key)
+            except Exception as e:
+                print(f"Error eliminando cache key {cache_key}: {e}")
+        
+        # Limpiar entrada de sesión si está vacía
+        if not SESSION_CACHE_INDEX[session_id]:
+            del SESSION_CACHE_INDEX[session_id]
+    else:
+        # Sin session_id o sesión no encontrada: buscar por file_hash en todas las keys
+        # Esto es menos eficiente pero funciona para casos legacy
+        keys_to_delete = []
+        for cache_key in list(GRID2D_CACHE.keys()):
+            # Las cache keys contienen el file_hash hasheado en su contenido
+            # Como no podemos deshacer el hash, eliminamos todas las keys de esa sesión
+            # o si no hay sesión, no hacemos nada (para evitar borrar cache de otras sesiones)
+            if not session_id:
+                # Sin session_id: no limpiar para evitar afectar otras sesiones
+                break
+        
+        for key in keys_to_delete:
+            try:
+                del GRID2D_CACHE[key]
+                count += 1
+            except Exception:
+                pass
     
     if count > 0:
-        print(f"Limpiadas {count} entradas de GRID2D_CACHE relacionadas con {len(file_hashes)} hash(es)")
+        print(f"Limpiadas {count} entradas de GRID2D_CACHE {'para sesión ' + session_id if session_id else 'globales'}")
+    
+    return count
+
+
+def _cleanup_w_operator_entries(session_id: str | None = None) -> int:
+    """
+    Limpia entradas de W_OPERATOR_CACHE por sesión usando contador de referencias.
+    Solo elimina operadores cuando ninguna otra sesión los está usando.
+    No toca disco (los .npz en disco son compartidos).
+    
+    Args:
+        session_id: ID de sesión
+    
+    Returns:
+        Número de entradas de cache eliminadas de RAM
+    """
+    count = 0
+    
+    if session_id and session_id in W_OPERATOR_SESSION_INDEX:
+        keys_to_delete = list(W_OPERATOR_SESSION_INDEX[session_id])
+        
+        for cache_key in keys_to_delete:
+            try:
+                # Decrementar contador de referencias
+                if cache_key in W_OPERATOR_REF_COUNT:
+                    W_OPERATOR_REF_COUNT[cache_key] -= 1
+                    
+                    # Solo eliminar de RAM si nadie más lo está usando
+                    if W_OPERATOR_REF_COUNT[cache_key] <= 0:
+                        if cache_key in W_OPERATOR_CACHE:
+                            del W_OPERATOR_CACHE[cache_key]
+                            count += 1
+                        # Limpiar contador
+                        del W_OPERATOR_REF_COUNT[cache_key]
+                
+                # Siempre remover de índice de esta sesión
+                W_OPERATOR_SESSION_INDEX[session_id].discard(cache_key)
+            except Exception as e:
+                print(f"Error eliminando W_OPERATOR cache key {cache_key}: {e}")
+        
+        # Limpiar entrada de sesión si está vacía
+        if not W_OPERATOR_SESSION_INDEX[session_id]:
+            del W_OPERATOR_SESSION_INDEX[session_id]
+    
+    if count > 0:
+        print(f"Limpiadas {count} entradas de W_OPERATOR_CACHE para sesión {session_id}")
     
     return count
 

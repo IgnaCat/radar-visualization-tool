@@ -30,6 +30,10 @@ def _nbytes_pkg(pkg) -> int:
 
 GRID2D_CACHE = LRUCache(maxsize=200 * 1024 * 1024, getsizeof=_nbytes_pkg)
 
+# Índice secundario: session_id -> set de cache keys
+# Permite limpieza eficiente por sesión
+SESSION_CACHE_INDEX: dict[str, set[str]] = {}
+
 # ---- Operador W  ----
 def _nbytes_w_operator(pkg) -> int:
     """
@@ -53,6 +57,12 @@ def _nbytes_w_operator(pkg) -> int:
 
 # Cache RAM para operador W (300 MB)
 W_OPERATOR_CACHE = LRUCache(maxsize=300 * 1024 * 1024, getsizeof=_nbytes_w_operator)
+
+# Índice secundario para W_OPERATOR: session_id -> set de cache keys
+W_OPERATOR_SESSION_INDEX: dict[str, set[str]] = {}
+
+# Contador de referencias: cache_key -> número de sesiones usando ese operador
+W_OPERATOR_REF_COUNT: dict[str, int] = {}
 
 # Directorio para cache en disco
 CACHE_DIR = Path(settings.CACHE_DIR)
