@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from titiler.core.factory import TilerFactory
+from fastapi.responses import HTMLResponse
 
 from .core.config import settings
 from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin
@@ -59,7 +60,7 @@ def health():
     return {"status": "ok"}
 
 
-@app.get("/cache")
+@app.get("/cache", response_class=HTMLResponse)
 def cache_public_dashboard():
     """
     Dashboard público de estadísticas de cache.
