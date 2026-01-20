@@ -459,7 +459,7 @@ def main():
     cappi_height = None
     interp = "Barnes2"
     field_name, _ = resolve_field(radar, "DBZH")
-    radar,strategy,volume,_ = extract_metadata_from_filename(str(nc_path))
+    radar_name, strategy, volume, _ = extract_metadata_from_filename(str(nc_path))
 
     # Calcular shape de grilla y límites
     grid_res_xy, grid_res_z = calculate_grid_resolution(volume)
@@ -561,7 +561,7 @@ def main():
         max_diff = np.max(np.abs(diff))
         
         print(f"\n  Métricas de comparación ({n_valid:,} voxels válidos):")
-        print(f"Field: {field_name}, Volume: {volume}, Radar: {radar}, Estrategia: {strategy}")
+        print(f"Field: {field_name}, Volume: {volume}, Radar: {radar_name}, Estrategia: {strategy}")
         print(f"   RMSE (Root Mean Square Error): {rmse:.6f}")
         print(f"   MAE (Mean Absolute Error):  {mae:.6f}")
         print(f"   Max diff: {max_diff:.6f}")
