@@ -162,3 +162,13 @@ export async function getColormapDefaults() {
   const response = await api.get("/colormap/defaults");
   return response.data;
 }
+
+export async function getCacheStats() {
+  const response = await api.get("/admin/cache-stats");
+  return response.data;
+}
+
+export async function clearCache(cacheType = "all") {
+  const response = await api.post(`/admin/clear-cache?cache_type=${cacheType}`);
+  return response.data;
+}
