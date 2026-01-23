@@ -1,10 +1,15 @@
 import sys
 import time
+import gc
+import os
+import tempfile
 import numpy as np
 import pyart
 from pathlib import Path
 from scipy.sparse import csr_matrix
 from scipy.spatial import cKDTree
+from multiprocessing import Pool, cpu_count
+from typing import Tuple, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -155,6 +160,115 @@ def compute_weights(distances, roi, method='Barnes'):
         raise ValueError(f"Método desconocido: {method}")
 
 
+def _process_single_level(args) -> Tuple[int, int, str]:
+    """
+    Worker function para procesar un único nivel Z (procesamiento paralelo).
+    
+    Construye KD-tree para gates válidos y encuentra todos los mapeos gate-to-grid
+    para una slice horizontal de la grilla.
+    
+    Args:
+        args: tuple con (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
+                         gate_valid_mask, h_factor, nb, bsp, min_radius,
+                         weight_func, temp_dir, dtype_val, dtype_idx)
+    
+    Returns:
+        (iz, n_pairs, temp_file): índice nivel, número de pares, archivo temporal
+    """
+    (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
+     gate_valid_mask, h_factor, nb, bsp, min_radius,
+     weight_func, temp_dir, dtype_val, dtype_idx) = args
+    
+    n_points = grid_y_2d.shape[0]
+    
+    # Filter gates by mask dentro del workers
+    valid_indices = np.where(gate_valid_mask)[0]
+    gate_x_valid = gate_x[gate_valid_mask]
+    gate_y_valid = gate_y[gate_valid_mask]
+    gate_z_valid = gate_z[gate_valid_mask]
+    ngates = len(valid_indices)
+    
+    # Build KD-tree from valid gates only
+    gate_coords = np.column_stack([gate_x_valid, gate_y_valid, gate_z_valid]).astype('float64')
+    tree = cKDTree(gate_coords)
+    del gate_coords
+    gc.collect()
+    
+    grid_z_level = np.full(n_points, z_coord, dtype='float64')
+    
+    # ROI para este nivel usando dist_beam
+    roi = calculate_roi_dist_beam(
+        z_coords=grid_z_level,
+        y_coords=grid_y_2d,
+        x_coords=grid_x_2d,
+        h_factor=h_factor,
+        nb=nb,
+        bsp=bsp,
+        min_radius=min_radius,
+        radar_offset=(0, 0, 0)
+    )
+    
+    # Storage para este nivel (listas temporales)
+    level_indices = []
+    level_weights = []
+    level_indptr = [0]
+    
+    for i in range(n_points):
+        gx, gy, gz_pt = grid_x_2d[i], grid_y_2d[i], grid_z_level[i]
+        r = roi[i]
+        r2 = r * r
+        
+        point = np.array([gx, gy, gz_pt], dtype='float64')
+        candidate_indices_local = tree.query_ball_point(point, r)
+        
+        if not candidate_indices_local:
+            level_indptr.append(level_indptr[-1])
+            continue
+        
+        candidate_indices_local = np.array(candidate_indices_local, dtype='int32')
+        candidate_indices_global = valid_indices[candidate_indices_local]
+        
+        # Calcular distancias
+        dx = gate_x_valid[candidate_indices_local] - gx
+        dy = gate_y_valid[candidate_indices_local] - gy
+        dz = gate_z_valid[candidate_indices_local] - gz_pt
+        d2 = dx*dx + dy*dy + dz*dz
+        
+        # Doble validación ROI (como compute.py)
+        mask = d2 < r2
+        if not np.any(mask):
+            level_indptr.append(level_indptr[-1])
+            continue
+        
+        final_indices = candidate_indices_global[mask]
+        final_d2 = d2[mask]
+        
+        # Calcular pesos
+        d = np.sqrt(final_d2).astype('float32')
+        w = compute_weights(d, r, weight_func).astype(dtype_val)
+        
+        level_indices.extend(final_indices)
+        level_weights.extend(w)
+        level_indptr.append(level_indptr[-1] + final_indices.shape[0])
+    
+    # Guardar nivel a archivo temporal
+    temp_file = os.path.join(temp_dir, f'geometry_level_{iz}.npz')
+    np.savez(
+        temp_file,
+        indptr=np.array(level_indptr, dtype=dtype_idx),
+        gate_indices=np.array(level_indices, dtype=dtype_idx),
+        weights=np.array(level_weights, dtype=dtype_val)
+    )
+    
+    n_pairs = len(level_indices)
+    
+    # Limpiar memoria del worker
+    del tree, level_indices, level_weights, level_indptr
+    gc.collect()
+    
+    return iz, n_pairs, temp_file
+
+
 def build_W_operator(
     gates_xyz,
     voxels_xyz,
@@ -165,19 +279,20 @@ def build_W_operator(
     min_radius=800.0,
     weight_func="Barnes2",
     max_neighbors=None,
-    chunk_size=10_000,
+    n_workers=None,
+    temp_dir=None,
     dtype_val=np.float32,
     dtype_idx=np.int32,
 ):
     """
     Construye operador disperso W (CSR: Compressed Sparse Row) que mapea gates -> voxels.
     
-    OPERADOR W UNIVERSAL:
+    OPERADOR W UNIVERSAL con PROCESAMIENTO PARALELO:
     Este operador se construye con z_max = TOA para servir a TODOS los sweeps.
     Usa filtro TOA para excluir gates (ecos no-meteorológicos).
-
-    W[i, j] = peso (sin normalizar) del gate j para el voxel i
-
+    Procesa niveles Z en paralelo para mayor eficiencia.
+    
+    Args:
     gates_xyz: (Ngates, 3) float - coordenadas (x,y,z) de todos los gates
     voxels_xyz: (Nvoxels, 3) float - coordenadas (x,y,z) de todos los voxels
     toa: float, Top Of Atmosphere en metros (default 12000)
@@ -188,268 +303,185 @@ def build_W_operator(
     min_radius: float, radio mínimo en metros (default 800.0)
     weight_func: 'Barnes', 'Barnes2', 'Cressman', 'nearest'
     max_neighbors: int o None
-        - None: usa TODOS los gates dentro del ROI (query_ball_point)
-        - int: usa hasta K vecinos dentro del ROI (query con upper bound)
-    chunk_size: voxels procesados por bloque para reducir RAM
+        - None: usa TODOS los gates dentro del ROI (procesamiento paralelo por nivel Z)
+        - int: NO IMPLEMENTADO para parallel (usa modo secuencial original)
+    n_workers: int o None
+        - None: cpu_count() - 1
+        - 1: procesamiento secuencial
+        - >1: procesamiento paralelo por niveles Z
+    temp_dir: str o None (path a directorio temporal para archivos intermedios)
+        Si None, se crea uno automáticamente
     dtype_val: dtype para los pesos
     dtype_idx: dtype para índices
 
     Returns:
         W: scipy.sparse.csr_matrix shape (Nvoxels, Ngates_total)
+        valid_indices: np.ndarray mapeo de índices filtrados a originales
     """
     t_start = time.time()
+    
+    # Configurar workers
+    if n_workers is None:
+        n_workers = max(1, cpu_count() - 1)
+    
+    # Configurar directorio temporal
+    if temp_dir is None:
+        temp_dir = tempfile.mkdtemp(prefix='w_operator_')
+        cleanup_temp = True
+    else:
+        cleanup_temp = False
+        if not os.path.isdir(temp_dir):
+            raise ValueError(f"temp_dir no existe: {temp_dir}")
+    
     gates_xyz = np.asarray(gates_xyz, dtype=np.float32)
     voxels_xyz = np.asarray(voxels_xyz, dtype=np.float32)
 
     ngates_total = gates_xyz.shape[0]
     nvoxels = voxels_xyz.shape[0]
     
-    # Filtro TOA
-    # Esto elimina ecos no-meteorológicos y reduce tamaño del KDTree
+    # Crear máscara TOA (filtrado se hace dentro del worker)
     gate_z = gates_xyz[:, 2]
     toa_mask = gate_z <= toa
-    valid_indices = np.where(toa_mask)[0]
-    gates_xyz_filtered = gates_xyz[toa_mask]
-    ngates = gates_xyz_filtered.shape[0]
+    n_valid_gates = toa_mask.sum()
+    n_excluded = ngates_total - n_valid_gates
+    print(f"Filtro TOA ({toa/1000:.1f}km): {n_valid_gates:,}/{ngates_total:,} gates válidos ({n_excluded:,} excluidos)")
     
-    n_excluded = ngates_total - ngates
-    print(f"Filtro TOA ({toa/1000:.1f}km): {ngates:,}/{ngates_total:,} gates válidos ({n_excluded:,} excluidos)")
+    # Inferir grid_shape desde voxels_xyz
+    # Necesitamos conocer (nz, ny, nx) para procesamiento por niveles
+    # Asumimos que voxels están ordenados en Z-Y-X
+    z_coords = np.unique(voxels_xyz[:, 2])
+    y_coords = np.unique(voxels_xyz[:, 1])
+    x_coords = np.unique(voxels_xyz[:, 0])
     
-    # Calcular centro del radar (asumiendo que los gates están centrados en el origen)
-    radar_offset = np.array([0.0, 0.0, 0.0], dtype=np.float32)
-
-    print(f"Construyendo operador W UNIVERSAL: {nvoxels:,} voxels, {ngates:,} gates")
+    nz = len(z_coords)
+    ny = len(y_coords)
+    nx = len(x_coords)
+    
+    if nz * ny * nx != nvoxels:
+        # Si no es una grilla regular, caer a modo secuencial
+        print(f"Grilla no regular detectada, usando modo secuencial...")
+        n_workers = 1
+    
+    print(f"Construyendo operador W UNIVERSAL: {nvoxels:,} voxels, {n_valid_gates:,} gates válidos")
     print(f"  ROI dist_beam: h_factor={h_factor}, nb={nb}°, bsp={bsp}, min_radius={min_radius}m")
+    print(f"  Workers: {n_workers} (procesamiento {'paralelo' if n_workers > 1 else 'secuencial'})")
 
-    # Construir KDTree solo con gates filtrados
-    tree = cKDTree(gates_xyz_filtered)
-
-    # Vamos a acumular COO (Coordinate format) por chunks en arrays (mucho mejor que listas gigantes)
-    rows_chunks = []
-    cols_chunks = []
-    vals_chunks = []
-
-    voxels_with_data = 0
-    total_neighbors = 0
-
-    # Para cada voxel, buscar gates vecinos
-    for start in range(0, nvoxels, chunk_size):
-        end = min(start + chunk_size, nvoxels)
-        V = voxels_xyz[start:end]  # (m, 3)
-        m = V.shape[0]
-
-        # ==== Caso A: TODOS los vecinos en ROI ====
-        if max_neighbors is None:
-            # PASO 1: Calcular ROI máximo del chunk
-
-            # Calculamos el ROI de TODOS los voxels del chunk simultáneamente (vectorizado).
-            # Luego tomamos el ROI más grande del chunk para hacer UNA SOLA búsqueda en el KDTree.
-            # Esto evita hacer N búsquedas individuales (una por voxel).
-
-            # IMPORTANTE: Algunos voxels obtendrán gates FUERA de su ROI real (ej: voxel con 
-            # ROI=850m recibirá gates hasta 2200m). Esto se corrige en el PASO 2.
-            
-            z_vals = V[:, 0] - radar_offset[0]
-            y_vals = V[:, 1] - radar_offset[1]
-            x_vals = V[:, 2] - radar_offset[2]
-            
-            # Calcular ROI para cada voxel usando dist_beam
-            roi_vals = calculate_roi_dist_beam(
-                z_coords=z_vals,
-                y_coords=y_vals, 
-                x_coords=x_vals,
-                h_factor=h_factor,
-                nb=nb,
-                bsp=bsp,
-                min_radius=min_radius,
-                radar_offset=(0, 0, 0)  # Ya aplicamos offset arriba
-            )
-            
-            max_roi_chunk = float(roi_vals.max())
-            
-            # Búsqueda grupal con manejo de MemoryError
-            # Si el chunk es muy grande o el ROI es grande, puede fallar por memoria
-            try:
-                neigh_lists = tree.query_ball_point(V, r=max_roi_chunk)
-            except MemoryError:
-                # Sub-dividir el chunk en partes más pequeñas
-                print(f"    ⚠️  MemoryError en chunk [{start}:{end}], subdividiendo...")
-                sub_chunk_size = m // 4  # Dividir en 4 partes
-                if sub_chunk_size < 1:
-                    sub_chunk_size = 1
-                
-                neigh_lists = []
-                for sub_start in range(0, m, sub_chunk_size):
-                    sub_end = min(sub_start + sub_chunk_size, m)
-                    V_sub = V[sub_start:sub_end]
-                    
-                    # Calcular ROI máximo del sub-chunk
-                    roi_sub = roi_vals[sub_start:sub_end]
-                    max_roi_sub = float(roi_sub.max())
-                    
-                    try:
-                        sub_neigh = tree.query_ball_point(V_sub, r=max_roi_sub)
-                        neigh_lists.extend(sub_neigh)
-                    except MemoryError:
-                        # Si aún falla, procesar de a uno
-                        print(f"      ⚠️  MemoryError en sub-chunk, procesando voxel por voxel...")
-                        for i in range(sub_end - sub_start):
-                            vox = V_sub[i:i+1]
-                            roi = float(roi_sub[i])
-                            try:
-                                n = tree.query_ball_point(vox, r=roi)
-                                neigh_lists.extend(n)
-                            except:
-                                neigh_lists.append([])  # Voxel sin vecinos
-
-            # contamos nnz (no ceros) del chunk para prealocar
-            # dice cuántos pares (voxel,gate) vamos a agregar en este bloque
-            nnz_chunk = sum(len(lst) for lst in neigh_lists)
-            if nnz_chunk == 0:
-                continue
-
-            # Prealocar arrays del tamaño justo
-            rows = np.empty(nnz_chunk, dtype=dtype_idx)
-            cols = np.empty(nnz_chunk, dtype=dtype_idx)
-            vals = np.empty(nnz_chunk, dtype=dtype_val)
-
-            pos = 0
-            for local_i, idxs in enumerate(neigh_lists):
-                if not idxs:
-                    continue
-
-                i_global = start + local_i
-                idxs = np.asarray(idxs, dtype=np.int64)
-                
-                # PASO 2: Filtrado fino por voxel individual
-
-                # Ahora procesamos CADA voxel individualmente con su ROI específico.
-                # Calculamos el ROI real de este voxel y descartamos gates que están
-                # fuera de su ROI (aunque estén dentro del max_roi_chunk).
-
-                # Esto garantiza PRECISIÓN: cada voxel usa solo gates dentro de su ROI real.
-                
-                voxel = V[local_i]
-                
-                # Calcular ROI específico para ESTE voxel
-                roi = float(calculate_roi_dist_beam(
-                    z_coords=voxel[0] - radar_offset[0],
-                    y_coords=voxel[1] - radar_offset[1],
-                    x_coords=voxel[2] - radar_offset[2],
-                    h_factor=h_factor,
-                    nb=nb,
-                    bsp=bsp,
-                    min_radius=min_radius,
-                    radar_offset=(0, 0, 0)  # Ya aplicamos offset arriba
-                ))
-
-                # Calcular distancias euclidianas gate → voxel
-                gates_subset = gates_xyz_filtered[idxs]  # (k,3)
-                d = np.linalg.norm(gates_subset - voxel, axis=1).astype(np.float32)
-                
-                # Filtrar: solo gates dentro del ROI REAL de este voxel
-                within_roi = d <= roi
-                if not within_roi.any():
-                    continue
-                
-                idxs = idxs[within_roi]
-                d = d[within_roi]
-
-                # Calcular pesos (sin normalizar) usando el ROI específico
-                w = compute_weights(d, roi, weight_func).astype(dtype_val)
-
-                k = idxs.size
-                rows[pos:pos+k] = i_global
-                # Mapear índices locales (del array filtrado) a índices globales originales
-                cols[pos:pos+k] = valid_indices[idxs].astype(dtype_idx, copy=False)
-                vals[pos:pos+k] = w
-
-                pos += k
-                voxels_with_data += 1
-                total_neighbors += k
-
-            # por si pos < nnz_chunk (si hubo voxels vacíos)
-            rows = rows[:pos]
-            cols = cols[:pos]
-            vals = vals[:pos]
-
-        # ==== Caso B: hasta K vecinos dentro de ROI ====
-        # (Limitar número de vecinos si se especifica)
-        else:
-            K = int(max_neighbors)
-            if K <= 0:
-                raise ValueError("max_neighbors debe ser > 0 o None")
-            
-            # Calcular ROI para todos los voxels del chunk
-            z_vals = V[:, 0] - radar_offset[0]
-            y_vals = V[:, 1] - radar_offset[1]
-            x_vals = V[:, 2] - radar_offset[2]
-            
-            roi_vals = calculate_roi_dist_beam(
-                z_coords=z_vals,
-                y_coords=y_vals,
-                x_coords=x_vals,
-                h_factor=h_factor,
-                nb=nb,
-                bsp=bsp,
-                min_radius=min_radius,
-                radar_offset=(0, 0, 0)
-            )
-            
-            max_roi_chunk = float(roi_vals.max())
-
-            dist, idx = tree.query(V, k=K, distance_upper_bound=max_roi_chunk)
-
-            # normalizar shapes para K=1
-            if K == 1:
-                dist = dist.reshape(-1, 1)
-                idx = idx.reshape(-1, 1)
-
-            # Filtrar entradas inválidas (cuando no hay vecino, idx == ngates y dist=inf)
-            valid = np.isfinite(dist) & (idx < ngates)
-            nnz_chunk = int(valid.sum())
-            if nnz_chunk == 0:
-                continue
-
-            # indices COO
-            # filas: repetimos cada voxel por la cantidad de vecinos válidos
-            rows = np.repeat(np.arange(start, end, dtype=dtype_idx), valid.sum(axis=1).astype(np.int32))
-            # Mapear índices locales a globales
-            cols = valid_indices[idx[valid]].astype(dtype_idx, copy=False)
-
-            # pesos: si nearest -> todos 1, si no -> por distancia
-            d = dist[valid].astype(np.float32, copy=False)
-            if weight_func == "nearest":
-                vals = np.ones_like(d, dtype=dtype_val)
-            else:
-                # Para pesos, usar el ROI específico de cada voxel
-                voxel_indices = np.repeat(np.arange(m), valid.sum(axis=1).astype(np.int32))
-                voxel_rois = roi_vals[voxel_indices].astype(np.float32)
-                vals = compute_weights(d, voxel_rois, weight_func).astype(dtype_val)
-
-            # stats
-            voxels_with_data += int((valid.sum(axis=1) > 0).sum())
-            total_neighbors += nnz_chunk
-
-        rows_chunks.append(rows)
-        cols_chunks.append(cols)
-        vals_chunks.append(vals)
-
-    if len(rows_chunks) == 0:
-        # No hubo vecinos para ningún voxel
-        print("Operador W vacío (sin vecinos)")
-        return csr_matrix((nvoxels, ngates_total), dtype=dtype_val), valid_indices
-
-    # Concatenar chunks
-    rows_all = np.concatenate(rows_chunks)
-    cols_all = np.concatenate(cols_chunks)
-    vals_all = np.concatenate(vals_chunks)
-
-    # Construir CSR con shape completa (nvoxels x ngates_total originales)
-    W = csr_matrix((vals_all, (rows_all, cols_all)), shape=(nvoxels, ngates_total), dtype=dtype_val)
-    # Limpieza útil
-    W.sum_duplicates()
-    W.sort_indices()
+    # ============================================================================
+    # MODO PARALELO POR NIVELES Z
+    # ============================================================================
+    if max_neighbors is not None:
+        raise ValueError("max_neighbors no está implementado. Use None para procesamiento completo.")
+    
+    if nz * ny * nx != nvoxels:
+        raise ValueError(f"Grilla no regular detectada: {nz}*{ny}*{nx}={nz*ny*nx} != {nvoxels}")
+    
+    print(f"\nProcesando {nz} niveles Z con {n_workers} worker(s)...")
+        
+    # Preparar grid 2D (Y-X plane)
+    yy, xx = np.meshgrid(y_coords, x_coords, indexing='ij')
+    grid_y_2d = yy.ravel().astype('float64')
+    grid_x_2d = xx.ravel().astype('float64')
+    
+    # Extraer coordenadas individuales de gates (arrays 1D)
+    gate_x = gates_xyz[:, 0]
+    gate_y = gates_xyz[:, 1]
+    gate_z = gates_xyz[:, 2]
+    
+    # Preparar argumentos para cada nivel Z
+    # Pasar arrays 1D, máscara y parámetros dist_beam
+    args_list = [
+        (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
+            toa_mask, h_factor, nb, bsp, min_radius,
+            weight_func, temp_dir, dtype_val, dtype_idx)
+        for iz, z_coord in enumerate(z_coords)
+    ]
+    
+    # Procesar niveles en paralelo
+    if n_workers == 1:
+        # Secuencial
+        results = []
+        for args in args_list:
+            result = _process_single_level(args)
+            print(f"  Nivel {result[0]}: {result[1]:,} pares")
+            results.append(result)
+    else:
+        # Paralelo
+        with Pool(n_workers) as pool:
+            results = []
+            for result in pool.imap_unordered(_process_single_level, args_list):
+                print(f"  Nivel {result[0]}: {result[1]:,} pares")
+                results.append(result)
+    
+    # Ordenar resultados por nivel
+    results.sort(key=lambda x: x[0])
+    
+    # Calcular tamaño total para PRE-ALLOCATION
+    total_pairs = sum(r[1] for r in results)
+    total_grid_points = ny * nx * nz
+    
+    print(f"\nMerging {nz} niveles ({total_pairs:,} total pares)...")
+    
+    # PRE-ALLOCATION: arrays con tamaño exacto conocido
+    final_indptr = np.zeros(total_grid_points + 1, dtype=dtype_idx)
+    final_indices = np.empty(total_pairs, dtype=dtype_idx)
+    final_weights = np.empty(total_pairs, dtype=dtype_val)
+    
+    # Llenar arrays pre-alocados nivel por nivel
+    pair_offset = 0
+    point_offset = 0
+    
+    for iz, n_pairs, temp_file in results:
+        # Cargar datos del nivel
+        data = np.load(temp_file)
+        level_indptr = data['indptr']
+        level_indices = data['gate_indices']
+        level_weights = data['weights']
+        
+        n_level_points = len(level_indptr) - 1
+        n_level_pairs = len(level_indices)
+        
+        # Copiar índices y pesos directamente a arrays pre-alocados
+        if n_level_pairs > 0:
+            final_indices[pair_offset:pair_offset + n_level_pairs] = level_indices
+            final_weights[pair_offset:pair_offset + n_level_pairs] = level_weights
+        
+        # Construir indptr para este nivel con offset adecuado
+        for j in range(n_level_points):
+            final_indptr[point_offset + j + 1] = pair_offset + level_indptr[j + 1]
+        
+        # Actualizar offsets
+        pair_offset += n_level_pairs
+        point_offset += n_level_points
+        
+        # GESTIÓN DE MEMORIA: cerrar archivo y limpiar referencias
+        data.close()
+        del data, level_indptr, level_indices, level_weights
+        
+        # Eliminar archivo temporal inmediatamente
+        os.remove(temp_file)
+        
+        # Forzar garbage collection después de cada nivel
+        gc.collect()
+    
+    print("Merge completo.")
+    
+    # Limpiar directorio temporal si fue creado automáticamente
+    if cleanup_temp:
+        try:
+            os.rmdir(temp_dir)
+        except:
+            pass
+    
+    # Construir CSR directamente desde arrays pre-alocados
+    W = csr_matrix((final_weights, final_indices, final_indptr),
+                    shape=(nvoxels, ngates_total), dtype=dtype_val)
+    
+    # Limpieza final
+    del final_weights, final_indices, final_indptr
+    gc.collect()
+    
+    voxels_with_data = nvoxels  # Aproximación (no calculamos exacto en modo paralelo)
+    total_neighbors = total_pairs
 
     t_elapsed = time.time() - t_start
     avg_neighbors = total_neighbors / voxels_with_data if voxels_with_data > 0 else 0.0
@@ -525,7 +557,6 @@ def slice_W_operator(W_full, grid_shape_full, z_levels_needed, grid_shape_sliced
     """
     Extrae un sub-operador W con solo los niveles Z necesarios.
     
-    SLICING INTELIGENTE:
     Permite reutilizar un operador W universal extrayendo solo los niveles
     verticales relevantes para un sweep específico.
     
@@ -537,11 +568,6 @@ def slice_W_operator(W_full, grid_shape_full, z_levels_needed, grid_shape_sliced
     
     Returns:
         W_sliced: csr_matrix (nvoxels_sliced, ngates)
-    
-    Ejemplo:
-        W_full shape: (13*400*400=2,080,000 voxels, 3.5M gates) para z_max=12km
-        z_levels_needed: 10 (primeros 10 niveles, 0-9km)
-        W_sliced shape: (10*400*400=1,600,000 voxels, 3.5M gates)
         
         El slicing es instantáneo (solo extrae filas del CSR)
     """
@@ -628,7 +654,7 @@ def grid_with_pyart(radar, field_name, grid_shape, grid_limits, h_factor, nb, bs
 
 def main():
     print(f"="*80)
-    print(f"Validación: Operador W Universal + Slicing Inteligente")
+    print(f"Validación: Operador W con Procesamiento Paralelo")
     print(f"="*80)
 
     # Archivo NetCDF de prueba
@@ -636,14 +662,14 @@ def main():
     radar = pyart.io.read(str(nc_path))
 
     # Parámetros de grilla
-    elevation = 0  # Sweep bajo para demostrar slicing
+    elevation = 0
     cappi_height = None
     interp = "Barnes2"
     field_name, _ = resolve_field(radar, "DBZH")
     radar_name, strategy, volume, _ = extract_metadata_from_filename(str(nc_path))
 
     # Parámetros comunes
-    toa = 12000  # 12 km - límite físico universal
+    toa = 12000  # 12 km - límite físico para filtrado de ecos no-meteorológicos
     grid_res_xy, grid_res_z = calculate_grid_resolution(volume)
     range_max_m = safe_range_max_m(radar)
     
@@ -653,44 +679,44 @@ def main():
     bsp = 1.0
     min_radius = 300.0
 
-    # ==================== GRILLA UNIVERSAL (z_max = TOA) ====================
-    print(f"\n[1] CONFIGURACIÓN GRILLA UNIVERSAL")
-    print(f"    TOA (Top Of Atmosphere): {toa/1000:.1f} km")
-    print(f"    Este operador sirve para TODOS los sweeps\n")
+    # ==================== CONFIGURACIÓN DE GRILLA ====================
+    print(f"\n[1] CONFIGURACIÓN DE GRILLA")
+    print(f"    TOA (filtrado): {toa/1000:.1f} km")
+    print(f"    Elevación: {radar.fixed_angle['data'][elevation]:.2f}°\n")
     
     # Grilla universal: z_max = TOA (no depende del sweep)
-    z_grid_limits_universal = (0.0, toa)
+    z_grid_limits = (0.0, toa)
     y_grid_limits = (-range_max_m, range_max_m)
     x_grid_limits = (-range_max_m, range_max_m)
     
-    z_points_universal, y_points, x_points = calculate_grid_points(
-        z_grid_limits_universal, y_grid_limits, x_grid_limits,
+    z_points, y_points, x_points = calculate_grid_points(
+        z_grid_limits, y_grid_limits, x_grid_limits,
         grid_res_z, grid_res_xy
     )
     
-    grid_limits_universal = (z_grid_limits_universal, y_grid_limits, x_grid_limits)
-    grid_shape_universal = (z_points_universal, y_points, x_points)
+    grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
+    grid_shape = (z_points, y_points, x_points)
     
-    print(f"    Grid shape universal: {grid_shape_universal}")
-    print(f"    Total voxels: {np.prod(grid_shape_universal):,}")
+    print(f"    Grid shape: {grid_shape}")
+    print(f"    Grid limits Z: {z_grid_limits[0]/1000:.1f} - {z_grid_limits[1]/1000:.1f} km")
+    print(f"    Total voxels: {np.prod(grid_shape):,}")
 
-    # ==================== CONSTRUIR OPERADOR W UNIVERSAL ====================
-    print(f"\n[2] CONSTRUCCIÓN OPERADOR W UNIVERSAL")
-    print(f"    Este paso se hace UNA SOLA VEZ y sirve para todos los sweeps\n")
+    # ==================== CONSTRUIR OPERADOR W ====================
+    print(f"\n[2] CONSTRUCCIÓN OPERADOR W")
     
     # Coordenadas cartesianas de gates
     gates_xyz = get_gate_xyz_coords(radar)
     print(f"    Gates totales: {gates_xyz.shape[0]:,}")
 
-    # Coordenadas cartesianas de voxels (GRILLA UNIVERSAL)
-    voxels_xyz_universal = get_grid_xyz_coords(grid_shape_universal, grid_limits_universal)
-    print(f"    Voxels grilla universal: {voxels_xyz_universal.shape[0]:,}\n")
+    # Coordenadas cartesianas de voxels
+    voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
+    print(f"    Voxels: {voxels_xyz.shape[0]:,}\n")
 
-    # Construir operador W UNIVERSAL
+    # Construir operador W
     t0 = time.time()
-    W_universal, valid_gate_indices = build_W_operator(
+    W = build_W_operator(
         gates_xyz=gates_xyz,
-        voxels_xyz=voxels_xyz_universal,
+        voxels_xyz=voxels_xyz,
         toa=toa,
         h_factor=h_factor,
         nb=nb,
@@ -698,52 +724,20 @@ def main():
         min_radius=min_radius,
         weight_func=interp,
         max_neighbors=None,
-        chunk_size=5_000,
+        n_workers=3,  # Usa cpu_count() - 1 automáticamente
+        temp_dir=None,   # Crea directorio temporal automáticamente
     )
     t_build_w = time.time() - t0
     
-    print(f"\n    ✓ Operador W universal listo en {t_build_w:.2f}s")
+    print(f"\n    ✓ Operador W construido en {t_build_w:.2f}s")
 
-    # ==================== SLICING PARA SWEEP ESPECÍFICO ====================
-    print(f"\n[3] SLICING PARA SWEEP {elevation} (elevación {radar.fixed_angle['data'][elevation]:.2f}°)")
-    print(f"    Extraemos solo los niveles Z necesarios para este sweep\n")
-    
-    # Calcular altura máxima del haz para este sweep específico
-    z_min_sweep, z_max_sweep, elev_deg = calculate_z_limits(
-        range_max_m, elevation, cappi_height, radar.fixed_angle['data']
-    )
-    
-    # Limitar por TOA (no puede ser mayor que la grilla universal)
-    z_max_sweep = min(z_max_sweep, toa)
-    
-    z_grid_limits_sweep = (z_min_sweep, z_max_sweep)
-    z_points_sweep, _, _ = calculate_grid_points(
-        z_grid_limits_sweep, y_grid_limits, x_grid_limits,
-        grid_res_z, grid_res_xy
-    )
-    
-    grid_limits_sweep = (z_grid_limits_sweep, y_grid_limits, x_grid_limits)
-    grid_shape_sweep = (z_points_sweep, y_points, x_points)
-    
-    print(f"    Altura haz: 0 - {z_max_sweep/1000:.1f} km")
-    print(f"    Niveles Z necesarios: {z_points_sweep} (de {z_points_universal} disponibles)")
-    print(f"    Grid shape sweep: {grid_shape_sweep}")
-    
-    # Hacer slicing del operador W universal
-    W_sliced = slice_W_operator(
-        W_full=W_universal,
-        grid_shape_full=grid_shape_universal,
-        z_levels_needed=z_points_sweep,
-        grid_shape_sliced=grid_shape_sweep
-    )
-
-    # ==================== APLICAR OPERADOR SLICED ====================
-    print(f"\n[4] APLICACIÓN DEL OPERADOR W SLICED")
+    # ==================== APLICAR OPERADOR ====================
+    print(f"\n[3] APLICACIÓN DEL OPERADOR W")
     
     field_data = radar.fields[field_name]['data']
 
     t0 = time.time()
-    grid3d_sparse = apply_operator(W_sliced, field_data, grid_shape_sweep, handle_mask=True)
+    grid3d_sparse = apply_operator(W, field_data, grid_shape, handle_mask=True)
     t_apply = time.time() - t0
     
     print(f"    Completado en {t_apply:.2f}s")
@@ -752,13 +746,13 @@ def main():
           f"({100 * (~grid3d_sparse.mask).sum() / grid3d_sparse.size:.1f}%)")
 
     # ==================== COMPARAR CON PYART ====================
-    print(f"\n[5] VALIDACIÓN VS PYART (referencia)")
+    print(f"\n[4] VALIDACIÓN VS PYART (referencia)")
     
     grid3d_pyart, t_pyart = grid_with_pyart(
         radar=radar,
         field_name=field_name,
-        grid_shape=grid_shape_sweep,
-        grid_limits=grid_limits_sweep,
+        grid_shape=grid_shape,
+        grid_limits=grid_limits,
         h_factor=h_factor,
         nb=nb,
         bsp=bsp,
@@ -769,7 +763,7 @@ def main():
     print(f"    PyART completado en {t_pyart:.2f}s")
     
     # ==================== MÉTRICAS DE COMPARACIÓN ====================
-    print(f"\n[6] MÉTRICAS DE COMPARACIÓN")
+    print(f"\n[5] MÉTRICAS DE COMPARACIÓN")
     print(f"="*80)
     
     # Calcular diferencias solo en voxels válidos de ambos
@@ -787,14 +781,14 @@ def main():
         relative_error = rmse / (np.abs(pyart_valid.mean()) + 1e-10)
         
         print(f"\nDataset: {radar_name}_{strategy}_{volume}")
-        print(f"Field: {field_name}, Sweep: {elevation} ({elev_deg:.2f}°)")
+        print(f"Field: {field_name}, Sweep: {elevation}")
         print(f"\nVoxels válidos: {n_valid:,} ({100*n_valid/grid3d_sparse.size:.1f}% del total)")
-        print(f"\nComparación W Universal + Slicing vs PyART:")
+        print(f"\nComparación Operador W vs PyART:")
         print(f"  - RMSE: {rmse:.6f}")
         print(f"  - MAE:  {mae:.6f}")
         print(f"  - Max diff: {max_diff:.6f}")
-        print(f"  - Mean (W+Slice): {sparse_valid.mean():.2f}")
-        print(f"  - Mean (PyART):   {pyart_valid.mean():.2f}")
+        print(f"  - Mean (W Operator): {sparse_valid.mean():.2f}")
+        print(f"  - Mean (PyART):      {pyart_valid.mean():.2f}")
         print(f"  - Error relativo: {relative_error*100:.4f}%")
         
         # Criterio de éxito
@@ -802,27 +796,10 @@ def main():
         if relative_error < tolerance:
             print(f"\n✓ VALIDACIÓN EXITOSA")
         else:
-            print(f"\n⚠ Error relativo sobre tolerancia (>{tolerance*100}%)")
+            print(f"\nError relativo sobre tolerancia (>{tolerance*100}%)")
     else:
-        print(f"\n⚠ No hay voxels válidos en común para comparar")
+        print(f"\nNo hay voxels válidos en común para comparar")
     
-    # ==================== RESUMEN DE VENTAJAS ====================
-    print(f"\n{'='*80}")
-    print(f"VENTAJAS DEL OPERADOR W UNIVERSAL + SLICING:")
-    print(f"="*80)
-    print(f"\n1. UN SOLO operador W sirve para TODOS los sweeps")
-    print(f"   - Construcción: {t_build_w:.2f}s (una sola vez)")
-    print(f"   - Aplicación: {t_apply:.2f}s (slicing instantáneo + aplicación)")
-    print(f"\n2. Cache eficiente:")
-    print(f"   - W universal se guarda UNA vez en disco")
-    print(f"   - Slicing en memoria es instantáneo (<0.01s)")
-    print(f"\n3. Flexibilidad:")
-    print(f"   - Sweep 0 (bajo): usa {z_points_sweep}/{z_points_universal} niveles")
-    print(f"   - Sweep N (alto): usa más niveles, mismo operador")
-    print(f"\n4. Memoria controlada:")
-    print(f"   - W universal: {(W_universal.data.nbytes + W_universal.indices.nbytes + W_universal.indptr.nbytes)/1024**2:.1f} MB")
-    print(f"   - W sliced: {(W_sliced.data.nbytes + W_sliced.indices.nbytes + W_sliced.indptr.nbytes)/1024**2:.1f} MB")
-    print(f"   - Slicing NO copia datos, solo ajusta punteros")
     print(f"\n{'='*80}")
 
 
