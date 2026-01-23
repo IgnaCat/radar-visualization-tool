@@ -146,19 +146,23 @@ def get_or_build_W_operator(
         scipy.sparse.csr_matrix: Operador W
     """
     # Generar cache key (sin session_id - compartido globalmente)
-    cache_key = w_operator_cache_key(
-        radar=radar,
-        estrategia=estrategia,
-        volumen=volumen,
-        grid_shape=grid_shape,
-        grid_limits=grid_limits,
-        h_factor=h_factor,
-        nb=nb,
-        bsp=bsp,
-        min_radius=min_radius,
-        weight_func=weight_func,
-        max_neighbors=max_neighbors,
-    )
+    try:
+        cache_key = w_operator_cache_key(
+            radar=radar,
+            estrategia=estrategia,
+            volumen=volumen,
+            grid_shape=grid_shape,
+            grid_limits=grid_limits,
+            h_factor=h_factor,
+            nb=nb,
+            bsp=bsp,
+            min_radius=min_radius,
+            weight_func=weight_func,
+            max_neighbors=max_neighbors,
+        )
+    except Exception as e:
+        logger.error(f"Error generando cache_key: {e}")
+        raise
     
     # 1. Verificar cache RAM
     cached_pkg = W_OPERATOR_CACHE.get(cache_key)
@@ -167,30 +171,33 @@ def get_or_build_W_operator(
         return cached_pkg["W"]
     
     # 2. Verificar cache disco
-    disk_result = load_w_operator_from_disk(cache_key)
-    if disk_result is not None:
-        W, metadata = disk_result
-        logger.info(f"Operador W cargado desde disco: {cache_key[:16]}...")
-        
-        # Guardar en cache RAM para próximos usos
-        W_OPERATOR_CACHE[cache_key] = {
-            "W": W,
-            "metadata": metadata
-        }
-        
-        # Registrar en índice de sesión si existe
-        if session_id:
-            if session_id not in W_OPERATOR_SESSION_INDEX:
-                W_OPERATOR_SESSION_INDEX[session_id] = set()
+    try:
+        disk_result = load_w_operator_from_disk(cache_key)
+        if disk_result is not None:
+            W, metadata = disk_result
+            logger.info(f"Operador W cargado desde disco: {cache_key[:16]}...")
             
-            # Solo incrementar contador si es la primera vez que esta sesión usa este operador
-            if cache_key not in W_OPERATOR_SESSION_INDEX[session_id]:
-                if cache_key not in W_OPERATOR_REF_COUNT:
-                    W_OPERATOR_REF_COUNT[cache_key] = 0
-                W_OPERATOR_REF_COUNT[cache_key] += 1
-                W_OPERATOR_SESSION_INDEX[session_id].add(cache_key)
-        
-        return W
+            # Guardar en cache RAM para próximos usos
+            W_OPERATOR_CACHE[cache_key] = {
+                "W": W,
+                "metadata": metadata
+            }
+            
+            # Registrar en índice de sesión si existe
+            if session_id:
+                if session_id not in W_OPERATOR_SESSION_INDEX:
+                    W_OPERATOR_SESSION_INDEX[session_id] = set()
+                
+                # Solo incrementar contador si es la primera vez que esta sesión usa este operador
+                if cache_key not in W_OPERATOR_SESSION_INDEX[session_id]:
+                    if cache_key not in W_OPERATOR_REF_COUNT:
+                        W_OPERATOR_REF_COUNT[cache_key] = 0
+                    W_OPERATOR_REF_COUNT[cache_key] += 1
+                    W_OPERATOR_SESSION_INDEX[session_id].add(cache_key)
+            
+            return W
+    except Exception as e:
+        logger.warning(f"Error cargando operador W desde disco, construyendo nuevo: {e}")
     
     # 3. Construir operador W
     logger.info(f"Construyendo operador W: {radar}_{estrategia}_{volumen}")

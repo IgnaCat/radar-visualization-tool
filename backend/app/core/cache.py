@@ -55,8 +55,8 @@ def _nbytes_w_operator(pkg) -> int:
     
     return size
 
-# Cache RAM para operador W (300 MB)
-W_OPERATOR_CACHE = LRUCache(maxsize=300 * 1024 * 1024, getsizeof=_nbytes_w_operator)
+# Cache RAM para operador W (500 MB)
+W_OPERATOR_CACHE = LRUCache(maxsize=500 * 1024 * 1024, getsizeof=_nbytes_w_operator)
 
 # Índice secundario para W_OPERATOR: session_id -> set de cache keys
 W_OPERATOR_SESSION_INDEX: dict[str, set[str]] = {}
@@ -94,8 +94,23 @@ def save_w_operator_to_disk(cache_key: str, W: csr_matrix, metadata: dict):
         
         logger.info(f"Operador W guardado en disco: {cache_path} ({W.nnz} elementos)")
         
+    except (ValueError, OverflowError) as e:
+        # Error común: índices demasiado grandes para int32 en matrices dispersas
+        error_msg = str(e).lower()
+        if "value too large" in error_msg or "overflow" in error_msg:
+            logger.error(
+                f"Error guardando operador W (matriz demasiado grande): {e}\n"
+                f"Cache key: {cache_key[:16]}...\n"
+                f"Shape: {W.shape}, NNZ: {W.nnz}\n"
+                f"El archivo NetCDF tiene demasiados gates. Considere usar menor resolución."
+            )
+            print(f"[ERROR] Operador W demasiado grande para guardar: {cache_key[:16]}... - {e}")
+        else:
+            logger.error(f"Error guardando operador W en disco: {e}")
+            print(f"[ERROR] Error guardando operador W: {e}")
     except Exception as e:
-        logger.error(f"Error guardando operador W en disco: {e}")
+        logger.error(f"Error inesperado guardando operador W en disco: {e}")
+        print(f"[ERROR] Error inesperado guardando operador W: {e}")
 
 def load_w_operator_from_disk(cache_key: str) -> tuple[csr_matrix, dict] | None:
     """
@@ -121,6 +136,22 @@ def load_w_operator_from_disk(cache_key: str) -> tuple[csr_matrix, dict] | None:
         logger.info(f"Operador W cargado desde disco: {cache_path}")
         return W, metadata
         
+    except (ValueError, OverflowError) as e:
+        # Error común: "value too large" cuando índices exceden int32
+        error_msg = str(e).lower()
+        if "value too large" in error_msg or "overflow" in error_msg:
+            logger.error(
+                f"Error cargando operador W desde disco (matriz demasiado grande para RAM): {e}\n"
+                f"Cache key: {cache_key[:16]}...\n"
+                f"Archivo: {get_w_operator_cache_path(cache_key)}\n"
+                f"El archivo NetCDF puede ser demasiado grande o tener demasiados gates."
+            )
+            print(f"[ERROR] Operador W demasiado grande para RAM: {cache_key[:16]}... - {e}")
+        else:
+            logger.error(f"Error cargando operador W desde disco: {e}")
+            print(f"[ERROR] Error cargando operador W: {e}")
+        return None
     except Exception as e:
-        logger.error(f"Error cargando operador W desde disco: {e}")
+        logger.error(f"Error inesperado cargando operador W desde disco: {e}")
+        print(f"[ERROR] Error inesperado cargando operador W: {e}")
         return None

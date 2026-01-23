@@ -91,7 +91,7 @@ class ProcessingOrchestrator:
         if not selected_volumes:
             msg = "No se seleccionaron volúmenes, procesando todo."
             warnings.append(msg)
-            print(f"{msg}")
+            print(f"[WARNING] {msg}")
             return filepaths, warnings
         
         filtered_filepaths = []
@@ -103,7 +103,7 @@ class ProcessingOrchestrator:
             if vol == '03' and product.upper() == 'PPI':
                 msg = f"{filename}: El volumen '03' no es válido para el producto PPI."
                 warnings.append(msg)
-                print(f"{msg}")
+                print(f"[WARNING] {msg}")
                 continue
             
             if vol in selected_volumes:
@@ -111,7 +111,7 @@ class ProcessingOrchestrator:
             else:
                 msg = f"{filename}: Volumen '{vol}' no seleccionado, se omite."
                 warnings.append(msg)
-                print(f"{msg}")
+                print(f"[WARNING] {msg}")
         
         return filtered_filepaths, warnings
 
@@ -141,7 +141,7 @@ class ProcessingOrchestrator:
             else:
                 msg = f"{Path(f).name}: Radar '{radar}' no seleccionado, se omite."
                 warnings.append(msg)
-                print(f"{msg}")
+                print(f"[WARNING] {msg}")
         
         return filtered_filepaths, warnings
 
@@ -240,7 +240,7 @@ class ProcessingOrchestrator:
                         warnings_by_radar[radar] = []
                     msg = f"{Path(f_rel).name}: {e}"
                     warnings_by_radar[radar].append(msg)
-                    print(f"{radar}: {msg}")
+                    print(f"[ERROR] {radar}: {msg}")
 
         return results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar
 
@@ -271,11 +271,11 @@ class ProcessingOrchestrator:
             if missing_fields:
                 msg = f"El radar {radar} no tiene los siguientes campos: {', '.join(sorted(missing_fields))}"
                 warnings_by_radar.setdefault(radar, []).append(msg)
-                print(f"{msg}")
+                print(f"[WARNING] {msg}")
             if missing_vols:
                 msg = f"El radar {radar} no tiene los siguientes volúmenes: {', '.join(sorted(missing_vols))}"
                 warnings_by_radar.setdefault(radar, []).append(msg)
-                print(f"{msg}")
+                print(f"[WARNING] {msg}")
 
     @staticmethod
     def build_radar_results(
@@ -314,7 +314,7 @@ class ProcessingOrchestrator:
         if not radar_results:
             msg = "No se generaron imágenes de salida."
             all_warnings.append(msg)
-            print(f"{msg}")
+            print(f"[WARNING] {msg}")
 
         return radar_results, all_warnings
 
