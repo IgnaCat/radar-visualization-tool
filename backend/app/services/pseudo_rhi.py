@@ -15,7 +15,7 @@ from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
 
 from ..models import RangeFilter
-from ..services.grid_geometry import beam_height_max_km, calculate_grid_points
+from .grid_geometry import beam_height_max_km, calculate_grid_points
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
     safe_range_max_m, get_radar_site, md5_file, limit_line_to_range,
@@ -433,11 +433,11 @@ def _generate_segment_transect_png(
     )
     grid_shape = (z_points, y_points, x_points)
     
-    # Calcular ROI
-    constant_roi = max(
-        grid_resolution_xy * 1.5,
-        800 + (range_max_m / 100000) * 400
-    )
+    # Calcular parámetros dist_beam
+    h_factor = 1.0
+    nb = 1.5  # ancho de haz típico para radares meteorológicos
+    bsp = 1.0
+    min_radius = 300.0
     
     # Construir operador W (compartido, sin session_id)
     W = get_or_build_W_operator(
@@ -447,7 +447,10 @@ def _generate_segment_transect_png(
         volumen=volume,
         grid_shape=grid_shape,
         grid_limits=grid_limits,
-        constant_roi=constant_roi,
+        h_factor=h_factor,
+        nb=nb,
+        bsp=bsp,
+        min_radius=min_radius,
         weight_func='Barnes2',
         max_neighbors=None,
         session_id=session_id,

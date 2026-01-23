@@ -1,5 +1,5 @@
 ﻿"""
-Script para validar construcción de operador W disperso.
+Script para validar construcción de operador W disperso de manera secuencial.
 
 Este script:
 1. Lee un archivo NetCDF de radar
@@ -26,7 +26,7 @@ from scipy.spatial import cKDTree
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.services.radar_common import resolve_field, safe_range_max_m
-from app.services.grid_geometry import calculate_grid_resolution
+from backend.app.services.grid_geometry import calculate_grid_resolution
 
 
 def get_gate_xyz_coords(radar):

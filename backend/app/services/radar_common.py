@@ -262,15 +262,18 @@ def w_operator_cache_key(
     volumen: str,
     grid_shape: tuple,
     grid_limits: tuple,
-    constant_roi: float,
-    weight_func: str,
+    h_factor: float = 1.0,
+    nb: float = 1.5,
+    bsp: float = 1.0,
+    min_radius: float = 300.0,
+    weight_func: str = 'Barnes2',
     max_neighbors: int | None = None,
 ) -> str:
     """
     Genera cache key para operador W basado en:
     - Identificación del radar (radar_estrategia_volumen)
     - Geometría de grilla (shape, limits)
-    - Parámetros de interpolación (ROI, weight_func, max_neighbors)
+    - Parámetros de interpolación (h_factor, nb, bsp, min_radius, weight_func, max_neighbors)
     
     NOTA: Cache W es COMPARTIDO entre sesiones - el operador depende solo
     de la geometría del radar, no de datos específicos del archivo.
@@ -281,12 +284,15 @@ def w_operator_cache_key(
         volumen: Número de volumen (ej: 01)
         grid_shape: (nz, ny, nx)
         grid_limits: ((z_min, z_max), (y_min, y_max), (x_min, x_max))
-        constant_roi: Radio de influencia en metros
-        weight_func: Función de ponderación ('Barnes', 'Cressman', 'nearest')
+        h_factor: Escalado de altura (default 1.0)
+        nb: Ancho de haz en grados (default 1.5)
+        bsp: Espaciado entre haces (default 1.0)
+        min_radius: Radio mínimo en metros (default 800.0)
+        weight_func: Función de ponderación ('Barnes', 'Barnes2', 'Cressman', 'nearest')
         max_neighbors: Máximo número de vecinos (None = todos)
     """
     payload = {
-        "v": 1,  # versión del formato
+        "v": 2,  # versión del formato (incrementado para dist_beam)
         "radar": str(radar),
         "strat": str(estrategia),
         "vol": str(volumen),
@@ -296,7 +302,10 @@ def w_operator_cache_key(
             [float(grid_limits[1][0]), float(grid_limits[1][1])],
             [float(grid_limits[2][0]), float(grid_limits[2][1])],
         ],
-        "roi": float(constant_roi),
+        "h_factor": float(h_factor),
+        "nb": float(nb),
+        "bsp": float(bsp),
+        "min_radius": float(min_radius),
         "wfunc": str(weight_func),
         "maxn": int(max_neighbors) if max_neighbors is not None else None,
     }

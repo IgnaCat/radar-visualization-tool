@@ -1,3 +1,23 @@
+"""
+Script para validar construcción de operador W disperso de manera paralelas.
+
+Probando construcción de operador W con procesamiento paralelo por niveles Z
+Comparación con PyART para validación
+Diferencia con el secuencial, ademas de cambiar build_W_operator, usamos roi=dist_beam
+
+Este script:
+1. Lee un archivo NetCDF de radar
+2. Construye geometría de gates (coordenadas cartesianas)
+3. Define geometría de grilla cartesiana 3D
+4. Construye operador W usando KDTree + función de pesos
+5. Aplica W a un campo (DBZH)
+6. Compara con PyART tradicional (grid_from_radars)
+7. Reporta métricas de validación (RMSE, tiempo, sparsity)
+
+Uso:
+    python backend/experiments/test_sparse_operator.py
+"""
+
 import sys
 import time
 import gc
@@ -14,7 +34,7 @@ from typing import Tuple, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.services.radar_common import resolve_field, safe_range_max_m
-from app.services.grid_geometry import calculate_roi_dist_beam, calculate_grid_resolution, calculate_z_limits, calculate_grid_points
+from backend.app.services.grid_geometry import calculate_roi_dist_beam, calculate_grid_resolution, calculate_z_limits, calculate_grid_points
 from app.utils.helpers import extract_metadata_from_filename
 
 def get_gate_xyz_coords(radar, edges=False):
@@ -487,7 +507,7 @@ def build_W_operator(
     avg_neighbors = total_neighbors / voxels_with_data if voxels_with_data > 0 else 0.0
     size_mb = (W.data.nbytes + W.indices.nbytes + W.indptr.nbytes) / 1024**2
     print(
-        f"Operador W UNIVERSAL construido:\n"
+        f"Operador W construido:\n"
         f"  - {W.nnz:,} elementos no-cero\n"
         f"  - {voxels_with_data:,}/{nvoxels:,} voxels con datos ({100*voxels_with_data/nvoxels:.1f}%)\n"
         f"  - Vecinos promedio: {avg_neighbors:.1f}\n"

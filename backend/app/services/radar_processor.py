@@ -180,6 +180,9 @@ def process_radar_to_cog(
         range_max_m, elevation, cappi_height, radar.fixed_angle['data']
     )
 
+    # TOA (Top of Atmosphere)
+    toa = 15000.0
+
     # Preparar radar según producto (PPI/CAPPI/COLMAX)
     field_name = fill_dbzh_if_needed(radar, field_name, product)
     radar_to_use, field_to_use = prepare_radar_for_product(
@@ -209,7 +212,7 @@ def process_radar_to_cog(
     # Calculamos la cantidad de puntos en cada dimensión
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
-    z_grid_limits = (z_min, z_max)
+    z_grid_limits = (0.0, toa)
     y_grid_limits = (-range_max_m, range_max_m)
     x_grid_limits = (-range_max_m, range_max_m)
     grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
@@ -251,6 +254,7 @@ def process_radar_to_cog(
             estrategia=estrategia,
             volume=volume,
             range_max_m=range_max_m,
+            toa=toa,
             grid_limits=grid_limits,
             grid_shape=grid_shape,
             grid_resolution_xy=grid_resolution_xy,

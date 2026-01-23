@@ -1,6 +1,6 @@
 """
 Utilidades para cálculo de geometría de grillas 3D.
-Incluye límites espaciales, resolución, y altura del haz del radar.
+Incluye límites espaciales, resolución, roi y altura del haz del radar.
 """
 
 import math
@@ -33,7 +33,7 @@ def calculate_z_limits(
     radar_fixed_angles=None
 ) -> tuple[float, float, float | None]:
     """
-    Calcula límites verticales (z_min, z_max) según el tipo de producto.
+    Calcula límites verticales (z_min, z_max).
     
     Args:
         range_max_m: Rango máximo del radar en metros
@@ -50,7 +50,7 @@ def calculate_z_limits(
     # if product_upper == "CAPPI":
     #     z_top_m = cappi_height + 2000  # +2 km de margen
     #     elev_deg = None
-    # No hago diferenciacion por vista para manejar siempre la misma grilla 3d
+    # No hago diferenciacion por vista (PPI, etc) para manejar siempre la misma grilla 3d
         
 
     if radar_fixed_angles is None:
@@ -59,6 +59,7 @@ def calculate_z_limits(
     elev_deg = float(radar_fixed_angles[elevation])
     hmax_km = beam_height_max_km(range_max_m, elev_deg)
     z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen
+
     
     return (0.0, z_top_m, elev_deg)
 
@@ -106,3 +107,73 @@ def calculate_grid_points(
     x_points = int((x_limits[1] - x_limits[0]) / resolution_xy)
     
     return z_points, y_points, x_points
+
+
+def calculate_roi_dist_beam(
+    z_coords,
+    y_coords,
+    x_coords,
+    h_factor: float = 1.0,
+    nb: float = 1.5,
+    bsp: float = 1.0,
+    min_radius: float = 300.0,
+    radar_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
+):
+    """
+    Calcula el Radio de Influencia (ROI) usando el método dist_beam que simula
+    el ensanchamiento geométrico del haz del radar con la distancia.
+    
+    El ROI crece con la distancia del radar basándose en:
+    - Altura del voxel (componente vertical)
+    - Distancia horizontal del voxel (componente que simula apertura del haz)
+    
+    Fórmula dist_beam (PyART):
+        ROI = max(h_factor*(z/20) + distancia_xy*tan(nb*bsp*π/180), min_radius)
+    
+    Args:
+        z_coords: Coordenada(s) Z en metros (escalar o array)
+        y_coords: Coordenada(s) Y en metros (escalar o array)
+        x_coords: Coordenada(s) X en metros (escalar o array)
+        h_factor: Factor de escalado de altura (default 1.0)
+            - Controla cuánto contribuye la altura al ROI
+            - Dividido por 20 para evitar que domine sobre componente horizontal
+        nb: Ancho de haz virtual en grados (default 1.5)
+            - 0.5-1.0°: Radares de investigación alta resolución
+            - 1.5°: Radares meteorológicos operacionales (recomendado)
+            - 2.0-3.0°: Radares antiguos o baja resolución
+        bsp: Espaciado entre haces (default 1.0)
+            - Multiplica el ancho del haz para simular solapamiento
+        min_radius: Radio mínimo en metros (default 800.0)
+            - Garantiza ROI mínimo cerca del radar donde z y xy son pequeños
+            - Previene ROI demasiado pequeño que causaría voxels sin datos
+        radar_offset: Offset (z, y, x) del centro del radar en metros (default origen)
+    
+    Returns:
+        ROI en metros (mismo shape que inputs: escalar o array)
+    """
+    # Convertir a arrays para operaciones vectorizadas
+    z = np.asarray(z_coords, dtype=np.float32)
+    y = np.asarray(y_coords, dtype=np.float32)
+    x = np.asarray(x_coords, dtype=np.float32)
+    
+    # Aplicar offset del radar (normalmente en el origen)
+    z_rel = z - radar_offset[0]
+    y_rel = y - radar_offset[1]
+    x_rel = x - radar_offset[2]
+    
+    # Componente vertical: altura dividida por 20 para evitar que domine
+    vertical_component = h_factor * (z_rel / 20.0)
+    
+    # Componente horizontal: distancia XY multiplicada por tangente del ángulo del haz
+    # tan(nb * bsp * π/180) simula el ensanchamiento del haz con la distancia
+    xy_distance = np.sqrt(x_rel**2 + y_rel**2)
+    beam_angle_rad = nb * bsp * np.pi / 180.0
+    horizontal_component = xy_distance * np.tan(beam_angle_rad)
+    
+    # ROI total: suma de componentes con límite mínimo
+    roi = np.maximum(
+        vertical_component + horizontal_component,
+        min_radius
+    )
+    
+    return roi
