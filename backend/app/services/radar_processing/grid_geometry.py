@@ -113,9 +113,9 @@ def calculate_roi_dist_beam(
     z_coords,
     y_coords,
     x_coords,
-    h_factor: float = 1.0,
-    nb: float = 1.5,
-    bsp: float = 1.0,
+    h_factor: float = 0.8,
+    nb: float = 1.0,
+    bsp: float = 0.8,
     min_radius: float = 300.0,
     radar_offset: tuple[float, float, float] = (0.0, 0.0, 0.0)
 ):
@@ -134,16 +134,16 @@ def calculate_roi_dist_beam(
         z_coords: Coordenada(s) Z en metros (escalar o array)
         y_coords: Coordenada(s) Y en metros (escalar o array)
         x_coords: Coordenada(s) X en metros (escalar o array)
-        h_factor: Factor de escalado de altura (default 1.0)
+        h_factor: Factor de escalado de altura (default 0.8)
             - Controla cuánto contribuye la altura al ROI
             - Dividido por 20 para evitar que domine sobre componente horizontal
-        nb: Ancho de haz virtual en grados (default 1.5)
-            - 0.5-1.0°: Radares de investigación alta resolución
-            - 1.5°: Radares meteorológicos operacionales (recomendado)
+        nb: Ancho de haz virtual en grados (default 1.0)
+            - 0.5-1.0°: Radares de investigación alta resolución (recomendado)
+            - 1.5°: Radares meteorológicos operacionales
             - 2.0-3.0°: Radares antiguos o baja resolución
-        bsp: Espaciado entre haces (default 1.0)
+        bsp: Espaciado entre haces (default 0.8)
             - Multiplica el ancho del haz para simular solapamiento
-        min_radius: Radio mínimo en metros (default 800.0)
+        min_radius: Radio mínimo en metros (default 300.0)
             - Garantiza ROI mínimo cerca del radar donde z y xy son pequeños
             - Previene ROI demasiado pequeño que causaría voxels sin datos
         radar_offset: Offset (z, y, x) del centro del radar en metros (default origen)

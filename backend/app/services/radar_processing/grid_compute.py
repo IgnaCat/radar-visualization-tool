@@ -194,10 +194,10 @@ def build_W_operator(
     gates_xyz,
     voxels_xyz,
     toa=12000,
-    h_factor=1.0,
-    nb=1.5,
-    bsp=1.0,
-    min_radius=800.0,
+    h_factor=0.8,
+    nb=1.0,
+    bsp=0.8,
+    min_radius=300.0,
     weight_func="Barnes2",
     max_neighbors=None,
     n_workers=None,
@@ -218,10 +218,10 @@ def build_W_operator(
     voxels_xyz: (Nvoxels, 3) float - coordenadas (x,y,z) de todos los voxels
     toa: float, Top Of Atmosphere en metros (default 12000)
          Límite físico para excluir ecos no-meteorológicos sobre tropopausa
-    h_factor: float, escalado de altura (default 1.0)
-    nb: float, ancho de haz virtual en grados (default 1.5° para radares meteorológicos)
-    bsp: float, espaciado entre haces (default 1.0)
-    min_radius: float, radio mínimo en metros (default 800.0)
+    h_factor: float, escalado de altura (default 0.8)
+    nb: float, ancho de haz virtual en grados (default 1.0° para radares meteorológicos)
+    bsp: float, espaciado entre haces (default 0.8)
+    min_radius: float, radio mínimo en metros (default 300.0)
     weight_func: 'Barnes', 'Barnes2', 'Cressman', 'nearest'
     max_neighbors: int o None
         - None: usa TODOS los gates dentro del ROI (procesamiento paralelo por nivel Z)

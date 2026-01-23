@@ -28,7 +28,7 @@ def _nbytes_pkg(pkg) -> int:
     # crs/transform pesan poco, los ignoramos
     return n
 
-GRID2D_CACHE = LRUCache(maxsize=200 * 1024 * 1024, getsizeof=_nbytes_pkg)
+GRID2D_CACHE = LRUCache(maxsize=100 * 1024 * 1024, getsizeof=_nbytes_pkg)
 
 # Índice secundario: session_id -> set de cache keys
 # Permite limpieza eficiente por sesión
@@ -55,8 +55,8 @@ def _nbytes_w_operator(pkg) -> int:
     
     return size
 
-# Cache RAM para operador W (500 MB)
-W_OPERATOR_CACHE = LRUCache(maxsize=500 * 1024 * 1024, getsizeof=_nbytes_w_operator)
+# Cache RAM para operador W (300 MB)
+W_OPERATOR_CACHE = LRUCache(maxsize=300 * 1024 * 1024, getsizeof=_nbytes_w_operator)
 
 # Índice secundario para W_OPERATOR: session_id -> set de cache keys
 W_OPERATOR_SESSION_INDEX: dict[str, set[str]] = {}

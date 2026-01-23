@@ -111,9 +111,9 @@ def get_or_build_W_operator(
     volumen: str,
     grid_shape: tuple,
     grid_limits: tuple,
-    h_factor: float = 1.0,
-    nb: float = 1.5,
-    bsp: float = 1.0,
+    h_factor: float = 0.8,
+    nb: float = 1.0,
+    bsp: float = 0.8,
     min_radius: float = 300.0,
     toa: float = 15000.0,
     weight_func: str = 'Barnes2',
@@ -135,10 +135,10 @@ def get_or_build_W_operator(
         volumen: Número de volumen (ej: 01)
         grid_shape: (nz, ny, nx)
         grid_limits: ((z_min, z_max), (y_min, y_max), (x_min, x_max))
-        h_factor: Escalado de altura (default 1.0)
-        nb: Ancho de haz virtual en grados (default 1.5)
-        bsp: Espaciado entre haces (default 1.0)
-        min_radius: Radio mínimo en metros (default 800.0)
+        h_factor: Escalado de altura (default 0.8)
+        nb: Ancho de haz virtual en grados (default 1.0)
+        bsp: Espaciado entre haces (default 0.8)
+        min_radius: Radio mínimo en metros (default 300.0)
         weight_func: Función de ponderación
         max_neighbors: Máximo número de vecinos
     
@@ -298,11 +298,11 @@ def get_or_build_grid3d_with_operator(
     """
     # Calcular parámetros dist_beam
     # h_factor: escalado de altura estándar
-    h_factor = 1.0
-    # nb: ancho de haz en grados (1.5° típico para radares meteorológicos)
-    nb = 1.5
+    h_factor = 0.8
+    # nb: ancho de haz en grados
+    nb = 1.0
     # bsp: espaciado entre haces
-    bsp = 1.0
+    bsp = 0.8
     # min_radius: radio mínimo en metros
     min_radius = 300.0
     

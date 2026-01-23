@@ -80,7 +80,7 @@ export default function CacheStats() {
   const grid2d = stats?.grid2d_cache || {
     entries: 0,
     size_mb: 0,
-    max_size_mb: 200,
+    max_size_mb: 100,
   };
   const wRam = stats?.w_operator_cache_ram || {
     entries: 0,
