@@ -26,7 +26,7 @@ from scipy.spatial import cKDTree
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.services.radar_common import resolve_field, safe_range_max_m
-from backend.app.services.grid_geometry import calculate_grid_resolution
+from backend.app.services.radar_processing import calculate_grid_resolution
 
 
 def get_gate_xyz_coords(radar):

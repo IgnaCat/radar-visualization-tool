@@ -16,7 +16,7 @@ from scipy.spatial import cKDTree
 from multiprocessing import Pool, cpu_count
 from typing import Tuple
 
-from ..grid_geometry import calculate_roi_dist_beam
+from .grid_geometry import calculate_roi_dist_beam
 
 logger = logging.getLogger(__name__)
 

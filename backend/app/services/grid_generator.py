@@ -14,18 +14,16 @@ from .radar_common import (
     safe_range_max_m, 
     normalize_proj_dict,
 )
-from .grid_geometry import (
+from .radar_processing import (
+    get_or_build_grid3d_with_operator,
+    collapse_grid_to_2d,
     calculate_z_limits,
     calculate_grid_resolution,
     calculate_grid_points,
-)
-from .product_preparation import (
     prepare_radar_for_product,
     fill_dbzh_if_needed,
+    separate_filters
 )
-from .radar_processing import get_or_build_grid3d_with_operator
-from .radar_processing import collapse_grid_to_2d
-from .filter_application import separate_filters
 
 
 def generate_grid2d_on_demand(

@@ -34,7 +34,12 @@ from typing import Tuple, Optional
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.services.radar_common import resolve_field, safe_range_max_m
-from backend.app.services.grid_geometry import calculate_roi_dist_beam, calculate_grid_resolution, calculate_z_limits, calculate_grid_points
+from backend.app.services.radar_processing import (
+    calculate_roi_dist_beam,
+    calculate_grid_resolution,
+    calculate_z_limits,
+    calculate_grid_points
+)
 from app.utils.helpers import extract_metadata_from_filename
 
 def get_gate_xyz_coords(radar, edges=False):

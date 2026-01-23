@@ -15,13 +15,13 @@ from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
 
 from ..models import RangeFilter
-from .grid_geometry import beam_height_max_km, calculate_grid_points
+from .radar_processing import beam_height_max_km, calculate_grid_points
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
     safe_range_max_m, get_radar_site, md5_file, limit_line_to_range,
     normalize_proj_dict, qc_signature,
 )
-from .radar_processing.grid_builder import get_or_build_W_operator, apply_operator
+from .radar_processing import get_or_build_W_operator, apply_operator
 
 def calcule_radial_angle(radar_lat, radar_lon, punto_lat, punto_lon):
     """

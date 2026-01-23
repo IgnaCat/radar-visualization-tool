@@ -5,7 +5,7 @@ Cada producto requiere transformaciones específicas antes del gridding.
 
 import numpy as np
 import pyart
-from ..utils import cappi as cappi_utils
+from ...utils import cappi as cappi_utils
 
 
 def prepare_radar_for_product(

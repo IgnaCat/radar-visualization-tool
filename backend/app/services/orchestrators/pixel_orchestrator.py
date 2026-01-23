@@ -17,7 +17,7 @@ from ..radar_common import (
     grid2d_cache_key,
     md5_file,
 )
-from ..filter_application import (
+from ..radar_processing import (
     separate_filters,
     apply_visual_filters,
     apply_qc_filters,
