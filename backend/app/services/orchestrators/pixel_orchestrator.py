@@ -81,10 +81,11 @@ class PixelOrchestrator:
         elevation: Optional[int] = 0,
         cappi_height: Optional[int] = 4000,
         volume: Optional[str] = None,
+        filters: Optional[List] = None,
         session_id: Optional[str] = None,
     ) -> str:
         """
-        Genera cache key sin incluir filtros (se aplican dinámicamente).
+        Genera cache key incluyendo filtros QC (afectan interpolación).
         
         Returns:
             Cache key para GRID2D_CACHE
@@ -95,6 +96,12 @@ class PixelOrchestrator:
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
+        
+        # Generar signature de qc_filters para cache keys
+        qc_filters, _ = separate_filters(filters or [], field_to_use)
+        qc_sig = tuple(sorted([
+            (f.field, f.min, f.max) for f in qc_filters
+        ])) if qc_filters else tuple()
 
         cache_key = grid2d_cache_key(
             file_hash=file_hash,
@@ -104,7 +111,7 @@ class PixelOrchestrator:
             cappi_height=cappi_height if product_upper == "CAPPI" else None,
             volume=volume,
             interp=interp,
-            qc_sig=tuple(),  # Filtros se aplican dinámicamente
+            qc_sig=qc_sig,  # Incluir filtros QC en cache key
             session_id=session_id,
         )
 
@@ -130,19 +137,11 @@ class PixelOrchestrator:
             Array con filtros aplicados
         """
         field_to_use = field.upper()
-        qc_filters, visual_filters = separate_filters(filters, field_to_use)
+        _, visual_filters = separate_filters(filters, field_to_use)
         
-        # Aplicar filtros visuales
+        # Solo aplicar filtros visuales - los QC ya están aplicados en el cache
+        # (fueron aplicados durante la interpolación al generar la grilla)
         arr = apply_visual_filters(arr, visual_filters, field_to_use)
-        
-        # Aplicar filtros QC
-        if qc_filters:
-            # Usar qc_warped si arr_warped está disponible para coincidir dimensiones
-            if pkg.get("arr_warped") is not None:
-                qc_dict = pkg.get("qc_warped", {}) or {}
-            else:
-                qc_dict = pkg.get("qc", {}) or {}
-            arr = apply_qc_filters(arr, qc_filters, qc_dict)
         
         return arr
 
@@ -364,6 +363,7 @@ class PixelOrchestrator:
             elevation=payload.elevation,
             cappi_height=payload.height,
             volume=volume,
+            filters=payload.filters,
             session_id=payload.session_id,
         )
 

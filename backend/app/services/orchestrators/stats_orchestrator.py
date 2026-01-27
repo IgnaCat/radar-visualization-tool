@@ -84,10 +84,11 @@ class StatsOrchestrator:
         elevation: Optional[int] = 0,
         cappi_height: Optional[int] = 4000,
         volume: Optional[str] = None,
+        filters: Optional[List] = None,
         session_id: Optional[str] = None,
     ) -> str:
         """
-        Genera cache key sin incluir filtros (se aplican dinámicamente).
+        Genera cache key incluyendo filtros QC (afectan interpolación).
         
         Returns:
             Cache key para GRID2D_CACHE
@@ -98,6 +99,12 @@ class StatsOrchestrator:
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
+        
+        # Generar signature de qc_filters para cache key
+        qc_filters, _ = separate_filters(filters or [], field_to_use)
+        qc_sig = tuple(sorted([
+            (f.field, f.min, f.max) for f in qc_filters
+        ])) if qc_filters else tuple()
 
         cache_key = grid2d_cache_key(
             file_hash=file_hash,
@@ -107,7 +114,7 @@ class StatsOrchestrator:
             cappi_height=cappi_height if product_upper == "CAPPI" else None,
             volume=volume,
             interp=interp,
-            qc_sig=tuple(),  # Filtros se aplican dinámicamente
+            qc_sig=qc_sig,  # Incluir filtros QC en cache key
             session_id=session_id,
         )
 
@@ -133,19 +140,11 @@ class StatsOrchestrator:
             Array con filtros aplicados
         """
         field_to_use = field.upper()
-        qc_filters, visual_filters = separate_filters(filters, field_to_use)
+        _, visual_filters = separate_filters(filters, field_to_use)
         
-        # Aplicar filtros visuales
+        # Solo aplicar filtros visuales - los QC ya están aplicados en el cache
+        # (fueron aplicados durante la interpolación al generar la grilla)
         arr = apply_visual_filters(arr, visual_filters, field_to_use)
-        
-        # Aplicar filtros QC
-        if qc_filters:
-            # Usar qc_warped si arr_warped está disponible para coincidir dimensiones
-            if pkg.get("arr_warped") is not None:
-                qc_dict = pkg.get("qc_warped", {}) or {}
-            else:
-                qc_dict = pkg.get("qc", {}) or {}
-            arr = apply_qc_filters(arr, qc_filters, qc_dict)
         
         return arr
 
@@ -348,15 +347,11 @@ class StatsOrchestrator:
         arr = pkg["arr"]
         transform = pkg["transform"]
         crs_wkt = pkg["crs"]
-        qc_dict = pkg["qc"]
         
-        # Aplicar filtros dinámicamente (visual y QC)
+        # Aplicar solo filtros visuales (QC ya aplicados durante interpolación)
         field_upper = field_requested.upper()
-        qc_filters, visual_filters = separate_filters(filters, field_upper)
-        
+        _, visual_filters = separate_filters(filters, field_upper)
         arr = apply_visual_filters(arr, visual_filters, field_upper)
-        if qc_filters:
-            arr = apply_qc_filters(arr, qc_filters, qc_dict)
         
         # Reproyectar polígono al CRS de la grilla
         crs = pyproj.CRS.from_wkt(crs_wkt)
@@ -415,7 +410,7 @@ class StatsOrchestrator:
         # 3. Resolver nombre del campo
         field = StatsOrchestrator.resolve_field_name(payload.product, payload.field)
 
-        # 4. Generar cache key
+        # 4. Generar cache key (incluyendo filtros QC)
         radar_name, estrategia, volume, _ = extract_metadata_from_filename(payload.filepath)
         cache_key = StatsOrchestrator.generate_cache_key(
             filepath=filepath,
@@ -424,6 +419,7 @@ class StatsOrchestrator:
             elevation=payload.elevation,
             cappi_height=payload.height,
             volume=volume,
+            filters=payload.filters,
             session_id=payload.session_id,
         )
 
