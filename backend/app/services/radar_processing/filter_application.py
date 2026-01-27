@@ -4,9 +4,13 @@ Separa filtros QC (campos auxiliares como RHOHV) de filtros visuales (mismo camp
 """
 
 import numpy as np
-from typing import List
+import pyart
+import logging
+from typing import List, Optional
 from ...core.constants import AFFECTS_INTERP_FIELDS
 from ...models import RangeFilter
+
+logger = logging.getLogger(__name__)
 
 
 def separate_filters(filters: List[RangeFilter], field_to_use: str) -> tuple[List, List]:
@@ -115,3 +119,51 @@ def apply_qc_filters(
         masked.mask = np.ma.getmaskarray(masked) | qmask
     
     return masked
+
+
+def build_gatefilter_for_gridding(
+    radar: pyart.core.Radar,
+    qc_filters: Optional[List[RangeFilter]] = None
+) -> Optional[pyart.filters.GateFilter]:
+    """
+    Construye un GateFilter para usar durante la interpolación de grilla.
+    
+    Aplica exclude_transition() y filtros de rango sobre campos QC (RHOHV, etc.)
+    que afectan la interpolación.
+    
+    Args:
+        radar: Objeto radar PyART
+        qc_filters: Lista de RangeFilter con filtros QC
+    
+    Returns:
+        GateFilter configurado o None si no hay filtros
+    """
+    if not qc_filters:
+        return None
+    
+    gatefilter = pyart.filters.GateFilter(radar)
+    
+    # Exclude transition gates
+    try:
+        gatefilter.exclude_transition()
+    except Exception:
+        pass
+    
+    # Aplicar cada filtro QC
+    for f in qc_filters:
+        fld = getattr(f, "field", None)
+        if not fld or fld not in radar.fields:
+            continue
+            
+        fmin = getattr(f, "min", None)
+        fmax = getattr(f, "max", None)
+        
+        try:
+            if fmin is not None:
+                gatefilter.exclude_below(fld, float(fmin))
+            if fmax is not None:
+                gatefilter.exclude_above(fld, float(fmax))
+        except Exception as e:
+            logger.warning(f"Error aplicando filtro {fld} durante gridding: {e}")
+    
+    return gatefilter

@@ -18,6 +18,7 @@ from ...core.constants import AFFECTS_INTERP_FIELDS
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields
+from .filter_application import build_gatefilter_for_gridding
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +275,7 @@ def get_or_build_grid3d_with_operator(
     grid_resolution_xy: float,
     grid_resolution_z: float,
     weight_func: str = 'Barnes2',
+    qc_filters: list | None = None,
     session_id: str | None = None,
 ) -> pyart.core.Grid:
     """
@@ -291,6 +293,7 @@ def get_or_build_grid3d_with_operator(
         grid_resolution_xy: Resolución horizontal en metros
         grid_resolution_z: Resolución vertical en metros
         weight_func: Función de ponderación para el operador W
+        qc_filters: Lista de RangeFilter con filtros QC (ej. RHOHV) para aplicar durante interpolación
         session_id: Identificador de sesión
     
     Returns:
@@ -324,12 +327,23 @@ def get_or_build_grid3d_with_operator(
         session_id=session_id,
     )
     
+    # Construir GateFilter desde qc_filters
+    gatefilter = build_gatefilter_for_gridding(radar_to_use, qc_filters)
+    
+    # Preparar dict de filtros por campo (mismo filtro para todos los campos)
+    additional_filters = {}
+    if gatefilter is not None:
+        # Aplicar el mismo gatefilter a todos los campos
+        for field_name in radar_to_use.fields.keys():
+            additional_filters[field_name] = [gatefilter]
+    
     # Aplicar operador W a todos los campos disponibles
     fields_dict = apply_operator_to_all_fields(
         radar=radar_to_use,
         W=W,
         grid_shape=grid_shape,
-        handle_mask=True
+        handle_mask=True,
+        additional_filters=additional_filters
     )
     
     # Generar coordenadas de la grilla
