@@ -241,6 +241,10 @@ class ProcessingOrchestrator:
                     msg = f"{Path(f_rel).name}: {e}"
                     warnings_by_radar[radar].append(msg)
                     print(f"[ERROR] {radar}: {msg}")
+                    # Debug: imprimir traceback completo
+                    import traceback
+                    print(f"[DEBUG] Traceback completo:")
+                    traceback.print_exc()
 
         return results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar
 

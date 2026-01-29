@@ -194,16 +194,16 @@ def build_W_operator(
     gates_xyz,
     voxels_xyz,
     toa=12000,
-    h_factor=0.8,
-    nb=1.0,
-    bsp=0.8,
-    min_radius=300.0,
+    h_factor=0.5,
+    nb=0.7,
+    bsp=0.6,
+    min_radius=250.0,
     weight_func="Barnes2",
     max_neighbors=None,
     n_workers=None,
     temp_dir=None,
     dtype_val=np.float32,
-    dtype_idx=np.int32,
+    dtype_idx=np.int64,  # Cambiar a int64 para soportar radares completos
 ):
     """
     Construye operador disperso W (CSR: Compressed Sparse Row) que mapea gates -> voxels.
@@ -324,17 +324,23 @@ def build_W_operator(
     
     # Procesar niveles en paralelo
     if n_workers == 1:
-        # Secuencial
+        # Secuencial con progreso
         results = []
-        for args in args_list:
+        for i, args in enumerate(args_list):
             result = _process_single_level(args)
             results.append(result)
+            progress = (i + 1) / nz * 100
+            logger.info(f"  Progreso: {i+1}/{nz} niveles ({progress:.1f}%)")
     else:
-        # Paralelo
+        # Paralelo con progreso
         with Pool(n_workers) as pool:
             results = []
+            completed = 0
             for result in pool.imap_unordered(_process_single_level, args_list):
                 results.append(result)
+                completed += 1
+                progress = completed / nz * 100
+                logger.info(f"  Progreso: {completed}/{nz} niveles ({progress:.1f}%)")
     
     # Ordenar resultados por nivel
     results.sort(key=lambda x: x[0])
@@ -397,8 +403,17 @@ def build_W_operator(
             pass
     
     # Construir CSR directamente desde arrays pre-alocados
+    final_indices = final_indices.astype(np.int64, copy=False)
+    final_indptr = final_indptr.astype(np.int64, copy=False)
+    
     W = csr_matrix((final_weights, final_indices, final_indptr),
                     shape=(nvoxels, ngates_total), dtype=dtype_val)
+    
+    # Verificar que los índices sean int64
+    if W.indices.dtype != np.int64 or W.indptr.dtype != np.int64:
+        logger.warning(f"Convirtiendo índices de W a int64 (eran {W.indices.dtype}, {W.indptr.dtype})")
+        W.indices = W.indices.astype(np.int64)
+        W.indptr = W.indptr.astype(np.int64)
     
     # Limpieza final
     del final_weights, final_indices, final_indptr

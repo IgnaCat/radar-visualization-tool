@@ -84,6 +84,12 @@ def save_w_operator_to_disk(cache_key: str, W: csr_matrix, metadata: dict):
     try:
         cache_path = get_w_operator_cache_path(cache_key)
         
+        # Convertir índices a int64 antes de guardar para evitar overflow
+        if W.indices.dtype != np.int64:
+            W.indices = W.indices.astype(np.int64)
+        if W.indptr.dtype != np.int64:
+            W.indptr = W.indptr.astype(np.int64)
+        
         # Guardar matriz dispersa usando scipy (formato .npz optimizado)
         save_npz(cache_path, W, compressed=True)
         

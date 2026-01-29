@@ -19,6 +19,7 @@ from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields
 from .filter_application import build_gatefilter_for_gridding
+from .product_preparation import prepare_radar_for_product
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +219,7 @@ def get_or_build_W_operator(
         max_neighbors=max_neighbors,
         n_workers=3,  # Usa cpu_count() - 1 automáticamente
         temp_dir=None,   # Crea directorio temporal automáticamente
+        dtype_idx=np.int64,
     )
     
     # Metadata para referencia
@@ -268,7 +270,6 @@ def get_or_build_grid3d_with_operator(
     radar: str,
     estrategia: str,
     volume: str,
-    range_max_m: float,
     toa: float,
     grid_limits: tuple, 
     grid_shape: tuple,
@@ -287,7 +288,6 @@ def get_or_build_grid3d_with_operator(
         radar: Código del radar (ej: RMA1)
         estrategia: Estrategia de escaneo (ej: 0315)
         volume: Volumen del radar
-        range_max_m: Rango máximo en metros (afecta parámetros dist_beam)
         grid_limits: Límites de la grilla ((z_min, z_max), (y_min, y_max), (x_min, x_max))
         grid_shape: (nz, ny, nx)
         grid_resolution_xy: Resolución horizontal en metros
@@ -301,13 +301,13 @@ def get_or_build_grid3d_with_operator(
     """
     # Calcular parámetros dist_beam
     # h_factor: escalado de altura estándar
-    h_factor = 0.8
+    h_factor = 0.5
     # nb: ancho de haz en grados
-    nb = 1.0
+    nb = 0.7
     # bsp: espaciado entre haces
-    bsp = 0.8
+    bsp = 0.6
     # min_radius: radio mínimo en metros
-    min_radius = 300.0
+    min_radius = 250.0
     
     # Obtener operador W (con caché completo: RAM -> Disco -> Build)
     W = get_or_build_W_operator(
