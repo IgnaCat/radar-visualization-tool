@@ -11,6 +11,8 @@ from ...core.cache import (
     W_OPERATOR_CACHE,
     save_w_operator_to_disk,
     load_w_operator_from_disk,
+    try_cache_w_operator_in_ram,
+    get_w_operator_size_mb,
     W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT
 )
@@ -114,10 +116,10 @@ def get_or_build_W_operator(
     grid_shape: tuple,
     grid_limits: tuple,
     h_factor: float = 0.8,
-    nb: float = 1.0,
-    bsp: float = 0.8,
+    nb: float = 1.1,
+    bsp: float = 0.9,
     min_radius: float = 300.0,
-    toa: float = 15000.0,
+    toa: float = 12000.0,
     weight_func: str = 'Barnes2',
     max_neighbors: int | None = None,
     session_id: str | None = None,
@@ -179,23 +181,8 @@ def get_or_build_W_operator(
             W, metadata = disk_result
             logger.info(f"Operador W cargado desde disco: {cache_key[:16]}...")
             
-            # Guardar en cache RAM para próximos usos
-            W_OPERATOR_CACHE[cache_key] = {
-                "W": W,
-                "metadata": metadata
-            }
-            
-            # Registrar en índice de sesión si existe
-            if session_id:
-                if session_id not in W_OPERATOR_SESSION_INDEX:
-                    W_OPERATOR_SESSION_INDEX[session_id] = set()
-                
-                # Solo incrementar contador si es la primera vez que esta sesión usa este operador
-                if cache_key not in W_OPERATOR_SESSION_INDEX[session_id]:
-                    if cache_key not in W_OPERATOR_REF_COUNT:
-                        W_OPERATOR_REF_COUNT[cache_key] = 0
-                    W_OPERATOR_REF_COUNT[cache_key] += 1
-                    W_OPERATOR_SESSION_INDEX[session_id].add(cache_key)
+            # Intentar guardar en cache RAM
+            try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
             
             return W
     except Exception as e:
@@ -240,26 +227,13 @@ def get_or_build_W_operator(
         "created_at": time.time(),
     }
     
-    # Guardar en disco
+    # Siempre guardar en disco
+    w_size_mb = get_w_operator_size_mb(W)
     save_w_operator_to_disk(cache_key, W, metadata)
+    logger.info(f"Operador W guardado en disco ({w_size_mb:.2f} MB)")
     
-    # Guardar en cache RAM
-    W_OPERATOR_CACHE[cache_key] = {
-        "W": W,
-        "metadata": metadata
-    }
-    
-    # Registrar en índice de sesión si existe
-    if session_id:
-        if session_id not in W_OPERATOR_SESSION_INDEX:
-            W_OPERATOR_SESSION_INDEX[session_id] = set()
-        
-        # Solo incrementar contador si es la primera vez que esta sesión usa este operador
-        if cache_key not in W_OPERATOR_SESSION_INDEX[session_id]:
-            if cache_key not in W_OPERATOR_REF_COUNT:
-                W_OPERATOR_REF_COUNT[cache_key] = 0
-            W_OPERATOR_REF_COUNT[cache_key] += 1
-            W_OPERATOR_SESSION_INDEX[session_id].add(cache_key)
+    # Intentar guardar en cache RAM si no es muy grande
+    try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
     
     return W
 
@@ -301,13 +275,13 @@ def get_or_build_grid3d_with_operator(
     """
     # Calcular parámetros dist_beam
     # h_factor: escalado de altura estándar
-    h_factor = 0.5
+    h_factor = 0.8
     # nb: ancho de haz en grados
-    nb = 0.7
+    nb = 1.1
     # bsp: espaciado entre haces
-    bsp = 0.6
+    bsp = 0.9
     # min_radius: radio mínimo en metros
-    min_radius = 250.0
+    min_radius = 300.0
     
     # Obtener operador W (con caché completo: RAM -> Disco -> Build)
     W = get_or_build_W_operator(

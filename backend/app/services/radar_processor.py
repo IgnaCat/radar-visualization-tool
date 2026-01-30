@@ -172,7 +172,7 @@ def process_radar_to_cog(
     )
 
     # TOA (Top of Atmosphere)
-    toa = 15000.0
+    toa = 12000.0
 
     # Generamos la imagen PNG para previsualización y referencia
     # png.create_png(

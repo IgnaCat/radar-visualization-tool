@@ -58,6 +58,9 @@ def _nbytes_w_operator(pkg) -> int:
 # Cache RAM para operador W (300 MB)
 W_OPERATOR_CACHE = LRUCache(maxsize=300 * 1024 * 1024, getsizeof=_nbytes_w_operator)
 
+# Límite para intentar guardar en RAM (un poco menos que el maxsize para margen)
+W_OPERATOR_MAX_RAM_SIZE_MB = 250
+
 # Índice secundario para W_OPERATOR: session_id -> set de cache keys
 W_OPERATOR_SESSION_INDEX: dict[str, set[str]] = {}
 
@@ -68,9 +71,74 @@ W_OPERATOR_REF_COUNT: dict[str, int] = {}
 CACHE_DIR = Path(settings.CACHE_DIR)
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+
+def get_w_operator_size_mb(W: csr_matrix) -> float:
+    """Calcula el tamaño en MB de un operador W (matriz dispersa CSR)."""
+    if W is None:
+        return 0.0
+    
+    w_size_bytes = 0
+    if hasattr(W, 'data'):
+        w_size_bytes += W.data.nbytes
+    if hasattr(W, 'indices'):
+        w_size_bytes += W.indices.nbytes
+    if hasattr(W, 'indptr'):
+        w_size_bytes += W.indptr.nbytes
+    
+    return w_size_bytes / (1024 ** 2)
+
+
+def try_cache_w_operator_in_ram(
+    cache_key: str,
+    W: csr_matrix,
+    metadata: dict,
+    session_id: str | None = None
+) -> bool:
+    """
+    Intenta guardar operador W en cache RAM si no excede el límite de tamaño.
+    
+    Args:
+        cache_key: Clave de cache
+        W: Operador W (matriz dispersa)
+        metadata: Metadatos del operador
+        session_id: ID de sesión (opcional)
+    
+    Returns:
+        bool: True si se guardó en RAM, False si era muy grande
+    """
+    w_size_mb = get_w_operator_size_mb(W)
+    
+    if w_size_mb < W_OPERATOR_MAX_RAM_SIZE_MB:
+        W_OPERATOR_CACHE[cache_key] = {
+            "W": W,
+            "metadata": metadata
+        }
+        logger.info(f"Operador W guardado en cache RAM ({w_size_mb:.2f} MB)")
+        
+        # Registrar en índice de sesión si existe
+        if session_id:
+            if session_id not in W_OPERATOR_SESSION_INDEX:
+                W_OPERATOR_SESSION_INDEX[session_id] = set()
+            
+            if cache_key not in W_OPERATOR_SESSION_INDEX[session_id]:
+                if cache_key not in W_OPERATOR_REF_COUNT:
+                    W_OPERATOR_REF_COUNT[cache_key] = 0
+                W_OPERATOR_REF_COUNT[cache_key] += 1
+                W_OPERATOR_SESSION_INDEX[session_id].add(cache_key)
+        
+        return True
+    else:
+        logger.info(
+            f"Operador W ({w_size_mb:.2f} MB) NO se guarda en RAM "
+            f"(excede límite de {W_OPERATOR_MAX_RAM_SIZE_MB} MB)"
+        )
+        return False
+    
+
 def get_w_operator_cache_path(cache_key: str) -> Path:
     """Retorna la ruta del archivo de cache en disco para un operador W."""
     return CACHE_DIR / f"{cache_key}.npz"
+
 
 def save_w_operator_to_disk(cache_key: str, W: csr_matrix, metadata: dict):
     """
@@ -117,6 +185,7 @@ def save_w_operator_to_disk(cache_key: str, W: csr_matrix, metadata: dict):
     except Exception as e:
         logger.error(f"Error inesperado guardando operador W en disco: {e}")
         print(f"[ERROR] Error inesperado guardando operador W: {e}")
+
 
 def load_w_operator_from_disk(cache_key: str) -> tuple[csr_matrix, dict] | None:
     """
