@@ -16,7 +16,7 @@ Estructura:
 from .grid_builder import get_or_build_grid3d_with_operator, get_or_build_W_operator
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields, apply_operator
-from .field_processor import collapse_grid_to_2d
+from .product_collapse import collapse_grid_to_2d
 from .warping import warp_array_to_mercator
 from .cog_generator import convert_to_cog, create_cog_from_warped_array
 from .grid_geometry import (

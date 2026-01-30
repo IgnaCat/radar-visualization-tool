@@ -39,16 +39,19 @@ def create_cog_from_warped_array(
     data_norm = (data_masked - vmin) / (vmax - vmin)
     data_norm = np.clip(data_norm, 0, 1)
     
-    # Aplicar colormap (retorna RGBA)
-    # filled(0) pone 0 en los valores enmascarados, pero luego los pondremos negros explícitamente
+    # Crear máscara de transparencia ANTES de aplicar colormap
+    mask = data_masked.mask
+    
+    # Aplicar colormap solo a valores válidos (retorna RGBA)
+    # Para valores enmascarados, filled() pone 0 temporalmente pero serán reemplazados
     rgba = cmap(data_norm.filled(0))
     data_rgba = (rgba * 255).astype(np.uint8)
     
-    # Crear máscara de transparencia
-    mask = data_masked.mask
+    # Crear alpha channel
     alpha = np.where(mask, 0, 255).astype(np.uint8)
     
-    # Poner pixels transparentes en negro para evitar halos de color
+    # Poner pixels enmascarados en negro (0,0,0) para evitar halos de colormap
+    # Esto previene que el colormap aplicado a valores enmascarados genere artefactos visibles
     for i in range(3):
         data_rgba[:, :, i] = np.where(mask, 0, data_rgba[:, :, i])
     

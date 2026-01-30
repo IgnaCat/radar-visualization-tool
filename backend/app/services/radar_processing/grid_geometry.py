@@ -26,6 +26,69 @@ def beam_height_max_km(range_max_m: float, elev_deg: float, antenna_alt_m: float
     return h / 1000.0  # Convertir a km
 
 
+def compute_beam_height(
+    horizontal_distance: np.ndarray,
+    elevation_deg: float,
+    radar_altitude: float = 0.0,
+    ke: float = 4.0/3.0,
+    re: float = 6.371e6
+) -> np.ndarray:
+    """
+    Calcula la altura del haz del radar considerando curvatura terrestre.
+    
+    Usa el modelo estándar 4/3 de radio efectivo de la Tierra que considera
+    tanto la curvatura geométrica como la refracción atmosférica estándar.
+    
+    Fórmula completa:
+        h = sqrt(r² + (ke*Re)² + 2*r*ke*Re*sin(θ)) - ke*Re + h0
+    
+    Donde:
+        - r: slant range (rango inclinado) ≈ distancia_horizontal / cos(θ)
+        - ke: factor de radio efectivo (4/3 para refracción estándar)
+        - Re: radio de la Tierra (6.371e6 m)
+        - θ: ángulo de elevación
+        - h0: altura del radar sobre el nivel del mar
+    
+    Args:
+        horizontal_distance: Distancia horizontal desde el radar en metros (array o escalar)
+        elevation_deg: Ángulo de elevación en grados
+        radar_altitude: Altura del radar sobre el nivel del mar en metros (default: 0)
+        ke: Factor de radio efectivo de la Tierra (default: 4/3)
+        re: Radio de la Tierra en metros (default: 6.371e6)
+    
+    Returns:
+        Altura del haz en metros sobre el nivel del mar (mismo shape que input)
+    
+    Notas:
+        - Importante para rangos > 50 km donde la curvatura es significativa
+        - Para rangos cortos, coincide aproximadamente con h = r*tan(θ)
+    
+    Referencias:
+        Doviak, R. J., and D. S. Zrnić, 1993: Doppler Radar and Weather
+        Observations. Academic Press, 562 pp.
+    """
+    # Convertir a radianes
+    elev_rad = np.radians(elevation_deg)
+    sin_elev = np.sin(elev_rad)
+    cos_elev = np.cos(elev_rad)
+    
+    # Radio efectivo de la Tierra
+    ke_re = ke * re
+    
+    # Aproximar slant range desde distancia horizontal
+    # Para ángulos pequeños: r ≈ s / cos(θ)
+    slant_range = horizontal_distance / np.maximum(cos_elev, 0.01)
+    
+    # Altura usando ecuación completa con curvatura terrestre
+    height = (
+        np.sqrt(slant_range**2 + ke_re**2 + 2 * slant_range * ke_re * sin_elev)
+        - ke_re
+        + radar_altitude
+    )
+    
+    return height
+
+
 def calculate_z_limits(
     range_max_m: float,
     elevation: int = 0,
@@ -74,11 +137,11 @@ def calculate_grid_resolution(volume: str | None) -> tuple[float, float]:
     Returns:
         Tupla (grid_resolution_xy, grid_resolution_z) en metros:
             - grid_resolution_xy: Resolución horizontal (depende del volumen)
-            - grid_resolution_z: Resolución vertical (siempre 300m para cross-sections)
+            - grid_resolution_z: Resolución vertical (siempre 600m para cross-sections)
     """
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
-    grid_resolution_xy = 300 if volume == '03' else 1200
-    grid_resolution_z = 1000  # Siempre usar 300m en Z para cross-sections de calidad
+    grid_resolution_xy = 300 if volume == '03' else 1000
+    grid_resolution_z = 600
     
     return grid_resolution_xy, grid_resolution_z
 

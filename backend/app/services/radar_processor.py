@@ -27,11 +27,9 @@ from .radar_processing import (
     calculate_z_limits,
     calculate_grid_resolution,
     calculate_grid_points,
-    prepare_radar_for_product,
     fill_dbzh_if_needed,
     separate_filters,
     apply_visual_filters,
-    apply_qc_filters
 )
 
 
@@ -156,7 +154,7 @@ def process_radar_to_cog(
     radar = pyart.io.read(filepath)
 
     try:
-        field_name, field_key = resolve_field(radar, field_requested)
+        field_to_use, field_key = resolve_field(radar, field_requested)
     except KeyError as e:
         raise ValueError(e)
     
@@ -176,15 +174,9 @@ def process_radar_to_cog(
     # TOA (Top of Atmosphere)
     toa = 15000.0
 
-    # Preparar radar según producto (PPI/CAPPI/COLMAX)
-    field_name = fill_dbzh_if_needed(radar, field_name, product)
-    radar_to_use, field_to_use = prepare_radar_for_product(
-        radar, product, field_name, elevation, cappi_height
-    )
-
     # Generamos la imagen PNG para previsualización y referencia
     # png.create_png(
-    #     radar_to_use, 
+    #     radar, 
     #     product, 
     #     output_dir, 
     #     field_to_use, 
@@ -246,12 +238,11 @@ def process_radar_to_cog(
     if pkg_cached is None:
         # Construir o recuperar grilla 3D multi-campo con el operador W
         grid = get_or_build_grid3d_with_operator(
-            radar_to_use=radar_to_use,
+            radar_to_use=radar,
             file_hash=file_hash,
             radar=radar_name,
             estrategia=estrategia,
             volume=volume,
-            range_max_m=range_max_m,
             toa=toa,
             grid_limits=grid_limits,
             grid_shape=grid_shape,
@@ -280,8 +271,8 @@ def process_radar_to_cog(
 
         # Obtener grid_origin para normalize_proj_dict
         grid_origin = (
-            float(radar_to_use.latitude['data'][0]),
-            float(radar_to_use.longitude['data'][0]),
+            float(radar.latitude['data'][0]),
+            float(radar.longitude['data'][0]),
         )
 
         x = grid.x['data'].astype(float)
@@ -324,9 +315,9 @@ def process_radar_to_cog(
             time={'data': np.array([0])},
             fields={field_to_use: {'data': arr2d[np.newaxis, :, :], '_FillValue': -9999.0}},
             metadata={'instrument_name': 'RADAR'},
-            origin_latitude={'data': radar_to_use.latitude['data']},
-            origin_longitude={'data': radar_to_use.longitude['data']},
-            origin_altitude={'data': radar_to_use.altitude['data']},
+            origin_latitude={'data': radar.latitude['data']},
+            origin_longitude={'data': radar.longitude['data']},
+            origin_altitude={'data': radar.altitude['data']},
             x={'data': np.linspace(x_grid_limits[0], x_grid_limits[1], nx).astype(np.float32)},
             y={'data': np.linspace(y_grid_limits[0], y_grid_limits[1], ny).astype(np.float32)},
             z={'data': np.array([0.0], dtype=np.float32)}
@@ -350,9 +341,11 @@ def process_radar_to_cog(
             transform_warped = src_numeric.transform
             crs_warped = src_numeric.crs.to_wkt()
             
-            # Enmascarar valores extremadamente bajos (ruido de interpolación en bordes)
+            # Asegurar que arr_warped sea MaskedArray
             if not np.ma.is_masked(arr_warped):
                 arr_warped = np.ma.array(arr_warped, mask=np.zeros_like(arr_warped, dtype=bool))
+            
+            # Enmascarar valores extremadamente bajos (ruido de interpolación en bordes)
             arr_warped = np.ma.masked_less(arr_warped, vmin)
             
             pkg_cached["arr_warped"] = arr_warped.astype(np.float32)

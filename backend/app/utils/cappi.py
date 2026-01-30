@@ -6,6 +6,9 @@ from radar data using an xarray dataset. The function includes options for addin
 color bars, and customized visual settings.
 
 Author: Syed Hamid Ali (@syedhamidali)
+
+Notas: 
+Las funciones estan deprecated, ahora se hace todo el calculo cappi post-gridding
 """
 
 import os

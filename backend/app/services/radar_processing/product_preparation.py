@@ -1,6 +1,9 @@
 """
 Preparación de radares según tipo de producto (PPI, CAPPI, COLMAX).
 Cada producto requiere transformaciones específicas antes del gridding.
+
+Notas:
+La mayoria de funciones estan deprecated, ahora se hace todo post-gridding
 """
 
 import numpy as np
