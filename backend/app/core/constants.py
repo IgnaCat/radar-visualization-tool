@@ -48,3 +48,15 @@ FIELD_COLORMAP_OPTIONS = {
 }
 
 AFFECTS_INTERP_FIELDS = {"RHOHV"}
+
+# Parámetros adaptativos de ROI por altura Z para interpolación Barnes2
+# Formato: (z_threshold_m, (h_factor, nb, bsp, min_radius))
+# Niveles bajos usan parámetros más agresivos, niveles altos más conservadores
+# IMPORTANTE: Cambiar estos valores invalida el caché de operadores W
+ADAPTIVE_ROI_PARAMS = [
+    (2000,  (0.9, 1.2, 1.0, 350.0)),
+    (4000,  (0.8, 1.0, 0.9, 350.0)),
+    (6000,  (0.6, 0.8, 0.7, 300.0)),
+    (9000,  (0.4, 0.7, 0.6, 300.0)),
+    (float('inf'), (0.3, 0.5, 0.5, 200.0)),
+]

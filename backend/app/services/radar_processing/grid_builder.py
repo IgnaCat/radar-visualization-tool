@@ -16,7 +16,7 @@ from ...core.cache import (
     W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT
 )
-from ...core.constants import AFFECTS_INTERP_FIELDS
+from ...core.constants import AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_PARAMS
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields
@@ -24,6 +24,27 @@ from .filter_application import build_gatefilter_for_gridding
 from .product_preparation import prepare_radar_for_product
 
 logger = logging.getLogger(__name__)
+
+
+def adaptive_roi_params(z_height_m):
+    """
+    Calcula parámetros de ROI adaptativos según altura Z.
+    
+    Usa la constante ADAPTIVE_ROI_PARAMS definida en constants.py.
+    Esta constante también se usa para generar el cache key del operador W,
+    asegurando que si cambian los parámetros se genere un nuevo W.
+    
+    Args:
+        z_height_m: Altura del nivel Z en metros
+    
+    Returns:
+        tuple: (h_factor, nb, bsp, min_radius)
+    """
+    for z_threshold, params in ADAPTIVE_ROI_PARAMS:
+        if z_height_m < z_threshold:
+            return params
+    # Fallback (no debería llegar aquí con float('inf') al final)
+    return ADAPTIVE_ROI_PARAMS[-1][1]
 
 
 def get_gate_xyz_coords(radar, edges=False):
@@ -157,10 +178,6 @@ def get_or_build_W_operator(
             volumen=volumen,
             grid_shape=grid_shape,
             grid_limits=grid_limits,
-            h_factor=h_factor,
-            nb=nb,
-            bsp=bsp,
-            min_radius=min_radius,
             weight_func=weight_func,
             max_neighbors=max_neighbors,
         )
@@ -273,15 +290,11 @@ def get_or_build_grid3d_with_operator(
     Returns:
         pyart.core.Grid con la grilla 3D multi-campo construida
     """
-    # Calcular parámetros dist_beam
-    # h_factor: escalado de altura estándar
-    h_factor = 0.8
-    # nb: ancho de haz en grados
-    nb = 1.1
-    # bsp: espaciado entre haces
-    bsp = 0.9
-    # min_radius: radio mínimo en metros
-    min_radius = 300.0
+    # Usar siempre parámetros adaptativos (ADAPTIVE_ROI_PARAMS se incluye en cache key)
+    h_factor = None
+    nb = None
+    bsp = None
+    min_radius = None
     
     # Obtener operador W (con caché completo: RAM -> Disco -> Build)
     W = get_or_build_W_operator(
@@ -291,10 +304,10 @@ def get_or_build_grid3d_with_operator(
         volumen=volume,
         grid_shape=grid_shape,
         grid_limits=grid_limits,
-        h_factor=h_factor,
-        nb=nb,
-        bsp=bsp,
-        min_radius=min_radius,
+        h_factor=None,  # None = usar adaptativos
+        nb=None,
+        bsp=None,
+        min_radius=None,
         toa=toa,
         weight_func=weight_func,
         max_neighbors=None,

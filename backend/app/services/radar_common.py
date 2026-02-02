@@ -8,7 +8,7 @@ import json
 from pyproj import Geod
 
 from ..utils import colores
-from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS
+from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_PARAMS
 from ..models import RangeFilter
 
 
@@ -262,10 +262,6 @@ def w_operator_cache_key(
     volumen: str,
     grid_shape: tuple,
     grid_limits: tuple,
-    h_factor: float = 1.0,
-    nb: float = 1.5,
-    bsp: float = 1.0,
-    min_radius: float = 300.0,
     weight_func: str = 'Barnes2',
     max_neighbors: int | None = None,
 ) -> str:
@@ -284,15 +280,12 @@ def w_operator_cache_key(
         volumen: Número de volumen (ej: 01)
         grid_shape: (nz, ny, nx)
         grid_limits: ((z_min, z_max), (y_min, y_max), (x_min, x_max))
-        h_factor: Escalado de altura (default 1.0)
-        nb: Ancho de haz en grados (default 1.5)
-        bsp: Espaciado entre haces (default 1.0)
-        min_radius: Radio mínimo en metros (default 800.0)
+        adaptive_roi_params: Parámetros adaptativos de ROI por altura Z
         weight_func: Función de ponderación ('Barnes', 'Barnes2', 'Cressman', 'nearest')
         max_neighbors: Máximo número de vecinos (None = todos)
     """
     payload = {
-        "v": 2,  # versión del formato (incrementado para dist_beam)
+        "v": 3,  # versión del formato (incrementado para dist_beam)
         "radar": str(radar),
         "strat": str(estrategia),
         "vol": str(volumen),
@@ -302,13 +295,11 @@ def w_operator_cache_key(
             [float(grid_limits[1][0]), float(grid_limits[1][1])],
             [float(grid_limits[2][0]), float(grid_limits[2][1])],
         ],
-        "h_factor": float(h_factor),
-        "nb": float(nb),
-        "bsp": float(bsp),
-        "min_radius": float(min_radius),
+        "adaptive_roi": [[z, list(params)] for z, params in ADAPTIVE_ROI_PARAMS],
         "wfunc": str(weight_func),
         "maxn": int(max_neighbors) if max_neighbors is not None else None,
     }
+    
     return f"W_{radar}_{estrategia}_{volumen}_{_hash_of(payload)}"
 
 def normalize_proj_dict(grid, grid_origin):
