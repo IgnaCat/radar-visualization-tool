@@ -31,7 +31,12 @@ def apply_operator(W, field_data, grid_shape, handle_mask=True, additional_filte
     # NOTA: si field_data es MaskedArray, conviene separar valores (.data) y máscara (.mask)
     if np.ma.isMaskedArray(field_data):
         g = field_data.data.ravel()  # valores puros (sin máscara)
-        field_mask = field_data.mask.ravel()  # máscara 2D aplanada
+        # field_data.mask puede ser np.ma.nomask (False) si no hay valores enmascarados
+        # En ese caso, .ravel() devuelve array([False]) de 1 elemento, causando dimension mismatch
+        if field_data.mask is np.ma.nomask:
+            field_mask = np.zeros(g.shape, dtype=bool)
+        else:
+            field_mask = field_data.mask.ravel()  # máscara 2D aplanada
     else:
         g = np.asarray(field_data).ravel()
         field_mask = np.zeros(g.shape, dtype=bool)
