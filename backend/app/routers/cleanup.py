@@ -5,7 +5,15 @@ import shutil
 import os
 
 from ..core.config import settings
-from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, W_OPERATOR_CACHE, W_OPERATOR_SESSION_INDEX, W_OPERATOR_REF_COUNT
+from ..core.cache import (
+    GRID2D_CACHE, 
+    SESSION_CACHE_INDEX, 
+    W_OPERATOR_CACHE, 
+    W_OPERATOR_SESSION_INDEX, 
+    W_OPERATOR_REF_COUNT,
+    _W_OPERATOR_LOCKS,
+    _W_OPERATOR_LOCKS_MASTER
+)
 from ..models import CleanupRequest
 
 router = APIRouter(prefix="/cleanup", tags=["cleanup"])
@@ -317,6 +325,8 @@ def _cleanup_w_operator_entries(session_id: str | None = None) -> int:
                         if cache_key in W_OPERATOR_CACHE:
                             del W_OPERATOR_CACHE[cache_key]
                             count += 1
+                        # Limpiar lock asociado
+                        cleanup_w_operator_lock(cache_key)
                         # Limpiar contador
                         del W_OPERATOR_REF_COUNT[cache_key]
                 
@@ -333,6 +343,18 @@ def _cleanup_w_operator_entries(session_id: str | None = None) -> int:
         print(f"Limpiadas {count} entradas de W_OPERATOR_CACHE para sesión {session_id}")
     
     return count
+
+
+def cleanup_w_operator_lock(cache_key: str) -> None:
+    """
+    Limpia el lock asociado a una cache_key cuando ya no se necesita.
+
+    Args:
+        cache_key: Clave de cache del operador W
+    """
+    with _W_OPERATOR_LOCKS_MASTER:
+        if cache_key in _W_OPERATOR_LOCKS:
+            del _W_OPERATOR_LOCKS[cache_key]
 
 
 def _cleanup_empty_session_dirs(session_id: str) -> None:
