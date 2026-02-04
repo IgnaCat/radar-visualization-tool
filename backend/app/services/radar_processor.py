@@ -9,7 +9,7 @@ from urllib.parse import quote
 from affine import Affine
 
 from ..core.config import settings
-from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX
+from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, NETCDF_READ_LOCK
 from ..core.constants import AFFECTS_INTERP_FIELDS
 
 from .radar_common import (
@@ -150,8 +150,9 @@ def process_radar_to_cog(
     if not Path(filepath).exists():
         raise ValueError(f"Archivo no encontrado: {filepath}")
     
-    # Leer archivo NetCDF con PyART
-    radar = pyart.io.read(filepath)
+    # Leer archivo NetCDF con PyART (protegido con lock - NetCDF/HDF5 no es thread-safe)
+    with NETCDF_READ_LOCK:
+        radar = pyart.io.read(filepath)
 
     try:
         field_to_use, field_key = resolve_field(radar, field_requested)

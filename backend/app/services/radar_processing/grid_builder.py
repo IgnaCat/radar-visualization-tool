@@ -13,6 +13,7 @@ from ...core.cache import (
     load_w_operator_from_disk,
     try_cache_w_operator_in_ram,
     get_w_operator_size_mb,
+    get_w_operator_lock,
     W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT
 )
@@ -185,74 +186,83 @@ def get_or_build_W_operator(
         logger.error(f"Error generando cache_key: {e}")
         raise
     
-    # 1. Verificar cache RAM
+    # 1. Verificar cache RAM (sin lock - lectura rápida)
     cached_pkg = W_OPERATOR_CACHE.get(cache_key)
     if cached_pkg is not None:
         logger.info(f"Operador W recuperado de cache RAM: {cache_key[:16]}...")
         return cached_pkg["W"]
     
-    # 2. Verificar cache disco
-    try:
-        disk_result = load_w_operator_from_disk(cache_key)
-        if disk_result is not None:
-            W, metadata = disk_result
-            logger.info(f"Operador W cargado desde disco: {cache_key[:16]}...")
-            
-            # Intentar guardar en cache RAM
-            try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
-            
-            return W
-    except Exception as e:
-        logger.warning(f"Error cargando operador W desde disco, construyendo nuevo: {e}")
-    
-    # 3. Construir operador W
-    logger.info(f"Construyendo operador W: {radar}_{estrategia}_{volumen}")
-    
-    gates_xyz = get_gate_xyz_coords(radar_to_use, edges=False)
-    voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
-    
-    W = build_W_operator(
-        gates_xyz=gates_xyz,
-        voxels_xyz=voxels_xyz,
-        toa=toa,
-        h_factor=h_factor,
-        nb=nb,
-        bsp=bsp,
-        min_radius=min_radius,
-        weight_func=weight_func,
-        max_neighbors=max_neighbors,
-        n_workers=3,  # Usa cpu_count() - 1 automáticamente
-        temp_dir=None,   # Crea directorio temporal automáticamente
-        dtype_idx=np.int64,
-    )
-    
-    # Metadata para referencia
-    metadata = {
-        "radar": radar,
-        "estrategia": estrategia,
-        "volumen": volumen,
-        "grid_shape": grid_shape,
-        "grid_limits": grid_limits,
-        "h_factor": h_factor,
-        "nb": nb,
-        "bsp": bsp,
-        "min_radius": min_radius,
-        "weight_func": weight_func,
-        "max_neighbors": max_neighbors,
-        "nnz": W.nnz,
-        "shape": W.shape,
-        "created_at": time.time(),
-    }
-    
-    # Siempre guardar en disco
-    w_size_mb = get_w_operator_size_mb(W)
-    save_w_operator_to_disk(cache_key, W, metadata)
-    logger.info(f"Operador W guardado en disco ({w_size_mb:.2f} MB)")
-    
-    # Intentar guardar en cache RAM si no es muy grande
-    try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
-    
-    return W
+    # 2. Adquirir lock para esta cache_key (evita construcción duplicada en concurrencia)
+    lock = get_w_operator_lock(cache_key)
+    with lock:
+        # Re-verificar cache RAM (otro thread pudo haberlo construido mientras esperábamos)
+        cached_pkg = W_OPERATOR_CACHE.get(cache_key)
+        if cached_pkg is not None:
+            logger.info(f"Operador W recuperado de cache RAM (post-lock): {cache_key[:16]}...")
+            return cached_pkg["W"]
+        
+        # 3. Verificar cache disco
+        try:
+            disk_result = load_w_operator_from_disk(cache_key)
+            if disk_result is not None:
+                W, metadata = disk_result
+                logger.info(f"Operador W cargado desde disco: {cache_key[:16]}...")
+                
+                # Intentar guardar en cache RAM
+                try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
+                
+                return W
+        except Exception as e:
+            logger.warning(f"Error cargando operador W desde disco, construyendo nuevo: {e}")
+        
+        # 4. Construir operador W
+        logger.info(f"Construyendo operador W: {radar}_{estrategia}_{volumen}")
+        
+        gates_xyz = get_gate_xyz_coords(radar_to_use, edges=False)
+        voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
+        
+        W = build_W_operator(
+            gates_xyz=gates_xyz,
+            voxels_xyz=voxels_xyz,
+            toa=toa,
+            h_factor=h_factor,
+            nb=nb,
+            bsp=bsp,
+            min_radius=min_radius,
+            weight_func=weight_func,
+            max_neighbors=max_neighbors,
+            n_workers=3,  # Usa cpu_count() - 1 automáticamente
+            temp_dir=None,   # Crea directorio temporal automáticamente
+            dtype_idx=np.int64,
+        )
+        
+        # Metadata para referencia
+        metadata = {
+            "radar": radar,
+            "estrategia": estrategia,
+            "volumen": volumen,
+            "grid_shape": grid_shape,
+            "grid_limits": grid_limits,
+            "h_factor": h_factor,
+            "nb": nb,
+            "bsp": bsp,
+            "min_radius": min_radius,
+            "weight_func": weight_func,
+            "max_neighbors": max_neighbors,
+            "nnz": W.nnz,
+            "shape": W.shape,
+            "created_at": time.time(),
+        }
+        
+        # Siempre guardar en disco
+        w_size_mb = get_w_operator_size_mb(W)
+        save_w_operator_to_disk(cache_key, W, metadata)
+        logger.info(f"Operador W guardado en disco ({w_size_mb:.2f} MB)")
+        
+        # Intentar guardar en cache RAM si no es muy grande
+        try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
+        
+        return W
 
 
 def get_or_build_grid3d_with_operator(

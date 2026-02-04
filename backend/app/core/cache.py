@@ -1,6 +1,7 @@
 import numpy as np
 import pickle
 import logging
+import threading
 from pathlib import Path
 from cachetools import LRUCache
 from scipy.sparse import csr_matrix, save_npz, load_npz
@@ -60,6 +61,25 @@ W_OPERATOR_CACHE = LRUCache(maxsize=300 * 1024 * 1024, getsizeof=_nbytes_w_opera
 
 # Límite para intentar guardar en RAM (un poco menos que el maxsize para margen)
 W_OPERATOR_MAX_RAM_SIZE_MB = 250
+
+# Locks para evitar construcción duplicada del operador W en concurrencia
+# Si múltiples threads piden el mismo operador W, solo uno lo construye
+_W_OPERATOR_LOCKS: dict[str, threading.Lock] = {}
+_W_OPERATOR_LOCKS_MASTER = threading.Lock()  # Protege el diccionario de locks
+
+# Lock global para lectura de archivos NetCDF/HDF5 (no es thread-safe)
+NETCDF_READ_LOCK = threading.Lock()
+
+
+def get_w_operator_lock(cache_key: str) -> threading.Lock:
+    """
+    Obtiene o crea un lock para una cache_key específica del operador W.
+    Permite que solo un thread construya un operador W a la vez para la misma key.
+    """
+    with _W_OPERATOR_LOCKS_MASTER:
+        if cache_key not in _W_OPERATOR_LOCKS:
+            _W_OPERATOR_LOCKS[cache_key] = threading.Lock()
+        return _W_OPERATOR_LOCKS[cache_key]
 
 # Índice secundario para W_OPERATOR: session_id -> set de cache keys
 W_OPERATOR_SESSION_INDEX: dict[str, set[str]] = {}

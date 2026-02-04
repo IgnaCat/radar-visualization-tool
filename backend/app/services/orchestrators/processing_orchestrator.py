@@ -5,7 +5,9 @@ Contiene la lógica de negocio previamente en el router process.py.
 from pathlib import Path
 from typing import List, Set, Dict, Tuple, Optional
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
+import traceback
 
 from ...models import ProcessRequest, ProcessResponse, LayerResult, RangeFilter, RadarProcessResult
 from ...core.config import settings
@@ -192,20 +194,37 @@ class ProcessingOrchestrator:
         elevation: int,
         filters: List[RangeFilter],
         colormap_overrides: Optional[Dict] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        max_workers: int = 4
     ) -> Tuple[Dict, Dict, Dict, Dict]:
         """
-        Procesa todos los archivos secuencialmente.
-        Returns: (results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar)
+        Procesa archivos de radar en paralelo por archivo.
+        
+        Cada archivo NetCDF es independiente y se procesa en un thread separado.
+        Internamente cada archivo puede paralelizar por niveles Z si el operador W
+        no está cacheado. El lock por cache_key evita construcción duplicada.
+        
+        Args:
+            items: Lista de (filepath_rel, filepath_abs, timestamp, volume, radar, estrategia)
+            max_workers: Número máximo de threads (default 4, conservador porque cada
+                        archivo puede usar threads internos para niveles Z)
+        
+        Returns:
+            (results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar)
         """
         results_by_radar = {}
         warnings_by_radar = {}
         fields_by_radar = {}
         volumes_by_radar = {}
 
-        # Procesamiento secuencial - PyART/GDAL/NetCDF4 no son thread-safe
-        for item_idx, (f_rel, f_abs, ts, vol, radar, estrategia) in enumerate(items):
-            for idx, field in enumerate(fields):
+        def process_single_item(item_data):
+            """Procesa un archivo con todos sus campos. Retorna lista de resultados."""
+            item_idx, (f_rel, f_abs, ts, vol, radar, estrategia) = item_data
+            item_results = []
+            item_warnings = []
+            item_fields = set()
+            
+            for field_idx, field in enumerate(fields):
                 try:
                     result_dict = radar_processor.process_radar_to_cog(
                         filepath=f_abs,
@@ -221,29 +240,47 @@ class ProcessingOrchestrator:
                         session_id=session_id
                     )
                     result_dict["timestamp"] = ts
-                    result_dict["order"] = idx
+                    result_dict["order"] = field_idx
+                    item_results.append((radar, ts, vol, field, LayerResult(**result_dict)))
+                    item_fields.add(field)
                     
-                    # Agrupar por radar y timestamp
-                    if radar not in results_by_radar:
-                        results_by_radar[radar] = {}
-                    if ts not in results_by_radar[radar]:
-                        results_by_radar[radar][ts] = []
-                    results_by_radar[radar][ts].append(LayerResult(**result_dict))
+                except Exception as e:
+                    msg = f"{Path(f_rel).name}: {e}"
+                    item_warnings.append((radar, msg))
+                    print(f"[ERROR] {radar}: {msg}")
+                    traceback.print_exc()
+            
+            return item_results, item_warnings, item_fields, vol, radar
+
+        # Preparar items con índice para tracking
+        indexed_items = list(enumerate(items))
+        
+        # Procesar en paralelo (max_workers conservador por paralelismo interno de niveles Z)
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {executor.submit(process_single_item, item): item for item in indexed_items}
+            
+            for future in as_completed(futures):
+                try:
+                    item_results, item_warnings, item_fields, vol, radar = future.result()
                     
-                    # Track campos y volúmenes
-                    fields_by_radar.setdefault(radar, set()).add(field)
-                    if vol:
-                        volumes_by_radar.setdefault(radar, set()).add(vol)
+                    # Agregar resultados
+                    for (r_radar, r_ts, r_vol, r_field, layer_result) in item_results:
+                        if r_radar not in results_by_radar:
+                            results_by_radar[r_radar] = {}
+                        if r_ts not in results_by_radar[r_radar]:
+                            results_by_radar[r_radar][r_ts] = []
+                        results_by_radar[r_radar][r_ts].append(layer_result)
+                        
+                        fields_by_radar.setdefault(r_radar, set()).add(r_field)
+                        if r_vol:
+                            volumes_by_radar.setdefault(r_radar, set()).add(r_vol)
+                    
+                    # Agregar warnings
+                    for (w_radar, msg) in item_warnings:
+                        warnings_by_radar.setdefault(w_radar, []).append(msg)
                         
                 except Exception as e:
-                    if radar not in warnings_by_radar:
-                        warnings_by_radar[radar] = []
-                    msg = f"{Path(f_rel).name}: {e}"
-                    warnings_by_radar[radar].append(msg)
-                    print(f"[ERROR] {radar}: {msg}")
-                    # Debug: imprimir traceback completo
-                    import traceback
-                    print(f"[DEBUG] Traceback completo:")
+                    print(f"[ERROR] Error procesando future: {e}")
                     traceback.print_exc()
 
         return results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar
@@ -299,8 +336,8 @@ class ProcessingOrchestrator:
         # Para cada radar, ordenar frames por timestamp y capas por 'order'
         radar_results = []
         for radar, ts_dict in results_by_radar.items():
-            # Ordenar timestamps (None al final)
-            sorted_ts = sorted(ts_dict.keys(), key=lambda t: (t is None, t or 0))
+            # Ordenar timestamps (None al final usando tupla: is_none, timestamp)
+            sorted_ts = sorted(ts_dict.keys(), key=lambda t: (t is None, t or datetime.min))
             frames = []
             for ts in sorted_ts:
                 layers = ts_dict[ts]
