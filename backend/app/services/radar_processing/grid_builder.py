@@ -231,7 +231,7 @@ def get_or_build_W_operator(
             min_radius=min_radius,
             weight_func=weight_func,
             max_neighbors=max_neighbors,
-            n_workers=3,  # Usa cpu_count() - 1 automáticamente
+            n_workers=None,  # Auto: cpu_count() - 1 (usa todos los cores disponibles)
             temp_dir=None,   # Crea directorio temporal automáticamente
             dtype_idx=np.int64,
         )
