@@ -355,7 +355,7 @@ export default function MapPanel({
 
       {Array.isArray(mergedOutputs) && mergedOutputs.length > 0 && (
         <AnimationControls
-          overlayData={{ outputs: mergedOutputs, animation }}
+          overlayData={{ outputs: mergedOutputs, animation, product }}
           currentIndex={currentIndex}
           setCurrentIndex={setCurrentIndex}
           showPlayButton={animation}

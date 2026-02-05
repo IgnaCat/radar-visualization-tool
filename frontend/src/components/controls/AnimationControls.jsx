@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Box, Slider, IconButton } from "@mui/material";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
@@ -18,7 +18,7 @@ export default function AnimationControls({
     if (isPlaying && overlayData.outputs.length > 1) {
       interval = setInterval(() => {
         setCurrentIndex((prev) =>
-          prev < overlayData.outputs.length - 1 ? prev + 1 : 0
+          prev < overlayData.outputs.length - 1 ? prev + 1 : 0,
         );
       }, 1300);
     } else if (!isPlaying && interval !== null) {
@@ -30,6 +30,57 @@ export default function AnimationControls({
 
   // currentOverlay ahora es un array de capas (de distintos radares) para el frame actual
   const currentOverlay = overlayData.outputs[currentIndex];
+
+  // Extraer información del frame actual
+  const frameInfo = useMemo(() => {
+    if (!Array.isArray(currentOverlay) || currentOverlay.length === 0) {
+      return {
+        timestamp: null,
+        product: null,
+        radars: [],
+        strategies: [],
+        volumes: [],
+      };
+    }
+
+    // Timestamp (el más temprano del frame)
+    const timestamp = currentOverlay
+      .map((l) => l.timestamp)
+      .filter(Boolean)
+      .sort()[0];
+
+    // Producto del overlayData
+    const product = overlayData.product || null;
+
+    // Extraer radar de cada layer (ya viene anotado desde mergeRadarFrames)
+    const radars = [
+      ...new Set(currentOverlay.map((l) => l.radar).filter(Boolean)),
+    ];
+
+    // Extraer estrategia y volumen del source_file (formato: RADAR_ESTRATEGIA_VOLUMEN_TIMESTAMP.nc)
+    const strategies = new Set();
+    const volumes = new Set();
+
+    currentOverlay.forEach((layer) => {
+      if (layer.source_file) {
+        const filename = layer.source_file.split("/").pop().split("\\").pop();
+        const parts = filename.split("_");
+        if (parts.length >= 4) {
+          strategies.add(parts[1]); // estrategia
+          volumes.add(parts[2]); // volumen
+        }
+      }
+    });
+
+    return {
+      timestamp,
+      product,
+      radars,
+      strategies: Array.from(strategies),
+      volumes: Array.from(volumes),
+    };
+  }, [currentOverlay, overlayData.product]);
+
   // Buscar el timestamp más representativo del frame (el menor, si hay varios)
   let frameTimestamp = null;
   if (Array.isArray(currentOverlay) && currentOverlay.length > 0) {
@@ -106,7 +157,7 @@ export default function AnimationControls({
               <IconButton
                 onClick={() =>
                   setCurrentIndex((prev) =>
-                    prev < overlayData.outputs.length - 1 ? prev + 1 : 0
+                    prev < overlayData.outputs.length - 1 ? prev + 1 : 0,
                   )
                 }
                 sx={{
@@ -137,8 +188,24 @@ export default function AnimationControls({
         color="black"
         zIndex={999}
       >
-        Mostrando:{" "}
-        {frameTimestamp || `Imagen ${currentIndex + 1}`} (Frame {currentIndex + 1} de {overlayData.outputs.length})
+        <Box>
+          {frameInfo.product && (
+            <Box mt={0.5}>
+              Vista: {frameInfo.product.toUpperCase()}
+              {frameInfo.radars.length > 0 && (
+                <> | Radar: {frameInfo.radars.join(", ")}</>
+              )}
+              {frameInfo.strategies.length > 0 && (
+                <> | Estrategia: {frameInfo.strategies.join(", ")}</>
+              )}
+              {frameInfo.volumes.length > 0 && (
+                <> | Volumen: {frameInfo.volumes.join(", ")}</>
+              )}
+            </Box>
+          )}
+          Fecha: {frameTimestamp || `Imagen ${currentIndex + 1}`} (Frame{" "}
+          {currentIndex + 1} de {overlayData.outputs.length})
+        </Box>
       </Box>
     </Box>
   );
