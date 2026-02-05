@@ -48,6 +48,10 @@ class LayerResult(BaseModel):
     )
     source_file: Optional[Path] = None
     timestamp: Optional[datetime] = None
+    colormap: Optional[str] = Field(
+        default=None,
+        description="Colormap usado para esta capa (ej: 'grc_th', 'pyart_NWSRef')"
+    )
 
     @field_serializer("timestamp", when_used="json")
     def _check_ts(self, v: Optional[datetime]) -> Optional[str]:

@@ -10,7 +10,7 @@ from affine import Affine
 
 from ..core.config import settings
 from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, NETCDF_READ_LOCK
-from ..core.constants import AFFECTS_INTERP_FIELDS
+from ..core.constants import AFFECTS_INTERP_FIELDS, FIELD_RENDER
 
 from .radar_common import (
     md5_file,
@@ -72,6 +72,7 @@ def _build_output_summary(
     field_requested: str,
     filepath: str,
     cog_path: Path,
+    cmap_key: str = None,
     session_id: str | None = None
 ) -> dict:
     """
@@ -82,10 +83,11 @@ def _build_output_summary(
         field_requested: Campo procesado
         filepath: Path del archivo radar original
         cog_path: Path completo al archivo COG
+        cmap_key: Colormap usado (ej: 'grc_th')
         session_id: Identificador de sesión para aislar archivos
     
     Returns:
-        Dict con image_url, field, source_file, tilejson_url
+        Dict con image_url, field, source_file, tilejson_url, colormap
     """
     file_uri = cog_path.resolve().as_posix()
     style = "&resampling=nearest&warp_resampling=nearest"
@@ -96,6 +98,7 @@ def _build_output_summary(
         "field": field_requested,
         "source_file": filepath,
         "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
+        "colormap": cmap_key,
     }
 
 
@@ -139,8 +142,14 @@ def process_radar_to_cog(
     )
     cog_path = Path(output_dir) / unique_cog_name
 
+    # Si ya existe el COG, necesitamos calcular cmap_key para el summary
+    # Usar field_requested en lugar de field_key ya que no hemos leído el radar
+    cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
+    spec = FIELD_RENDER.get(field_requested.upper(), {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
+    cmap_key_for_summary = cmap_override_key if cmap_override_key else spec.get("cmap", "grc_th")
+
     # Generamos el resumen de salida
-    summary = _build_output_summary(unique_cog_name, field_requested, filepath, cog_path, session_id=session_id)
+    summary = _build_output_summary(unique_cog_name, field_requested, filepath, cog_path, cmap_key=cmap_key_for_summary, session_id=session_id)
 
     # Si ya existe el COG, devolvemos directo
     if cog_path.exists():
@@ -163,8 +172,7 @@ def process_radar_to_cog(
         raise ValueError(f"El ángulo de elevación {elevation} no existe en el archivo.")
     
     # defaults de render por variable con posible override
-    cmap_override = (colormap_overrides or {}).get(field_requested, None)
-    cmap, vmin, vmax, cmap_key = colormap_for(field_key, override_cmap=cmap_override)
+    cmap, vmin, vmax, cmap_key = colormap_for(field_key, override_cmap=cmap_override_key)
 
     # Calcular límites Z según producto ANTES de prepare_radar_for_product
     range_max_m = safe_range_max_m(radar)

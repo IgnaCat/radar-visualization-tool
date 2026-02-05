@@ -288,7 +288,7 @@ def w_operator_cache_key(
     roi_params = ADAPTIVE_ROI_BY_VOLUME.get(volumen, ADAPTIVE_ROI_PARAMS_VOL01)
     
     payload = {
-        "v": 4,  # versión del formato (volumen-specific ROI params)
+        "v": 3,  # versión del formato (volumen-specific ROI params)
         "radar": str(radar),
         "strat": str(estrategia),
         "vol": str(volumen),
