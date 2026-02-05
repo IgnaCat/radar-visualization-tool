@@ -163,6 +163,11 @@ export async function getColormapDefaults() {
   return response.data;
 }
 
+export async function getColormapColors(cmapName, steps = 256) {
+  const response = await api.get(`/colormap/colors/${cmapName}?steps=${steps}`);
+  return response.data;
+}
+
 export async function getCacheStats() {
   const response = await api.get("/admin/cache-stats");
   return response.data;

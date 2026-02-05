@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Typography } from "@mui/material";
+import { getColormapColors } from "../../api/backend";
 
 // --- Función para decidir color de texto ---
 function getTextColor(hex) {
@@ -12,7 +13,7 @@ function getTextColor(hex) {
           .map((c) => c + c)
           .join("")
       : clean,
-    16
+    16,
   );
   const r = (bigint >> 16) & 255;
   const g = (bigint >> 8) & 255;
@@ -22,7 +23,7 @@ function getTextColor(hex) {
   return luminance > 0.6 ? "#000" : "#FFF";
 }
 
-// --- Configuración de paletas ---
+// --- Configuración de paletas HARDCODED (para colormaps default) ---
 const LEGENDS = {
   DBZH: {
     steps: [
@@ -150,17 +151,221 @@ const LEGENDS = {
   },
 };
 
-export default function ColorLegend({
-  field = "DBZH",
-  fields, // opcional: array de variables, e.g. ['DBZH','RHOHV']
-  style, // opcional: para permitir override de estilos de posicionamiento
-}) {
-  const fieldsList =
-    Array.isArray(fields) && fields.length > 0 ? fields : [field];
+// Rango de valores por campo (vmin y vmax) para colormaps dinámicos
+const FIELD_RANGES = {
+  DBZH: { vmin: -30, vmax: 70 },
+  DBZHF: { vmin: -30, vmax: 70 },
+  DBZV: { vmin: -30, vmax: 70 },
+  ZDR: { vmin: -5, vmax: 10.5 },
+  RHOHV: { vmin: 0, vmax: 1 },
+  KDP: { vmin: 0, vmax: 8 },
+  VRAD: { vmin: -35, vmax: 35 },
+  WRAD: { vmin: 0, vmax: 10 },
+  PHIDP: { vmin: 0, vmax: 360 },
+};
 
-  const renderLegendColumn = (fld) => {
-    const key = String(fld || "").toUpperCase();
-    const legendData = LEGENDS[key] || LEGENDS.DBZH;
+// Mapeo de colormaps default por campo
+const DEFAULT_COLORMAPS = {
+  DBZH: "grc_th",
+  DBZHF: "grc_th",
+  DBZV: "grc_th",
+  ZDR: "grc_zdr2",
+  RHOHV: "grc_rho",
+  KDP: "grc_rain",
+  VRAD: "NWSVel",
+  WRAD: "Oranges",
+  PHIDP: "Theodore16",
+};
+
+// Extraer solo los valores de los LEGENDS para usarlos consistentemente
+const FIELD_VALUES = {
+  DBZH: [70, 60, 50, 40, 30, 20, 10, 0, -10],
+  DBZHF: [70, 60, 50, 40, 30, 20, 10, 0, -10],
+  DBZV: [70, 60, 50, 40, 30, 20, 10, 0, -10],
+  ZDR: [7, 5.5, 4, 3, 2.5, 1.5, 0],
+  RHOHV: ["1", ".98", ".95", ".9", ".85", ".8", ".7", ".5", ".3"],
+  KDP: [7, 6, 5, 4, 3, 2, 1, 0],
+  VRAD: [70, 30, 20, 10, 0, -10, -20, -30],
+  WRAD: [8, 6, 4, 2, 1, 0],
+  PHIDP: [180, 120, 60, 0, -60, -120, -180],
+};
+
+export default function ColorLegend({
+  overlayData, // Array de capas actuales con field y colormap
+  style,
+}) {
+  const [colormapCache, setColormapCache] = useState({});
+  const [loading, setLoading] = useState(false);
+
+  // Extraer campos únicos con sus colormaps
+  const fieldColormapPairs = React.useMemo(() => {
+    if (!Array.isArray(overlayData) || overlayData.length === 0) {
+      return [];
+    }
+
+    const pairs = new Map();
+    overlayData.forEach((layer) => {
+      if (layer.field) {
+        const colormap =
+          layer.colormap || DEFAULT_COLORMAPS[layer.field] || "grc_th";
+        const key = `${layer.field}_${colormap}`;
+        if (!pairs.has(key)) {
+          pairs.set(key, {
+            field: layer.field,
+            colormap: colormap,
+          });
+        }
+      }
+    });
+
+    return Array.from(pairs.values());
+  }, [overlayData]);
+
+  // Determinar qué colormaps necesitan cargarse dinámicamente
+  const dynamicColormaps = React.useMemo(() => {
+    return fieldColormapPairs.filter(({ field, colormap }) => {
+      const fieldKey = String(field || "").toUpperCase();
+      const defaultCmap = DEFAULT_COLORMAPS[fieldKey];
+      // Solo cargar dinámicamente si NO es el colormap default
+      return colormap !== defaultCmap;
+    });
+  }, [fieldColormapPairs]);
+
+  // Cargar colormaps necesarios (solo los no-default)
+  useEffect(() => {
+    const loadColormaps = async () => {
+      const missingColormaps = dynamicColormaps.filter(
+        ({ colormap }) => !colormapCache[colormap],
+      );
+
+      if (missingColormaps.length === 0) return;
+
+      setLoading(true);
+      try {
+        const promises = missingColormaps.map(async ({ colormap }) => {
+          try {
+            const data = await getColormapColors(colormap, 10); // 10 pasos para la leyenda
+            return { colormap, colors: data.colors };
+          } catch (error) {
+            console.error(`Error loading colormap ${colormap}:`, error);
+            return { colormap, colors: null };
+          }
+        });
+
+        const results = await Promise.all(promises);
+        const newCache = { ...colormapCache };
+        results.forEach(({ colormap, colors }) => {
+          if (colors) {
+            newCache[colormap] = colors;
+          }
+        });
+        setColormapCache(newCache);
+      } catch (error) {
+        console.error("Error loading colormaps:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadColormaps();
+  }, [dynamicColormaps]);
+
+  const renderLegendColumn = ({ field, colormap }) => {
+    const fieldKey = String(field || "").toUpperCase();
+    const defaultCmap = DEFAULT_COLORMAPS[fieldKey];
+    const isDefaultColormap = colormap === defaultCmap;
+
+    // Si es el colormap default, usar el hardcoded
+    if (isDefaultColormap && LEGENDS[fieldKey]) {
+      const legendData = LEGENDS[fieldKey];
+
+      return (
+        <div
+          key={`${fieldKey}_${colormap}`}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            minWidth: 60,
+          }}
+        >
+          <Typography variant="subtitle" color="white" gutterBottom>
+            {fieldKey}
+          </Typography>
+
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 5,
+            }}
+          >
+            {legendData.steps.map((item) => {
+              const textColor = getTextColor(item.color);
+              return (
+                <div
+                  key={`${fieldKey}-${item.value}`}
+                  title={item.label}
+                  style={{
+                    width: 23,
+                    height: 23,
+                    borderRadius: "50%",
+                    backgroundColor: item.color,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontWeight: "bold",
+                    color: textColor,
+                    fontSize: 15,
+                  }}
+                >
+                  {item.value}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    // Para colormaps no-default, usar el dinámico
+    const key = `${field}_${colormap}`;
+    const colors = colormapCache[colormap];
+
+    if (!colors) {
+      return null; // Todavía cargando
+    }
+
+    // Usar los mismos valores que el hardcoded para consistencia
+    const fieldValues = FIELD_VALUES[fieldKey] || [];
+
+    if (fieldValues.length === 0) {
+      return null; // Sin valores definidos para este campo
+    }
+
+    // Obtener rango del campo
+    const range = FIELD_RANGES[fieldKey] || { vmin: 0, vmax: 100 };
+    const numColors = colors.length;
+
+    // Mapear cada valor a su color correspondiente según normalización
+    // colors[0] = vmin, colors[numColors-1] = vmax
+    const colorValuePairs = fieldValues.map((value) => {
+      // Normalizar el valor entre 0 y 1
+      const numValue = typeof value === "string" ? parseFloat(value) : value;
+      const normalized = (numValue - range.vmin) / (range.vmax - range.vmin);
+
+      // Obtener índice del color (clampeado entre 0 y numColors-1)
+      const colorIndex = Math.max(
+        0,
+        Math.min(numColors - 1, Math.round(normalized * (numColors - 1))),
+      );
+
+      return {
+        color: colors[colorIndex],
+        value: value,
+      };
+    });
 
     return (
       <div
@@ -173,7 +378,7 @@ export default function ColorLegend({
         }}
       >
         <Typography variant="subtitle" color="white" gutterBottom>
-          {key}
+          {fieldKey}
         </Typography>
 
         <div
@@ -183,17 +388,18 @@ export default function ColorLegend({
             gap: 5,
           }}
         >
-          {legendData.steps.map((item) => {
-            const textColor = getTextColor(item.color);
+          {colorValuePairs.map(({ color, value }, idx) => {
+            const textColor = getTextColor(color);
+
             return (
               <div
-                key={`${key}-${item.value}`}
-                title={item.label}
+                key={`${key}-${idx}`}
+                title={`${fieldKey}: ${value}`}
                 style={{
                   width: 23,
                   height: 23,
                   borderRadius: "50%",
-                  backgroundColor: item.color,
+                  backgroundColor: color,
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -203,7 +409,7 @@ export default function ColorLegend({
                   fontSize: 15,
                 }}
               >
-                {item.value}
+                {value}
               </div>
             );
           })}
@@ -211,6 +417,10 @@ export default function ColorLegend({
       </div>
     );
   };
+
+  if (fieldColormapPairs.length === 0) {
+    return null;
+  }
 
   return (
     <div
@@ -227,7 +437,7 @@ export default function ColorLegend({
         ...style,
       }}
     >
-      {fieldsList.map(renderLegendColumn)}
+      {fieldColormapPairs.map(renderLegendColumn)}
     </div>
   );
 }

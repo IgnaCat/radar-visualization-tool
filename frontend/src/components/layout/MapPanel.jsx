@@ -351,7 +351,7 @@ export default function MapPanel({
         />
       )}
 
-      <ColorLegend fields={fieldsUsed} />
+      <ColorLegend overlayData={overlayData} />
 
       {Array.isArray(mergedOutputs) && mergedOutputs.length > 0 && (
         <AnimationControls
@@ -365,10 +365,10 @@ export default function MapPanel({
       <ProductSelectorDialog
         open={selectorOpen}
         fields_present={Array.from(
-          new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
+          new Set(filesInfo.map((f) => f.metadata.fields_present).flat()),
         )}
         elevations={Array.from(
-          new Set(filesInfo.map((f) => f.metadata.elevations).flat())
+          new Set(filesInfo.map((f) => f.metadata.elevations).flat()),
         )}
         volumes={volumes}
         radars={availableRadars}
@@ -384,7 +384,7 @@ export default function MapPanel({
         radarSite={radarSite}
         fields_present={
           Array.from(
-            new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
+            new Set(filesInfo.map((f) => f.metadata.fields_present).flat()),
           ) || ["DBZH", "KDP", "RHOHV", "ZDR"]
         }
         onRequestPickPoint={handleRequestPickPoint}
@@ -411,7 +411,7 @@ export default function MapPanel({
         }}
         fields_present={
           Array.from(
-            new Set(filesInfo.map((f) => f.metadata.fields_present).flat())
+            new Set(filesInfo.map((f) => f.metadata.fields_present).flat()),
           ) || ["DBZH", "KDP", "RHOHV", "ZDR"]
         }
       />
