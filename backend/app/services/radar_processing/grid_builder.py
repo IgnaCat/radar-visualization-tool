@@ -17,7 +17,7 @@ from ...core.cache import (
     W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT
 )
-from ...core.constants import AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_PARAMS
+from ...core.constants import AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_BY_VOLUME, ADAPTIVE_ROI_PARAMS_VOL01
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields
@@ -27,25 +27,34 @@ from .product_preparation import prepare_radar_for_product
 logger = logging.getLogger(__name__)
 
 
-def adaptive_roi_params(z_height_m):
+def adaptive_roi_params(z_height_m, volume: str | None = None):
     """
-    Calcula parámetros de ROI adaptativos según altura Z.
+    Calcula parámetros de ROI adaptativos según altura Z y volumen.
     
-    Usa la constante ADAPTIVE_ROI_PARAMS definida en constants.py.
-    Esta constante también se usa para generar el cache key del operador W,
-    asegurando que si cambian los parámetros se genere un nuevo W.
+    Cada volumen tiene su propia configuración de parámetros ROI optimizada
+    para sus características de escaneo:
+    - Vol 01: Parámetros base
+    - Vol 02: Alcance medio, min_radius aumentado para evitar ring
+    - Vol 03: Alta resolución (300m), ROI muy aumentado para evitar vacíos
+    - Vol 04: Largo alcance, ROI aumentado para cobertura horizontal
     
     Args:
         z_height_m: Altura del nivel Z en metros
+        volume: Identificador del volumen ('01', '02', '03', '04', etc.)
     
     Returns:
-        tuple: (h_factor, nb, bsp, min_radius)
+        tuple: (h_factor, nb, bsp, min_radius) específicos del volumen
     """
-    for z_threshold, params in ADAPTIVE_ROI_PARAMS:
+    # Seleccionar tabla de parámetros según volumen
+    roi_params = ADAPTIVE_ROI_BY_VOLUME.get(volume, ADAPTIVE_ROI_PARAMS_VOL01)
+    
+    # Buscar parámetros según altura Z
+    for z_threshold, params in roi_params:
         if z_height_m < z_threshold:
             return params
-    # Fallback (no debería llegar aquí con float('inf') al final)
-    return ADAPTIVE_ROI_PARAMS[-1][1]
+    
+    # Fallback al último nivel
+    return roi_params[-1][1]
 
 
 def get_gate_xyz_coords(radar, edges=False):
@@ -229,6 +238,7 @@ def get_or_build_W_operator(
             nb=nb,
             bsp=bsp,
             min_radius=min_radius,
+            volume=volumen,  # Pasar volumen para ajustes de ROI específicos
             weight_func=weight_func,
             max_neighbors=max_neighbors,
             n_workers=None,  # Auto: cpu_count() - 1 (usa todos los cores disponibles)

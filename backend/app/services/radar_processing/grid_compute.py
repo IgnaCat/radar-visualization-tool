@@ -198,6 +198,7 @@ def build_W_operator(
     nb=None,
     bsp=None,
     min_radius=None,
+    volume=None,  # Volumen del radar para ajustes de ROI por volumen
     weight_func="Barnes2",
     max_neighbors=None,
     n_workers=None,
@@ -222,6 +223,7 @@ def build_W_operator(
     nb: float o None, ancho de haz virtual en grados
     bsp: float o None, espaciado entre haces
     min_radius: float o None, radio mínimo en metros
+    volume: str o None, volumen del radar para aplicar multiplicadores de ROI específicos
     weight_func: 'Barnes', 'Barnes2', 'Cressman', 'nearest'
     max_neighbors: int o None
         - None: usa TODOS los gates dentro del ROI (procesamiento paralelo por nivel Z)
@@ -291,6 +293,7 @@ def build_W_operator(
     
     logger.info(f"Construyendo operador W: {nvoxels:,} voxels, {n_valid_gates:,} gates válidos")
     logger.info(f"  ROI dist_beam: h_factor={h_factor}, nb={nb}°, bsp={bsp}, min_radius={min_radius}m")
+    logger.info(f"  Volumen: {volume} (ajustes de ROI específicos por volumen)")
     logger.info(f"  Workers: {n_workers} (procesamiento {'paralelo' if n_workers > 1 else 'secuencial'})")
 
 
@@ -319,14 +322,20 @@ def build_W_operator(
     if use_adaptive:
         # Importar función adaptativa
         from .grid_builder import adaptive_roi_params
-        logger.info("Usando parámetros ROI adaptativos por altura Z (ADAPTIVE_ROI_PARAMS)")
+        logger.info(f"Usando parámetros ROI adaptativos por altura Z y volumen '{volume}' (ADAPTIVE_ROI_PARAMS + VOLUME_ROI_PARAMS)")
+        # Mostrar ejemplo de parámetros para primer y último nivel
+        z_low, z_high = z_coords[0], z_coords[-1]
+        params_low = adaptive_roi_params(z_low, volume)
+        params_high = adaptive_roi_params(z_high, volume)
+        logger.info(f"  ROI @ z={z_low/1000:.1f}km: h_factor={params_low[0]:.2f}, nb={params_low[1]:.2f}°, bsp={params_low[2]:.2f}, min_radius={params_low[3]:.0f}m")
+        logger.info(f"  ROI @ z={z_high/1000:.1f}km: h_factor={params_high[0]:.2f}, nb={params_high[1]:.2f}°, bsp={params_high[2]:.2f}, min_radius={params_high[3]:.0f}m")
     
     # Preparar argumentos para cada nivel Z
     args_list = []
     for iz, z_coord in enumerate(z_coords):
         if use_adaptive:
-            # Calcular parámetros específicos para esta altura desde ADAPTIVE_ROI_PARAMS
-            hf, nb_z, bsp_z, minr = adaptive_roi_params(z_coord)
+            # Calcular parámetros específicos para esta altura y volumen desde ADAPTIVE_ROI_PARAMS + VOLUME_ROI_PARAMS
+            hf, nb_z, bsp_z, minr = adaptive_roi_params(z_coord, volume)
         else:
             # Usar parámetros fijos pasados como argumentos
             hf, nb_z, bsp_z, minr = h_factor, nb, bsp, min_radius

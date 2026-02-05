@@ -8,7 +8,7 @@ import json
 from pyproj import Geod
 
 from ..utils import colores
-from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_PARAMS
+from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_BY_VOLUME, ADAPTIVE_ROI_PARAMS_VOL01
 from ..models import RangeFilter
 
 
@@ -269,7 +269,8 @@ def w_operator_cache_key(
     Genera cache key para operador W basado en:
     - Identificación del radar (radar_estrategia_volumen)
     - Geometría de grilla (shape, limits)
-    - Parámetros de interpolación (h_factor, nb, bsp, min_radius, weight_func, max_neighbors)
+    - Parámetros ROI específicos del volumen (ADAPTIVE_ROI_BY_VOLUME)
+    - Función de ponderación y max_neighbors
     
     NOTA: Cache W es COMPARTIDO entre sesiones - el operador depende solo
     de la geometría del radar, no de datos específicos del archivo.
@@ -280,12 +281,14 @@ def w_operator_cache_key(
         volumen: Número de volumen (ej: 01)
         grid_shape: (nz, ny, nx)
         grid_limits: ((z_min, z_max), (y_min, y_max), (x_min, x_max))
-        adaptive_roi_params: Parámetros adaptativos de ROI por altura Z
         weight_func: Función de ponderación ('Barnes', 'Barnes2', 'Cressman', 'nearest')
         max_neighbors: Máximo número de vecinos (None = todos)
     """
+    # Seleccionar parámetros ROI específicos del volumen
+    roi_params = ADAPTIVE_ROI_BY_VOLUME.get(volumen, ADAPTIVE_ROI_PARAMS_VOL01)
+    
     payload = {
-        "v": 3,  # versión del formato (incrementado para dist_beam)
+        "v": 4,  # versión del formato (volumen-specific ROI params)
         "radar": str(radar),
         "strat": str(estrategia),
         "vol": str(volumen),
@@ -295,7 +298,7 @@ def w_operator_cache_key(
             [float(grid_limits[1][0]), float(grid_limits[1][1])],
             [float(grid_limits[2][0]), float(grid_limits[2][1])],
         ],
-        "adaptive_roi": [[z, list(params)] for z, params in ADAPTIVE_ROI_PARAMS],
+        "adaptive_roi": [[z, list(params)] for z, params in roi_params],
         "wfunc": str(weight_func),
         "maxn": int(max_neighbors) if max_neighbors is not None else None,
     }

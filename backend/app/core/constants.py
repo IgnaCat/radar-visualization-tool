@@ -53,10 +53,50 @@ AFFECTS_INTERP_FIELDS = {"RHOHV"}
 # Formato: (z_threshold_m, (h_factor, nb, bsp, min_radius))
 # Niveles bajos usan parámetros más agresivos, niveles altos más conservadores
 # IMPORTANTE: Cambiar estos valores invalida el caché de operadores W
-ADAPTIVE_ROI_PARAMS = [
+
+# Volumen 01: Parámetros base
+ADAPTIVE_ROI_PARAMS_VOL01 = [
     (2000,  (0.9, 1.2, 1.0, 350.0)),
     (4000,  (0.8, 1.0, 0.9, 350.0)),
     (6000,  (0.6, 0.8, 0.7, 300.0)),
     (9000,  (0.4, 0.7, 0.6, 300.0)),
     (float('inf'), (0.3, 0.5, 0.5, 200.0)),
 ]
+
+# Volumen 02: Escaneo estándar, alcance medio
+# Ring cerca del radar → min_radius aumentado
+ADAPTIVE_ROI_PARAMS_VOL02 = [
+    (2000,  (0.9, 1.4, 1.1, 525.0)),
+    (4000,  (0.8, 1.2, 0.95, 525.0)),
+    (6000,  (0.6, 0.9, 0.7, 450.0)),
+    (9000,  (0.4, 0.8, 0.65, 450.0)),
+    (float('inf'), (0.3, 0.6, 0.55, 300.0)),
+]
+
+# Volumen 03: Alta resolución (300m), corto alcance, datos más densos
+# Necesita ROI mucho mayor para evitar imágenes vacías a gran altitud
+ADAPTIVE_ROI_PARAMS_VOL03 = [
+    (2000,  (1.35, 2.4, 1.5, 1400.0)),
+    (4000,  (1.2, 2.0, 1.35, 1400.0)),
+    (6000,  (0.9, 1.6, 1.05, 1200.0)),
+    (9000,  (0.6, 1.4, 0.9, 1200.0)),
+    (float('inf'), (0.45, 1.0, 0.75, 800.0)),
+]
+
+# Volumen 04: Largo alcance, mayor cobertura horizontal
+# Ring cerca del radar, alcance mayor → ROI aumentado
+ADAPTIVE_ROI_PARAMS_VOL04 = [
+    (2000,  (0.9, 1.5, 1.2, 700.0)),
+    (4000,  (0.8, 1.3, 1.0, 700.0)),
+    (6000,  (0.7, 1.1, 0.8, 600.0)),
+    (9000,  (0.5, 1.0, 0.7, 600.0)),
+    (float('inf'), (0.3, 0.75, 0.6, 400.0)),
+]
+
+# Mapeo de volumen a sus parámetros
+ADAPTIVE_ROI_BY_VOLUME = {
+    '01': ADAPTIVE_ROI_PARAMS_VOL01,
+    '02': ADAPTIVE_ROI_PARAMS_VOL02,
+    '03': ADAPTIVE_ROI_PARAMS_VOL03,
+    '04': ADAPTIVE_ROI_PARAMS_VOL04,
+}
