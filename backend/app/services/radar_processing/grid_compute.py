@@ -91,14 +91,14 @@ def _process_single_level(args) -> Tuple[int, int, str]:
     Args:
         args: tuple con (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
                          gate_valid_mask, h_factor, nb, bsp, min_radius,
-                         weight_func, temp_dir, dtype_val, dtype_idx)
+                         weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx)
     
     Returns:
         (iz, n_pairs, temp_file): índice nivel, número de pares, archivo temporal
     """
     (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
      gate_valid_mask, h_factor, nb, bsp, min_radius,
-     weight_func, temp_dir, dtype_val, dtype_idx) = args
+     weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx) = args
     
     n_points = grid_y_2d.shape[0]
     
@@ -110,12 +110,12 @@ def _process_single_level(args) -> Tuple[int, int, str]:
     ngates = len(valid_indices)
     
     # Build KD-tree from valid gates only
-    gate_coords = np.column_stack([gate_x_valid, gate_y_valid, gate_z_valid]).astype('float64')
+    gate_coords = np.column_stack([gate_x_valid, gate_y_valid, gate_z_valid]).astype('float32')
     tree = cKDTree(gate_coords)
     del gate_coords
     gc.collect()
     
-    grid_z_level = np.full(n_points, z_coord, dtype='float64')
+    grid_z_level = np.full(n_points, z_coord, dtype='float32')
     
     # ROI para este nivel usando dist_beam
     roi = calculate_roi_dist_beam(
@@ -139,7 +139,7 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         r = roi[i]
         r2 = r * r
         
-        point = np.array([gx, gy, gz_pt], dtype='float64')
+        point = np.array([gx, gy, gz_pt], dtype='float32')
         candidate_indices_local = tree.query_ball_point(point, r)
         
         if not candidate_indices_local:
@@ -163,6 +163,17 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         
         final_indices = candidate_indices_global[mask]
         final_d2 = d2[mask]
+        
+        # Limitar a max_neighbors si está especificado
+        if max_neighbors is not None and len(final_indices) > max_neighbors:
+            # Usar argpartition para seleccionar k más cercanos eficientemente: O(n) + O(k log k)
+            # 1. Partition: encuentra los k menores sin ordenar (O(n))
+            kth_indices = np.argpartition(final_d2, max_neighbors)[:max_neighbors]
+            # 2. Ordenar los k seleccionados por distancia (O(k log k), k << n típicamente)
+            #    Esto mejora: cache locality, CSR matrix ops, y consistencia con ROI completo
+            kth_indices = kth_indices[np.argsort(final_d2[kth_indices])]
+            final_indices = final_indices[kth_indices]
+            final_d2 = final_d2[kth_indices]
         
         # Calcular pesos
         d = np.sqrt(final_d2).astype('float32')
@@ -204,7 +215,7 @@ def build_W_operator(
     n_workers=None,
     temp_dir=None,
     dtype_val=np.float32,
-    dtype_idx=np.int64,
+    dtype_idx=np.int32,
 ):
     """
     Construye operador disperso W (CSR: Compressed Sparse Row) que mapea gates -> voxels.
@@ -226,8 +237,9 @@ def build_W_operator(
     volume: str o None, volumen del radar para aplicar multiplicadores de ROI específicos
     weight_func: 'Barnes', 'Barnes2', 'Cressman', 'nearest'
     max_neighbors: int o None
-        - None: usa TODOS los gates dentro del ROI (procesamiento paralelo por nivel Z)
-        - int: NO IMPLEMENTADO para parallel (usa modo secuencial original)
+        - None: usa TODOS los gates dentro del ROI
+        - int > 0: limita a los k gates más cercanos (por distancia euclidiana 3D)
+                   Usa np.argpartition para selección eficiente O(n)
     n_workers: int o None
         - None: cpu_count() - 1
         - 1: procesamiento secuencial
@@ -295,12 +307,11 @@ def build_W_operator(
     logger.info(f"  ROI dist_beam: h_factor={h_factor}, nb={nb}°, bsp={bsp}, min_radius={min_radius}m")
     logger.info(f"  Volumen: {volume} (ajustes de ROI específicos por volumen)")
     logger.info(f"  Workers: {n_workers} (procesamiento {'paralelo' if n_workers > 1 else 'secuencial'})")
+    if max_neighbors is not None:
+        logger.info(f"  max_neighbors: {max_neighbors} (limitando a k vecinos más cercanos)")
 
 
     # MODO PARALELO POR NIVELES Z
-    if max_neighbors is not None:
-        raise ValueError("max_neighbors no está implementado. Use None para procesamiento completo.")
-    
     if nz * ny * nx != nvoxels:
         raise ValueError(f"Grilla no regular detectada: {nz}*{ny}*{nx}={nz*ny*nx} != {nvoxels}")
     
@@ -308,8 +319,8 @@ def build_W_operator(
         
     # Preparar grid 2D (Y-X plane)
     yy, xx = np.meshgrid(y_coords, x_coords, indexing='ij')
-    grid_y_2d = yy.ravel().astype('float64')
-    grid_x_2d = xx.ravel().astype('float64')
+    grid_y_2d = yy.ravel().astype('float32')
+    grid_x_2d = xx.ravel().astype('float32')
     
     # Extraer coordenadas individuales de gates (arrays 1D)
     gate_x = gates_xyz[:, 0]
@@ -343,7 +354,7 @@ def build_W_operator(
         args_list.append((
             iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
             toa_mask, hf, nb_z, bsp_z, minr,
-            weight_func, temp_dir, dtype_val, dtype_idx
+            weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx
         ))
     
     # Procesar niveles en paralelo
@@ -426,18 +437,18 @@ def build_W_operator(
         except:
             pass
     
-    # Construir CSR directamente desde arrays pre-alocados
-    final_indices = final_indices.astype(np.int64, copy=False)
-    final_indptr = final_indptr.astype(np.int64, copy=False)
+    # Construir CSR con dtype_idx especificado (int32 por defecto, int64 solo si necesario)
+    final_indices = final_indices.astype(dtype_idx, copy=False)
+    final_indptr = final_indptr.astype(dtype_idx, copy=False)
     
     W = csr_matrix((final_weights, final_indices, final_indptr),
                     shape=(nvoxels, ngates_total), dtype=dtype_val)
     
-    # Verificar que los índices sean int64
-    if W.indices.dtype != np.int64 or W.indptr.dtype != np.int64:
-        logger.warning(f"Convirtiendo índices de W a int64 (eran {W.indices.dtype}, {W.indptr.dtype})")
-        W.indices = W.indices.astype(np.int64)
-        W.indptr = W.indptr.astype(np.int64)
+    # Verificar consistencia de dtype
+    if W.indices.dtype != dtype_idx or W.indptr.dtype != dtype_idx:
+        logger.warning(f"Convirtiendo índices de W a {dtype_idx} (eran {W.indices.dtype}, {W.indptr.dtype})")
+        W.indices = W.indices.astype(dtype_idx)
+        W.indptr = W.indptr.astype(dtype_idx)
     
     # Limpieza final
     del final_weights, final_indices, final_indptr

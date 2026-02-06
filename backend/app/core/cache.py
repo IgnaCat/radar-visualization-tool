@@ -172,11 +172,15 @@ def save_w_operator_to_disk(cache_key: str, W: csr_matrix, metadata: dict):
     try:
         cache_path = get_w_operator_cache_path(cache_key)
         
-        # Convertir índices a int64 antes de guardar para evitar overflow
-        if W.indices.dtype != np.int64:
-            W.indices = W.indices.astype(np.int64)
-        if W.indptr.dtype != np.int64:
-            W.indptr = W.indptr.astype(np.int64)
+        # Mantener dtype original de índices (int32 es suficiente para la mayoría de casos)
+        # Solo convertir a int64 si hay riesgo de overflow (matriz muy grande)
+        if W.nnz > 2_000_000_000 or W.shape[1] > 2_000_000_000:
+            # Matriz muy grande, forzar int64 para evitar overflow
+            if W.indices.dtype != np.int64:
+                W.indices = W.indices.astype(np.int64)
+            if W.indptr.dtype != np.int64:
+                W.indptr = W.indptr.astype(np.int64)
+            logger.info(f"Operador W grande ({W.nnz:,} elementos), usando int64 para índices")
         
         # Guardar matriz dispersa usando scipy (formato .npz optimizado)
         save_npz(cache_path, W, compressed=True)

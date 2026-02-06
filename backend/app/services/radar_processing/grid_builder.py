@@ -243,7 +243,7 @@ def get_or_build_W_operator(
             max_neighbors=max_neighbors,
             n_workers=None,  # Auto: cpu_count() - 1 (usa todos los cores disponibles)
             temp_dir=None,   # Crea directorio temporal automáticamente
-            dtype_idx=np.int64,
+            # dtype_idx usa default (int32), suficiente para matrices típicas
         )
         
         # Metadata para referencia
@@ -315,6 +315,7 @@ def get_or_build_grid3d_with_operator(
     nb = None
     bsp = None
     min_radius = None
+    max_neighbors = 40
     
     # Obtener operador W (con caché completo: RAM -> Disco -> Build)
     W = get_or_build_W_operator(
@@ -330,7 +331,7 @@ def get_or_build_grid3d_with_operator(
         min_radius=None,
         toa=toa,
         weight_func=weight_func,
-        max_neighbors=None,
+        max_neighbors=max_neighbors,
         session_id=session_id,
     )
     
