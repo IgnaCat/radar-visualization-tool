@@ -17,7 +17,7 @@ from ...core.cache import (
     W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT
 )
-from ...core.constants import AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_BY_VOLUME, ADAPTIVE_ROI_PARAMS_VOL01
+from ...core.constants import AFFECTS_INTERP_FIELDS, ROI_PARAMS_BY_VOLUME, ROI_PARAMS_VOL01
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields
@@ -27,34 +27,24 @@ from .product_preparation import prepare_radar_for_product
 logger = logging.getLogger(__name__)
 
 
-def adaptive_roi_params(z_height_m, volume: str | None = None):
+def get_roi_params_for_volume(volume: str | None = None):
     """
-    Calcula parámetros de ROI adaptativos según altura Z y volumen.
+    Obtiene parámetros de ROI según volumen.
     
-    Cada volumen tiene su propia configuración de parámetros ROI optimizada
-    para sus características de escaneo:
+    Con max_neighbors ya limitando vecinos, no es necesario reducir ROI
+    por altura. Cada volumen tiene parámetros constantes optimizados:
     - Vol 01: Parámetros base
     - Vol 02: Alcance medio, min_radius aumentado para evitar ring
-    - Vol 03: Alta resolución (300m), ROI muy aumentado para evitar vacíos
+    - Vol 03: Alta resolución (300m), ROI aumentado para densidad de datos
     - Vol 04: Largo alcance, ROI aumentado para cobertura horizontal
     
     Args:
-        z_height_m: Altura del nivel Z en metros
         volume: Identificador del volumen ('01', '02', '03', '04', etc.)
     
     Returns:
         tuple: (h_factor, nb, bsp, min_radius) específicos del volumen
     """
-    # Seleccionar tabla de parámetros según volumen
-    roi_params = ADAPTIVE_ROI_BY_VOLUME.get(volume, ADAPTIVE_ROI_PARAMS_VOL01)
-    
-    # Buscar parámetros según altura Z
-    for z_threshold, params in roi_params:
-        if z_height_m < z_threshold:
-            return params
-    
-    # Fallback al último nivel
-    return roi_params[-1][1]
+    return ROI_PARAMS_BY_VOLUME.get(volume, ROI_PARAMS_VOL01)
 
 
 def get_gate_xyz_coords(radar, edges=False):
@@ -310,12 +300,13 @@ def get_or_build_grid3d_with_operator(
     Returns:
         pyart.core.Grid con la grilla 3D multi-campo construida
     """
-    # Usar siempre parámetros adaptativos (ADAPTIVE_ROI_PARAMS se incluye en cache key)
+    # Usar parámetros por volumen (ROI_PARAMS_BY_VOLUME se incluye en cache key)
+    # None = lookup automático según volumen en build_W_operator
     h_factor = None
     nb = None
     bsp = None
     min_radius = None
-    max_neighbors = 40
+    max_neighbors = 30
     
     # Obtener operador W (con caché completo: RAM -> Disco -> Build)
     W = get_or_build_W_operator(

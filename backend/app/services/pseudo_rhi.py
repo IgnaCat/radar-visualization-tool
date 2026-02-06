@@ -433,11 +433,13 @@ def _generate_segment_transect_png(
     )
     grid_shape = (z_points, y_points, x_points)
     
-    # Calcular parámetros dist_beam
-    h_factor = 1.0
-    nb = 1.5  # ancho de haz típico para radares meteorológicos
-    bsp = 1.0
-    min_radius = 300.0
+    # Usar parámetros ROI por volumen (consistente con grillas 3D)
+    # None = lookup automático según volumen en build_W_operator
+    h_factor = None
+    nb = None
+    bsp = None
+    min_radius = None
+    max_neighbors = 40
     
     # Construir operador W (compartido, sin session_id)
     W = get_or_build_W_operator(
@@ -452,7 +454,7 @@ def _generate_segment_transect_png(
         bsp=bsp,
         min_radius=min_radius,
         weight_func='Barnes2',
-        max_neighbors=None,
+        max_neighbors=max_neighbors,
         session_id=session_id,
     )
     

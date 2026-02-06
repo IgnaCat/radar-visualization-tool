@@ -8,7 +8,7 @@ import json
 from pyproj import Geod
 
 from ..utils import colores
-from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS, ADAPTIVE_ROI_BY_VOLUME, ADAPTIVE_ROI_PARAMS_VOL01
+from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS, ROI_PARAMS_BY_VOLUME, ROI_PARAMS_VOL01
 from ..models import RangeFilter
 
 
@@ -269,7 +269,7 @@ def w_operator_cache_key(
     Genera cache key para operador W basado en:
     - Identificación del radar (radar_estrategia_volumen)
     - Geometría de grilla (shape, limits)
-    - Parámetros ROI específicos del volumen (ADAPTIVE_ROI_BY_VOLUME)
+    - Parámetros ROI específicos del volumen (ROI_PARAMS_BY_VOLUME)
     - Función de ponderación y max_neighbors
     
     NOTA: Cache W es COMPARTIDO entre sesiones - el operador depende solo
@@ -284,11 +284,11 @@ def w_operator_cache_key(
         weight_func: Función de ponderación ('Barnes', 'Barnes2', 'Cressman', 'nearest')
         max_neighbors: Máximo número de vecinos (None = todos)
     """
-    # Seleccionar parámetros ROI específicos del volumen
-    roi_params = ADAPTIVE_ROI_BY_VOLUME.get(volumen, ADAPTIVE_ROI_PARAMS_VOL01)
+    # Seleccionar parámetros ROI específicos del volumen (constantes, no adaptativos)
+    roi_params = ROI_PARAMS_BY_VOLUME.get(volumen, ROI_PARAMS_VOL01)
     
     payload = {
-        "v": 3,  # versión del formato (volumen-specific ROI params)
+        "v": 4,  # versión 4: ROI constantes por volumen + max_neighbors
         "radar": str(radar),
         "strat": str(estrategia),
         "vol": str(volumen),
@@ -298,7 +298,7 @@ def w_operator_cache_key(
             [float(grid_limits[1][0]), float(grid_limits[1][1])],
             [float(grid_limits[2][0]), float(grid_limits[2][1])],
         ],
-        "adaptive_roi": [[z, list(params)] for z, params in roi_params],
+        "roi": list(roi_params),  # (h_factor, nb, bsp, min_radius) - constante por volumen
         "wfunc": str(weight_func),
         "maxn": int(max_neighbors) if max_neighbors is not None else None,
     }

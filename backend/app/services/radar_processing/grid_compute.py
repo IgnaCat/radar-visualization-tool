@@ -230,7 +230,7 @@ def build_W_operator(
     voxels_xyz: (Nvoxels, 3) float - coordenadas (x,y,z) de todos los voxels
     toa: float, Top Of Atmosphere en metros (default 12000)
          Límite físico para excluir ecos no-meteorológicos sobre tropopausa
-    h_factor: float o None, escalado de altura (None=adaptativos por Z desde ADAPTIVE_ROI_PARAMS)
+    h_factor: float o None, escalado de altura (None=usar valor fijo por volumen desde ROI_PARAMS_BY_VOLUME)
     nb: float o None, ancho de haz virtual en grados
     bsp: float o None, espaciado entre haces
     min_radius: float o None, radio mínimo en metros
@@ -327,29 +327,21 @@ def build_W_operator(
     gate_y = gates_xyz[:, 1]
     gate_z = gates_xyz[:, 2]
     
-    # Detectar modo adaptativo: cualquier parámetro None activa adaptativos
-    use_adaptive = h_factor is None
+    # Detectar modo con parámetros por volumen: cualquier parámetro None activa lookup de volumen
+    use_volume_params = h_factor is None
     
-    if use_adaptive:
-        # Importar función adaptativa
-        from .grid_builder import adaptive_roi_params
-        logger.info(f"Usando parámetros ROI adaptativos por altura Z y volumen '{volume}' (ADAPTIVE_ROI_PARAMS + VOLUME_ROI_PARAMS)")
-        # Mostrar ejemplo de parámetros para primer y último nivel
-        z_low, z_high = z_coords[0], z_coords[-1]
-        params_low = adaptive_roi_params(z_low, volume)
-        params_high = adaptive_roi_params(z_high, volume)
-        logger.info(f"  ROI @ z={z_low/1000:.1f}km: h_factor={params_low[0]:.2f}, nb={params_low[1]:.2f}°, bsp={params_low[2]:.2f}, min_radius={params_low[3]:.0f}m")
-        logger.info(f"  ROI @ z={z_high/1000:.1f}km: h_factor={params_high[0]:.2f}, nb={params_high[1]:.2f}°, bsp={params_high[2]:.2f}, min_radius={params_high[3]:.0f}m")
+    if use_volume_params:
+        # Importar función de lookup de ROI por volumen
+        from .grid_builder import get_roi_params_for_volume
+        params = get_roi_params_for_volume(volume)
+        logger.info(f"Usando parámetros ROI constantes para volumen '{volume}': h_factor={params[0]:.2f}, nb={params[1]:.2f}°, bsp={params[2]:.2f}, min_radius={params[3]:.0f}m")
+        h_factor, nb, bsp, min_radius = params
     
-    # Preparar argumentos para cada nivel Z
+    # Preparar argumentos para cada nivel Z (mismo ROI para todos los niveles)
     args_list = []
     for iz, z_coord in enumerate(z_coords):
-        if use_adaptive:
-            # Calcular parámetros específicos para esta altura y volumen desde ADAPTIVE_ROI_PARAMS + VOLUME_ROI_PARAMS
-            hf, nb_z, bsp_z, minr = adaptive_roi_params(z_coord, volume)
-        else:
-            # Usar parámetros fijos pasados como argumentos
-            hf, nb_z, bsp_z, minr = h_factor, nb, bsp, min_radius
+        # Usar parámetros constantes (fijos o desde volumen)
+        hf, nb_z, bsp_z, minr = h_factor, nb, bsp, min_radius
         
         args_list.append((
             iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
