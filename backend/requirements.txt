@@ -142,3 +142,4 @@ xmltodict==0.14.2
 xradar==0.10.0
 yarl==1.20.1
 zipp==3.23.0
+radarlib @ git+https://github.com/jgmarti84/radarlib.git@main

@@ -16,7 +16,7 @@ export default function UploadButton({ onFilesSelected }) {
         style={{ display: "none" }}
         id="upload-file"
         type="file"
-        accept=".nc"
+        accept=".nc,.BUFR,.bufr"
         multiple
         onChange={handleChange}
       />

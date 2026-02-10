@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     ALLOWED_PRODUCTS: List[str] = ["PPI", "RHI", "CAPPI", "COLMAX"]
 
     # Reglas de upload
-    ALLOWED_EXTENSIONS: List[str] = [".nc"]
+    ALLOWED_EXTENSIONS: List[str] = [".nc", ".BUFR", ".bufr"]
     MAX_UPLOAD_MB: int = 500
 
     class Config:
