@@ -1,0 +1,37 @@
+# Radar rainrate in polar coordinates
+#
+3 01 001 11         WMO identifier (block and station number)
+         164
+3 01 011 2001       Date of observation
+         3
+         5
+3 01 012 12         Time of observation
+         5
+3 01 022 48.874     Latitude of station
+         13.767     Longitude of station
+         1876       Antenna height
+0 30 021 256        Number of pixels per row (number of bins)
+0 30 022 360        Number of pixels per column (number of azimuths)
+0 21 201 1000       Range bin size
+0 21 202 1          Azimuthal resolution
+0 21 203 2000       Range bin offset
+0 21 204 0          Azimuth offset
+3 21 008 0          Z to R conversion
+         200
+         1.6
+3 13  10 0          Rain rate scale
+         7
+         0.2
+         0.6
+         1.7
+         5
+         15
+         50
+         90
+0 02 135 1          1st Elevation
+3 21 192 elev1.raw  Data of 1st Elevation
+0 02 135 3          2nd Elevation
+3 21 192 elev2.raw  Data of 2nd Elevation
+0 02 135 7          3rd Elevation
+3 21 192 elev3.raw  Data of 3rd Elevation
+

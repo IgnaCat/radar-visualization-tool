@@ -1,9 +1,9 @@
 """
 Servicio para convertir archivos BUFR de radar a formato NetCDF (CFRadial).
 
-Utiliza radarlib para decodificar archivos BUFR y escribirlos como NetCDF,
-permitiendo que el resto del pipeline (procesamiento PyART, generación COG, etc.)
-trabaje con un formato único.
+Utiliza el módulo local app.services.bufr para decodificar archivos BUFR y
+escribirlos como NetCDF, permitiendo que el resto del pipeline (procesamiento
+PyART, generación COG, etc.) trabaje con un formato único.
 
 Los archivos BUFR de un volumen de radar vienen separados por campo
 (ej. DBZH, VRAD, ZDR cada uno en un archivo .BUFR distinto).
@@ -75,15 +75,15 @@ def convert_bufr_to_netcdf(
     """
     Convierte una lista de archivos BUFR a NetCDF (CFRadial).
 
-    Agrupa archivos por volumen, llama a radarlib para decodificar + fusionar campos,
+    Agrupa archivos por volumen, decodifica + fusiona campos,
     y escribe un .nc por volumen en *output_dir*.
 
     Returns:
         Lista de (netcdf_path, volume_key) para cada volumen convertido exitosamente.
         Los archivos que fallan en la conversión se registran en log y se omiten.
     """
-    from radarlib.io.bufr.bufr import bufr_to_dict
-    from radarlib.io.bufr.bufr_to_pyart import (
+    from app.services.bufr import (
+        bufr_to_dict,
         bufr_fields_to_pyart_radar,
         save_radar_to_cfradial,
     )

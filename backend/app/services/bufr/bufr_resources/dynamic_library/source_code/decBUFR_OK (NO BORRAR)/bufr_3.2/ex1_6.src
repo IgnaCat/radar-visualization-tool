@@ -1,0 +1,67 @@
+# surface radar rainfall intensity composite, 4 bits per pixel
+#
+3 01 001 11         WMO identifier (block and station number)
+         164
+3 01 194 2001       Date of observation
+         3
+         5
+         12         Time of observation
+         5
+         50.4371    Lat/long of the top left corner of the image
+         8.1938
+         50.3750    Lat/long of the top right corner of the image
+         19.7773
+         44.5910    Lat/long of the bottom right corner of the image
+         19.1030
+         44.6466    Lat/long of the bottom left corner of the image
+         8.7324
+         2          Projection Type
+         48.878     Lat
+         13.767     Lon
+         0          Height
+         2000       Pixel size along the x co-ordinate of the image
+         2000       Pixel size along the y co-ordinate of the image
+         412        Number of pixels per row
+         324        Number of pixels per column
+3 01 193 6378137    Projection parameters
+         6356752    Semi-minor axis or rotation ellipsoid
+         13.333333  Longitude Origin
+         47.0       Latitude Origin
+         -364548    X-Offset
+         394690     Y-Offset
+         46         1st Standard Parallel
+         49         2nd Standard Parallel
+0 30 031 1          Image type
+0 29 002 0          Co-ordinate grid
+3 21 250 4          Radars included
+         11
+         38
+         1
+         0
+         11
+         52
+         1
+         0
+         11
+         126
+         1
+         0
+         11
+         164
+         1
+         0
+3 21 008 0          Z to R conversion
+         200
+         1.6
+3 13  10 0          Rain rate scale
+         7
+         0.2
+         0.6
+         1.7
+         5
+         15
+         50
+         90
+3 21 192 ex1.raw    File name of 4-bit pixel map
+
+

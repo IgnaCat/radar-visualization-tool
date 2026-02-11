@@ -1,0 +1,90 @@
+# This is an example-VAD-file to verify the correct encoding/decoding
+# of VAD-profiles. Data in this file is based on OPERA working
+# document 22-1/99
+#
+# K.Koeck 03-AUG-2001
+#
+3 01 001   10               WMO block number                        
+           1018             WMO station number                      
+3 01 011   2001             Time of observation (year)              
+           7                Time of observation (month)             
+           20               Time of observation (day)               
+3 01 012   15               Time of observation (hour)              
+           35               Time of observation (minute)            
+3 01 022   48.119           Latitude (high accuracy)                
+           16.562           Longitude (high accuracy)               
+           183              Height of station                       
+0 02 003   0                Type of measuring equipment used        
+1 06 000
+0 31 001   10               Number of heights    
+#
+0 07 007   1000             Height               
+0 11 001   105              Wind direction       
+0 11 002   5.4              Wind speed           
+0 33 002   0                Quality information  
+0 11 006   0.4              w-component
+0 33 002   0                Quality information
+#
+           2000             Height               
+           122              Wind direction       
+           10.5             Wind speed           
+           0                Quality information  
+           0.5              w-component
+           0                Quality information
+#
+           3000             Height               
+           127              Wind direction       
+           14.0             Wind speed           
+           0                Quality information  
+           0.8              w-component
+           0                Quality information
+#
+           4000             Height               
+           108              Wind direction       
+           8.3              Wind speed           
+           0                Quality information  
+           0.5              w-component
+           0                Quality information
+#
+           5000             Height               
+           115              Wind direction       
+           7.2              Wind speed           
+           0                Quality information  
+           1.1              w-component
+           0                Quality information
+#
+           6000             Height               
+           102              Wind direction       
+           8.0              Wind speed           
+           0                Quality information  
+           1.5              w-component
+           0                Quality information
+#
+           7000             Height               
+           121              Wind direction       
+           14.3             Wind speed           
+           0                Quality information  
+           0.7              w-component
+           0                Quality information
+#
+           8000             Height               
+           118              Wind direction       
+           15.6             Wind speed           
+           0                Quality information  
+           1.7              w-component
+           0                Quality information
+#
+           9000             Height               
+           112              Wind direction       
+           17.1             Wind speed           
+           0                Quality information  
+           1.0              w-component
+           0                Quality information
+#
+           10000            Height               
+           101              Wind direction       
+           14.3             Wind speed           
+           0                Quality information  
+           0.6              w-component
+           0                Quality information
+

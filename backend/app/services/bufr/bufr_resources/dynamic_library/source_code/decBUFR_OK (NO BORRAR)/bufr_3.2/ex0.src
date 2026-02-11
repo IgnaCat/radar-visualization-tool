@@ -1,0 +1,27 @@
+0 00 001 'ABC'
+0 05 033 missing
+0 05 033 49.949494
+3 01 001 11         WMO identifier (block and station number)
+         164
+3 01 011 2001       Date of observation
+         3
+         5
+3 01 012 12         Time of observation
+         5
+3 01 023 50.4371    Lat/long of the top left corner of the image
+         8.1938
+3 01 023 50.3750    Lat/long of the top right corner of the image
+         19.7773
+3 01 023 44.5910    Lat/long of the bottom right corner of the image
+         19.1030
+3 01 023 44.6466    Lat/long of the bottom left corner of the image
+         8.7324
+0 05 033 2000       Pixel size along the x co-ordinate of the image
+0 06 033 2000       Pixel size along the y co-ordinate of the image
+0 30 021 412        Number of pixels per row
+0 30 022 324        Number of pixels per column
+0 29 001 2          Projection Type
+0 30 031 1          Image type
+0 29 002 0          Co-ordinate grid
+0 33 003 7          Quality information
+

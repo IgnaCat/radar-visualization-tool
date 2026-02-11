@@ -1,0 +1,71 @@
+# radar reflectivity composite, side-panels included, 4 bits per pixel
+#
+3 01 001    11          WMO identifier (block and station number)
+            164 
+3 01 192    2001        Date of observation
+            3           
+            5   
+            12          Time of observation
+            5   
+            50.4371     Lat/long of the top left corner of the image
+            8.1938      
+            50.3750     Lat/long of the top right corner of the image
+            19.7773 
+            44.5910     Lat/long of the bottom right corner of the image
+            19.1030 
+            44.6466     Lat/long of the bottom left corner of the image
+            8.7324  
+            2           Projection Type
+            48.874
+            13.767
+            2000        Pixel size along the x co-ordinate of the image
+            2000        Pixel size along the y co-ordinate of the image
+            412         Number of pixels per row
+            324         Number of pixels per column
+# Projection information
+0 29 199    6378137     Semi-major axis of rotation ellipsoid
+0 29 200    6356752     Semi-minor axis of rotation ellipsoid
+0 29 193    13.333333   Longitude Origin
+0 29 194    47          Latitude Origin
+0 29 195    458745      False Easting
+0 29 196    364548      False Northing
+0 29 197    46          1st Standard Parallel
+0 29 198    49          2nd Standard Parallel
+#
+0 30 031    1           Image type
+0 29 002    0           Co-ordinate grid
+3 21 250    4           Radars included
+            11
+            38
+            1
+            0
+            11
+            52
+            1
+            0
+            11
+            126
+            1
+            0
+            11
+            164
+            1
+            0
+3 13 009    0           Reflectivity scale
+            7   
+            14  
+            22  
+            30  
+            38  
+            46  
+            54  
+            62  
+3 21 192    ex2_top.raw File name of 4-bit pixel map top view.
+0 30 192    0           North-south-view organisation
+0 30 021    412         Number of columns of N-S-view
+0 30 022    32          Number of rows of N-S-view
+3 21 194    ex2_ns.raw  File name of 4-bit pixel map N-S-view
+0 30 193    0           East-west-view organisation
+0 30 021    32          Number of columns of E-W-view
+0 30 022    324         Number of rows of E-W-view
+3 21 196    ex2_ew.raw  File name of 4-bit pixel map N-S-view

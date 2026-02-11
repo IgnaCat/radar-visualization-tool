@@ -1,0 +1,3 @@
+env=Environment()
+env.Replace(CFLAGS=['-O2','-Wall','-ansi','-pedantic'])
+env.SharedLibrary('decbufr.so', ['decbufr.c', 'bufr.c', 'desc.c', 'bitio.c', 'rlenc.c', 'bufr_io.c'])
