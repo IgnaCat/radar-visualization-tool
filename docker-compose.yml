@@ -13,6 +13,7 @@ services:
       - APP_NAME=Radar Visualization
       - BASE_URL=http://localhost:8000
       - FRONTEND_ORIGINS=["http://localhost:3000","http://localhost"]
+      - ALLOWED_EXTENSIONS=[".nc", ".BUFR", ".bufr"]
 
       # Directories (absolute paths in container)
       - UPLOAD_DIR=/app/app/storage/uploads
