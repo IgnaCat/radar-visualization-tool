@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -18,10 +18,12 @@ import {
   Divider,
   IconButton,
   Collapse,
+  Chip,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import LayerControlList from "../controls/LayerControlList";
+import { formatSourceDisplay } from "../../utils/fieldAnalysis";
 
 const MARKS_01 = [
   { value: 0, label: "0" },
@@ -60,7 +62,113 @@ function canonize(name = "") {
   return CANON[k] || name.toUpperCase();
 }
 
-// Crear capas a partir de fields_present
+// Crear capas a partir del análisis de campos
+// Es decir, crea una lista de capas con metadata con un orden logico
+function deriveLayersFromFieldAnalysis(fieldAnalysis) {
+  if (!fieldAnalysis || !fieldAnalysis.allFields) {
+    return [];
+  }
+
+  const { commonFields, specificFields, allFields, sameRadarStrategy } =
+    fieldAnalysis;
+
+  // Orden sugerido: DBZH primero si existe
+  const order = [
+    "DBZH",
+    "DBZV",
+    "KDP",
+    "RHOHV",
+    "ZDR",
+    "VRAD",
+    "WRAD",
+    "PHIDP",
+  ];
+
+  const allLayers = [];
+
+  // Si no hay campos comunes ni específicos (una sola fuente),
+  // usar allFields directamente sin chips
+  if (commonFields.length === 0 && specificFields.length === 0) {
+    const sortedFields = [...allFields].sort((a, b) => {
+      const ia = order.indexOf(a);
+      const ib = order.indexOf(b);
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    });
+
+    sortedFields.forEach((f, i) => {
+      allLayers.push({
+        id: f.toLowerCase(),
+        label: f,
+        field: f,
+        enabled: i === 0, // Solo el primer campo habilitado por defecto
+        opacity: 1,
+        isCommon: false, // No mostrar chip de común
+        sources: [],
+      });
+    });
+
+    return allLayers;
+  }
+
+  // Primero agregar campos comunes
+  const sortedCommon = [...commonFields].sort((a, b) => {
+    const ia = order.indexOf(a);
+    const ib = order.indexOf(b);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+
+  sortedCommon.forEach((f, i) => {
+    allLayers.push({
+      id: f.toLowerCase(),
+      label: f,
+      field: f,
+      enabled: i === 0, // Solo el primer campo habilitado por defecto
+      opacity: 1,
+      isCommon: true,
+      sources: [],
+      simplified: sameRadarStrategy, // Pasar info para simplificar display
+    });
+  });
+
+  // Luego agregar campos específicos
+  specificFields.forEach((sourceInfo) => {
+    const { source, fields } = sourceInfo;
+    const sortedFields = [...fields]
+      .filter((f) => !commonFields.includes(f)) // Excluir campos ya agregados como comunes
+      .sort((a, b) => {
+        const ia = order.indexOf(a);
+        const ib = order.indexOf(b);
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      });
+
+    sortedFields.forEach((f) => {
+      // Verificar si ya existe este campo en la lista
+      const existing = allLayers.find((l) => l.field === f);
+      if (existing) {
+        // Agregar esta fuente al campo existente
+        existing.sources.push(source);
+        existing.isCommon = false;
+        existing.simplified = sameRadarStrategy;
+      } else {
+        // Crear nueva entrada
+        allLayers.push({
+          id: f.toLowerCase(),
+          label: f,
+          field: f,
+          enabled: false,
+          opacity: 1,
+          isCommon: false,
+          sources: [source],
+          simplified: sameRadarStrategy,
+        });
+      }
+    });
+  });
+
+  return allLayers;
+}
+
+// Función legacy para compatibilidad con fields_present
 function deriveLayersFromFields(fields_present) {
   const uniq = Array.from(new Set((fields_present || []).map(canonize)));
   // Orden sugerido: DBZH primero si existe
@@ -85,12 +193,15 @@ function deriveLayersFromFields(fields_present) {
     field: f,
     enabled: i === 0,
     opacity: 1,
+    isCommon: true,
+    sources: [],
   }));
 }
 
 export default function ProductSelectorDialog({
   open,
-  fields_present = ["DBZH"],
+  fieldAnalysis = null, // Información sobre campos comunes y específicos
+  fields_present = [], // Fallback para compatibilidad legacy (vacío por defecto)
   elevations = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
   volumes = [],
   radars = [],
@@ -106,13 +217,52 @@ export default function ProductSelectorDialog({
   },
 }) {
   const MAX_RADARS = 3;
-  const derivedLayers = useMemo(
-    () =>
-      initialLayers.length > 0
-        ? initialLayers
-        : deriveLayersFromFields(fields_present),
-    [fields_present, initialLayers]
-  );
+
+  // Siempre recalcular desde fieldAnalysis si está disponible
+  // Solo usar initialLayers para preservar el estado enabled/opacity del usuario
+  const derivedLayers = useMemo(() => {
+    // Primero calcular las capas desde fieldAnalysis o fields_present
+    let baseLayers = [];
+
+    if (
+      fieldAnalysis &&
+      fieldAnalysis.allFields &&
+      fieldAnalysis.allFields.length > 0
+    ) {
+      baseLayers = deriveLayersFromFieldAnalysis(fieldAnalysis);
+    } else if (fields_present && fields_present.length > 0) {
+      baseLayers = deriveLayersFromFields(fields_present);
+    }
+
+    // Si no hay datos base, retornar vacío
+    if (baseLayers.length === 0) {
+      return [];
+    }
+
+    // Si hay initialLayers, preservar solo enabled/opacity para campos que existen
+    if (initialLayers && initialLayers.length > 0) {
+      return baseLayers.map((bl, idx) => {
+        const existing = initialLayers.find((il) => il.field === bl.field);
+        if (existing) {
+          return {
+            ...bl, // Usar toda la metadata actualizada (isCommon, sources, etc.)
+            enabled: existing.enabled,
+            opacity: existing.opacity,
+          };
+        }
+        // Campo nuevo: habilitarlo solo si es el primero y no hay ninguno habilitado
+        const anyEnabled = initialLayers.some((il) =>
+          baseLayers.some((bl2) => bl2.field === il.field && il.enabled),
+        );
+        return {
+          ...bl,
+          enabled: !anyEnabled && idx === 0,
+        };
+      });
+    }
+
+    return baseLayers;
+  }, [fieldAnalysis, fields_present, initialLayers]);
 
   const [layers, setLayers] = useState(derivedLayers);
   const [product, setProduct] = useState(initialProduct);
@@ -131,66 +281,86 @@ export default function ProductSelectorDialog({
   const [filters, setFilters] = useState(structuredClone(initialFilters));
   const [showFilters, setShowFilters] = useState(false);
 
+  // Ref para evitar loops infinitos
+  const lastDerivedFieldsRef = useRef("");
+
   // Actualizar capas preservando el orden del usuario cuando cambian los campos disponibles
+  // (acordarse q el usuario puede haber reordenado o habilitado/deshabilitado capas)
   useEffect(() => {
+    // Crear una firma única de derivedLayers basada en los campos
+    const derivedSignature = derivedLayers
+      .map((dl) => `${dl.field}:${dl.isCommon}:${dl.sources?.length || 0}`)
+      .join("|");
+
+    // Solo procesar si la firma cambió
+    if (derivedSignature === lastDerivedFieldsRef.current) {
+      return;
+    }
+
+    lastDerivedFieldsRef.current = derivedSignature;
+
     if (layers.length === 0 || !layers.some((l) => l.enabled)) {
       setLayers(derivedLayers);
       return;
     }
 
-    // Si derivedLayers cambió, sincronizar el orden
-    // Comparar si el orden de los campos habilitados cambió
-    const currentEnabledFields = layers
-      .filter((l) => l.enabled)
-      .map((l) => l.field);
-    const derivedEnabledFields = derivedLayers
-      .filter((l) => l.enabled)
-      .map((l) => l.field);
+    // Verificar si el conjunto de campos cambió significativamente
+    const currentFields = new Set(layers.map((l) => l.field));
+    const derivedFields = new Set(derivedLayers.map((l) => l.field));
 
-    // Si el orden cambió, reordenar manteniendo estados enabled/disabled
-    const orderChanged =
-      currentEnabledFields.length === derivedEnabledFields.length &&
-      currentEnabledFields.some(
-        (field, idx) => field !== derivedEnabledFields[idx]
-      );
+    // Detectar campos nuevos o eliminados
+    const hasNewFields = derivedLayers.some(
+      (dl) => !currentFields.has(dl.field),
+    );
+    const hasRemovedFields = layers.some((l) => !derivedFields.has(l.field));
 
-    if (orderChanged) {
-      // Reordenar layers según el orden en derivedLayers, manteniendo enabled/disabled
-      const reordered = [];
-
-      // Primero los campos en el orden de derivedLayers
-      derivedLayers.forEach((dl) => {
+    // Si cambió significativamente el conjunto de campos, reemplazar preservando estados enabled
+    if (hasNewFields || hasRemovedFields) {
+      const updatedLayers = derivedLayers.map((dl) => {
         const existing = layers.find((l) => l.field === dl.field);
         if (existing) {
-          reordered.push(existing);
-        } else {
-          reordered.push(dl);
+          // Preservar enabled/opacity del usuario, actualizar metadata
+          return {
+            ...dl,
+            enabled: existing.enabled,
+            opacity: existing.opacity,
+          };
         }
+        return dl;
       });
-
-      // Luego los campos que están en layers pero no en derivedLayers
-      layers.forEach((l) => {
-        if (!derivedLayers.find((dl) => dl.field === l.field)) {
-          reordered.push(l);
-        }
-      });
-
-      setLayers(reordered);
+      setLayers(updatedLayers);
       return;
     }
 
-    // Si hay nuevos campos en derivedLayers que no están en layers actuales, agregarlos al final
-    const currentFields = new Set(layers.map((l) => l.field));
-    const newLayers = derivedLayers.filter(
-      (dl) => !currentFields.has(dl.field)
-    );
+    // Si solo cambió metadata (isCommon, sources), actualizar
+    const metadataChanged = layers.some((l) => {
+      const derived = derivedLayers.find((dl) => dl.field === l.field);
+      if (!derived) return false;
 
-    if (newLayers.length > 0) {
-      // Agregar nuevos campos al final, manteniendo el orden existente
-      setLayers((prev) => [...prev, ...newLayers]);
+      // Comparar metadata de forma más robusta
+      const isCommonChanged = l.isCommon !== derived.isCommon;
+      const sourcesChanged =
+        (l.sources?.length || 0) !== (derived.sources?.length || 0);
+
+      return isCommonChanged || sourcesChanged;
+    });
+
+    if (metadataChanged) {
+      setLayers((prev) =>
+        prev.map((l) => {
+          const derived = derivedLayers.find((dl) => dl.field === l.field);
+          if (derived) {
+            return {
+              ...l,
+              isCommon: derived.isCommon,
+              sources: derived.sources || [],
+            };
+          }
+          return l;
+        }),
+      );
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [derivedLayers]);
+  }, [derivedLayers, layers]);
 
   useEffect(() => {
     setElevationIdx(initialElevationIndex);
@@ -200,15 +370,15 @@ export default function ProductSelectorDialog({
     setSelectedVolumes(volumes);
   }, [volumes]);
 
-  // Reset height to default when product changes from/to CAPPI
+  // Resetear la altura a la inicial cuando se cambia desde/hacia CAPPI, para evitar confusiones
   useEffect(() => {
-    if (product !== 'cappi') {
+    if (product !== "cappi") {
       setHeight(initialCappiHeight);
     }
   }, [product, initialCappiHeight]);
 
   useEffect(() => {
-    // Cap default selection to MAX_RADARS to avoid overloading UI/backend
+    // Si el radar seleccionado ya no está en la lista, resetear a vacío
     setSelectedRadars(Array.isArray(radars) ? radars.slice(0, MAX_RADARS) : []);
   }, [radars]);
 
@@ -270,9 +440,18 @@ export default function ProductSelectorDialog({
     }
 
     // Para COLMAX, forzar DBZH como única capa
-    const finalLayers = product === "colmax"
-      ? [{ id: "dbzh", label: "DBZH", field: "DBZH", enabled: true, opacity: 1 }]
-      : layers;
+    const finalLayers =
+      product === "colmax"
+        ? [
+            {
+              id: "dbzh",
+              label: "DBZH",
+              field: "DBZH",
+              enabled: true,
+              opacity: 1,
+            },
+          ]
+        : layers;
 
     onConfirm({
       layers: finalLayers,
@@ -302,7 +481,7 @@ export default function ProductSelectorDialog({
     const N = Array.isArray(elevations) ? elevations.length : 0;
     const step = N > 9 ? Math.ceil(N / 9) : 1; // máx 9 marcas visibles
     return Array.from({ length: N }, (_, i) =>
-      i % step === 0 ? { value: i, label: String(i) } : null
+      i % step === 0 ? { value: i, label: String(i) } : null,
     ).filter(Boolean);
   }, [elevations]);
 
@@ -331,7 +510,11 @@ export default function ProductSelectorDialog({
                   control={<Radio />}
                   label="COLMAX"
                 />
-                <FormControlLabel value="cappi" control={<Radio />} label="CAPPI" />
+                <FormControlLabel
+                  value="cappi"
+                  control={<Radio />}
+                  label="CAPPI"
+                />
               </RadioGroup>
             </FormControl>
           </Box>
@@ -355,7 +538,7 @@ export default function ProductSelectorDialog({
                           setSelectedVolumes((prev) =>
                             prev.includes(vol)
                               ? prev.filter((v) => v !== vol)
-                              : [...prev, vol]
+                              : [...prev, vol],
                           );
                         }}
                         sx={{
@@ -445,6 +628,7 @@ export default function ProductSelectorDialog({
         {/* Variables reales del archivo - Ocultar para COLMAX */}
         {product !== "colmax" && (
           <Box mt={2}>
+            {/* Información sobre campos comunes y específicos */}
             <LayerControlList items={layers} onChange={setLayers} />
           </Box>
         )}
@@ -578,12 +762,7 @@ export default function ProductSelectorDialog({
                 }
                 label={`Rango de ${activeField}`}
               />
-              <Box
-                display="flex"
-                alignItems="center"
-                gap={1}
-                pl={5}
-              >
+              <Box display="flex" alignItems="center" gap={1} pl={5}>
                 <Slider
                   value={activeRange}
                   onChange={(_, v) => setActiveRange(v)}

@@ -406,7 +406,12 @@ export default function App() {
           severity: "warning",
         });
       }
-      setFilesInfo(filesInfo);
+      setFilesInfo((prev) => {
+        // Merge con archivos anteriores, evitando duplicados por filepath
+        const existingPaths = new Set(prev.map((f) => f.filepath));
+        const newFiles = filesInfo.filter((f) => !existingPaths.has(f.filepath));
+        return [...prev, ...newFiles];
+      });
       setVolumes((prev) => {
         const merged = [...prev, ...uploadResp.data.volumes];
         return Array.from(new Set(merged));

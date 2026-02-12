@@ -15,6 +15,7 @@ import AreaStatsDialog from "../dialogs/AreaStatsDialog";
 import ElevationProfileDialog from "../dialogs/ElevationProfileDialog";
 import WarningPanel from "../ui/WarningPanel";
 import Loader from "../ui/Loader";
+import { analyzeFieldsAcrossFiles } from "../../utils/fieldAnalysis";
 
 /**
  * MapPanel - Encapsula un mapa completo con todas sus herramientas
@@ -244,6 +245,13 @@ export default function MapPanel({
     setElevationProfileOpen(true);
   };
 
+  // Analizar campos en todos los archivos para identificar campos comunes vs específicos
+  // Los campos comunes son los que están presentes en todos los archivos
+  // Los campos específicos son los que solo están en algunos archivos
+  const fieldAnalysis = useMemo(() => {
+    return analyzeFieldsAcrossFiles(filesInfo);
+  }, [filesInfo]);
+
   return (
     <div
       id={`map-container-${panelId}`}
@@ -364,9 +372,7 @@ export default function MapPanel({
 
       <ProductSelectorDialog
         open={selectorOpen}
-        fields_present={Array.from(
-          new Set(filesInfo.map((f) => f.metadata.fields_present).flat()),
-        )}
+        fieldAnalysis={fieldAnalysis}
         elevations={Array.from(
           new Set(filesInfo.map((f) => f.metadata.elevations).flat()),
         )}

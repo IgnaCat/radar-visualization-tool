@@ -12,10 +12,12 @@ import {
   Divider,
   Tooltip,
   Button,
+  Chip,
 } from "@mui/material";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
+import { formatSourceDisplay } from "../../utils/fieldAnalysis";
 
 /**
  * items: [
@@ -26,36 +28,35 @@ import ExpandLessIcon from "@mui/icons-material/ExpandLess";
  *
  * onChange(nextItems) -> devuelve lista actualizada (orden/estado/opacity)
  */
-function LayerControlList({ title = "Variables de Radar", items, onChange, initialVisible = 4 }) {
+function LayerControlList({
+  title = "Variables de Radar",
+  items,
+  onChange,
+  initialVisible = 4,
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  // Reordenar items para priorizar DBZH, ZDR, RHOHV, KDP
-  const priorityFields = ['DBZH', 'ZDR', 'RHOHV', 'KDP'];
+  // Mantener el orden original de los items (comunes primero, luego específicos)
+  // El orden ya viene correcto desde deriveLayersFromFieldAnalysis
   const sortedItems = React.useMemo(() => {
-    const priority = [];
-    const rest = [];
+    // Si hay campos con isCommon, respetar el orden: comunes primero, específicos después
+    const hasClassification = items.some((item) => item.isCommon !== undefined);
 
-    items.forEach(item => {
-      const fieldName = item.field || item.label.toUpperCase();
-      if (priorityFields.includes(fieldName)) {
-        priority.push(item);
-      } else {
-        rest.push(item);
-      }
-    });
+    if (hasClassification) {
+      // Separar comunes y específicos, manteniendo su orden interno
+      const common = items.filter((item) => item.isCommon === true);
+      const specific = items.filter((item) => item.isCommon === false);
+      return [...common, ...specific];
+    }
 
-    // Ordenar priority según el orden en priorityFields
-    priority.sort((a, b) => {
-      const aField = a.field || a.label.toUpperCase();
-      const bField = b.field || b.label.toUpperCase();
-      return priorityFields.indexOf(aField) - priorityFields.indexOf(bField);
-    });
-
-    return [...priority, ...rest];
+    // Si no hay clasificación, mantener orden original
+    return items;
   }, [items]);
 
   // Determinar qué elementos mostrar
-  const visibleItems = isExpanded ? sortedItems : sortedItems.slice(0, initialVisible);
+  const visibleItems = isExpanded
+    ? sortedItems
+    : sortedItems.slice(0, initialVisible);
   const hasMoreItems = sortedItems.length > initialVisible;
 
   // --- Drag & Drop (HTML5 nativo) ---
@@ -76,7 +77,10 @@ function LayerControlList({ title = "Variables de Radar", items, onChange, initi
       if (Number.isNaN(fromIdx) || fromIdx === toIdx) return;
 
       // Si la lista está colapsada, solo permitir reordenar dentro de los elementos visibles
-      if (!isExpanded && (fromIdx >= initialVisible || toIdx >= initialVisible)) {
+      if (
+        !isExpanded &&
+        (fromIdx >= initialVisible || toIdx >= initialVisible)
+      ) {
         return;
       }
 
@@ -85,7 +89,7 @@ function LayerControlList({ title = "Variables de Radar", items, onChange, initi
       next.splice(toIdx, 0, moved);
       onChange(next);
     },
-    [sortedItems, onChange, isExpanded, initialVisible]
+    [sortedItems, onChange, isExpanded, initialVisible],
   );
 
   const toggleEnabled = (idx) => {
@@ -130,7 +134,9 @@ function LayerControlList({ title = "Variables de Radar", items, onChange, initi
         {sortedItems.length > 0 &&
           visibleItems.map((it, displayIdx) => {
             // El índice real en el array completo
-            const actualIdx = sortedItems.findIndex(item => item.id === it.id);
+            const actualIdx = sortedItems.findIndex(
+              (item) => item.id === it.id,
+            );
 
             return (
               <Box
@@ -152,14 +158,54 @@ function LayerControlList({ title = "Variables de Radar", items, onChange, initi
                     checked={!!it.enabled}
                     onChange={() => toggleEnabled(actualIdx)}
                     disabled={
-                      !it.enabled && sortedItems.filter((l) => l.enabled).length >= 3
+                      !it.enabled &&
+                      sortedItems.filter((l) => l.enabled).length >= 3
                     }
                     inputProps={{ "aria-label": `activar ${it.label}` }}
                   />
 
-                  <Typography variant="body2" sx={{ minWidth: 80 }}>
-                    {it.label}
-                  </Typography>
+                  <Box
+                    display="flex"
+                    flexDirection="column"
+                    gap={0.5}
+                    sx={{ minWidth: 100 }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {it.label}
+                    </Typography>
+
+                    {/* Mostrar origen del campo */}
+                    {it.isCommon ? (
+                      <Chip
+                        label="Común"
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        sx={{
+                          height: 20,
+                          fontSize: "0.7rem",
+                          fontWeight: 400,
+                        }}
+                      />
+                    ) : it.sources && it.sources.length > 0 ? (
+                      <Box display="flex" flexWrap="wrap" gap={0.5}>
+                        {it.sources.map((source, idx) => (
+                          <Chip
+                            key={idx}
+                            label={formatSourceDisplay(source, it.simplified)}
+                            size="small"
+                            color="info"
+                            variant="outlined"
+                            sx={{
+                              height: 20,
+                              fontSize: "0.65rem",
+                              fontWeight: 400,
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    ) : null}
+                  </Box>
 
                   <Slider
                     value={Number(it.opacity ?? 1)}
@@ -211,7 +257,9 @@ LayerControlList.propTypes = {
       label: PropTypes.string.isRequired,
       enabled: PropTypes.bool.isRequired,
       opacity: PropTypes.number.isRequired, // 0..1
-    })
+      isCommon: PropTypes.bool, // Si el campo es común a todos los archivos
+      sources: PropTypes.arrayOf(PropTypes.object), // Fuentes de donde proviene el campo
+    }),
   ).isRequired,
   onChange: PropTypes.func.isRequired,
   initialVisible: PropTypes.number, // Número de elementos visibles inicialmente
