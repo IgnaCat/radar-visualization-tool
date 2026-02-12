@@ -306,6 +306,8 @@ def get_or_build_grid3d_with_operator(
     nb = None
     bsp = None
     min_radius = None
+    
+    # Limitamos vecinos de W
     max_neighbors = 30
     
     # Obtener operador W (con caché completo: RAM -> Disco -> Build)

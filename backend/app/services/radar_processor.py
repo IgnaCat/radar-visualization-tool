@@ -207,14 +207,25 @@ def process_radar_to_cog(
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
     z_grid_limits = (0.0, toa)
-    y_grid_limits = (-range_max_m, range_max_m)
-    x_grid_limits = (-range_max_m, range_max_m)
+    
+    # Volumen 03 (bird bath) necesita grid XY más grande para COLMAX/CAPPI
+    # El scan vertical con 360 azimuts crea un patrón circular amplio
+    if volume == '03' and product.upper() in ['COLMAX', 'CAPPI']:
+        # Usar grid más grande para capturar el patrón circular completo
+        # Ajustado a 50km radio (gates alcanzan ~35km, con ROI ~9km total ~44km)
+        grid_extent_m = 50000.0  # 50 km de radio
+        y_grid_limits = (-grid_extent_m, grid_extent_m)
+        x_grid_limits = (-grid_extent_m, grid_extent_m)
+    else:
+        y_grid_limits = (-range_max_m, range_max_m)
+        x_grid_limits = (-range_max_m, range_max_m)
+    
     grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
 
     # Calcular puntos de grilla
     z_points, y_points, x_points = calculate_grid_points(
         grid_limits[0], grid_limits[1], grid_limits[2],
-        grid_resolution_z, grid_resolution_xy
+        grid_resolution_xy, grid_resolution_z
     )
     grid_shape = (z_points, y_points, x_points)
 

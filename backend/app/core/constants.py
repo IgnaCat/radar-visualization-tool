@@ -61,9 +61,12 @@ ROI_PARAMS_VOL01 = (0.9, 1.2, 1.0, 700.0)
 # Volumen 02: Escaneo estándar, alcance medio
 ROI_PARAMS_VOL02 = (1.1, 1.6, 1.3, 900.0)
 
-# Volumen 03: Alta resolución (300m), corto alcance, datos más densos
-# ROI aumentado para compensar mayor resolución espacial
-ROI_PARAMS_VOL03 = (1.5, 2.5, 1.8, 1800.0)
+# Volumen 03: Bird bath (scan vertical ~90° con 360 azimuts)
+# ROI muy grande para permitir proyección horizontal de gates verticales
+# h_factor alto para escalar con Z (altura ≈ distancia radial en bird bath)
+# min_radius extremadamente alto para cubrir todo el patrón circular
+# Con estos valores, gates a Z=30km tendrán ROI de ~15km, cubriendo hasta 45km de radio
+ROI_PARAMS_VOL03 = (5.0, 3.0, 2.5, 15000.0)
 
 # Volumen 04: Largo alcance, mayor cobertura horizontal
 ROI_PARAMS_VOL04 = (1.1, 1.6, 1.3, 900.0)
