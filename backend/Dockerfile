@@ -52,7 +52,6 @@ COPY ./app ./app
 # Note: these will be overridden by docker-compose volumes in development
 RUN mkdir -p /app/storage/uploads \
     /app/storage/tmp \
-    /app/storage/cache \
     /app/storage/data
 
 # Set permissions
