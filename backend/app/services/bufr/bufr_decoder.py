@@ -310,8 +310,13 @@ def decompress_sweep(sweep: dict) -> np.ndarray:
         )
 
     dec_data = zlib.decompress(memoryview(sweep["compress_data"]))
-    arr = np.frombuffer(dec_data, dtype=np.float64)
-    arr = np.ma.masked_equal(arr, -1.797693134862315708e308)
+    # frombuffer retorna read-only array, necesitamos copia para modificar
+    arr = np.frombuffer(dec_data, dtype=np.float64).copy()
+    
+    # Valor "missing" en BUFR: -1.797693134862315708e308 (cerca de -float64_max)
+    # Reemplazar por NaN en lugar de masked array para evitar perder la info después
+    # Umbral: valores con magnitud > 1e100 son considerados "missing"
+    arr[np.abs(arr) > 1e100] = np.nan
 
     expected = sweep["nrays"] * sweep["ngates"]
     if arr.size != expected:

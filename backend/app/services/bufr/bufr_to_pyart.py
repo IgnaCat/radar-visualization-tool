@@ -78,6 +78,10 @@ def _align_field_to_reference(
             raise ValueError("field cannot be aligned to reference grid")
         out_data[:, init : init + ngates] = data
 
+    # Asegurar que NaN queden enmascarados (crítico para BUFR donde
+    # los valores faltantes son NaN en lugar de _FillValue)
+    out_data = np.ma.masked_invalid(out_data)
+
     out["data"] = out_data
     return out
 
