@@ -165,6 +165,11 @@ function deriveLayersFromFieldAnalysis(fieldAnalysis) {
     });
   });
 
+  // Asegurar que al menos el primer campo esté habilitado por defecto
+  if (allLayers.length > 0 && !allLayers.some((l) => l.enabled)) {
+    allLayers[0].enabled = true;
+  }
+
   return allLayers;
 }
 
@@ -264,7 +269,19 @@ export default function ProductSelectorDialog({
     return baseLayers;
   }, [fieldAnalysis, fields_present, initialLayers]);
 
-  const [layers, setLayers] = useState(derivedLayers);
+  // Asegurar que derivedLayers tenga al menos un campo habilitado
+  const derivedLayersWithDefault = useMemo(() => {
+    if (derivedLayers.length === 0) return [];
+    if (derivedLayers.some((l) => l.enabled)) return derivedLayers;
+
+    // Si ninguno está habilitado, habilitar el primero
+    return derivedLayers.map((l, i) => ({
+      ...l,
+      enabled: i === 0,
+    }));
+  }, [derivedLayers]);
+
+  const [layers, setLayers] = useState(derivedLayersWithDefault);
   const [product, setProduct] = useState(initialProduct);
   const [height, setHeight] = useState(initialCappiHeight);
   const [selectedVolumes, setSelectedVolumes] = useState(volumes);
@@ -287,8 +304,8 @@ export default function ProductSelectorDialog({
   // Actualizar capas preservando el orden del usuario cuando cambian los campos disponibles
   // (acordarse q el usuario puede haber reordenado o habilitado/deshabilitado capas)
   useEffect(() => {
-    // Crear una firma única de derivedLayers basada en los campos
-    const derivedSignature = derivedLayers
+    // Crear una firma única de derivedLayersWithDefault basada en los campos
+    const derivedSignature = derivedLayersWithDefault
       .map((dl) => `${dl.field}:${dl.isCommon}:${dl.sources?.length || 0}`)
       .join("|");
 
@@ -300,23 +317,23 @@ export default function ProductSelectorDialog({
     lastDerivedFieldsRef.current = derivedSignature;
 
     if (layers.length === 0 || !layers.some((l) => l.enabled)) {
-      setLayers(derivedLayers);
+      setLayers(derivedLayersWithDefault);
       return;
     }
 
     // Verificar si el conjunto de campos cambió significativamente
     const currentFields = new Set(layers.map((l) => l.field));
-    const derivedFields = new Set(derivedLayers.map((l) => l.field));
+    const derivedFields = new Set(derivedLayersWithDefault.map((l) => l.field));
 
     // Detectar campos nuevos o eliminados
-    const hasNewFields = derivedLayers.some(
+    const hasNewFields = derivedLayersWithDefault.some(
       (dl) => !currentFields.has(dl.field),
     );
     const hasRemovedFields = layers.some((l) => !derivedFields.has(l.field));
 
     // Si cambió significativamente el conjunto de campos, reemplazar preservando estados enabled
     if (hasNewFields || hasRemovedFields) {
-      const updatedLayers = derivedLayers.map((dl) => {
+      const updatedLayers = derivedLayersWithDefault.map((dl) => {
         const existing = layers.find((l) => l.field === dl.field);
         if (existing) {
           // Preservar enabled/opacity del usuario, actualizar metadata
@@ -328,13 +345,21 @@ export default function ProductSelectorDialog({
         }
         return dl;
       });
+
+      // Asegurar que al menos un campo esté habilitado
+      if (updatedLayers.length > 0 && !updatedLayers.some((l) => l.enabled)) {
+        updatedLayers[0].enabled = true;
+      }
+
       setLayers(updatedLayers);
       return;
     }
 
     // Si solo cambió metadata (isCommon, sources), actualizar
     const metadataChanged = layers.some((l) => {
-      const derived = derivedLayers.find((dl) => dl.field === l.field);
+      const derived = derivedLayersWithDefault.find(
+        (dl) => dl.field === l.field,
+      );
       if (!derived) return false;
 
       // Comparar metadata de forma más robusta
@@ -348,7 +373,9 @@ export default function ProductSelectorDialog({
     if (metadataChanged) {
       setLayers((prev) =>
         prev.map((l) => {
-          const derived = derivedLayers.find((dl) => dl.field === l.field);
+          const derived = derivedLayersWithDefault.find(
+            (dl) => dl.field === l.field,
+          );
           if (derived) {
             return {
               ...l,
@@ -360,7 +387,7 @@ export default function ProductSelectorDialog({
         }),
       );
     }
-  }, [derivedLayers, layers]);
+  }, [derivedLayersWithDefault, layers]);
 
   useEffect(() => {
     setElevationIdx(initialElevationIndex);
@@ -411,6 +438,13 @@ export default function ProductSelectorDialog({
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
   const handleAccept = () => {
+    // Validar que haya al menos un campo habilitado
+    const enabledCount = layers.filter((l) => l.enabled).length;
+    if (enabledCount === 0 && product !== "colmax") {
+      alert("Debe seleccionar al menos un campo para visualizar");
+      return;
+    }
+
     const filtersOut = [];
 
     // Filtro de rango de variable activa (solo si está habilitado)
@@ -466,7 +500,7 @@ export default function ProductSelectorDialog({
   };
 
   const handleClose = () => {
-    setLayers(derivedLayers);
+    setLayers(derivedLayersWithDefault);
     setProduct(initialProduct);
     setHeight(initialCappiHeight);
     setElevationIdx(initialElevationIndex);

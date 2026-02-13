@@ -79,17 +79,6 @@ export function analyzeFieldsAcrossFiles(filesInfo) {
   const fieldToSources = new Map();
   const sourceMap = new Map(); // sourceId -> objeto de origen
 
-  // DEBUG: Ver qué filesInfo recibimos
-  console.log("📁 Files Info Received:", {
-    filesCount: filesInfo.length,
-    files: filesInfo.map((fi) => ({
-      filepath: fi.filepath,
-      hasMetadata: !!fi.metadata,
-      fields: fi.metadata?.fields_present || [],
-      metadata: fi.metadata,
-    })),
-  });
-
   filesInfo.forEach((fileInfo) => {
     const source = extractFileSource(fileInfo);
     const sourceId = createSourceId(source);
@@ -156,25 +145,6 @@ export function analyzeFieldsAcrossFiles(filesInfo) {
 
   // Ordenar campos específicos por número de campos (descendente) para mejor UX
   specificFields.sort((a, b) => b.fields.length - a.fields.length);
-
-  // DEBUG: Ver qué se está clasificando
-  console.log("🔍 Field Analysis Debug:", {
-    totalSources,
-    sourceIds: allSourceIds,
-    sameRadarStrategy,
-    commonFields,
-    specificFields: specificFields.map((sf) => ({
-      sourceId: sf.sourceId,
-      fields: sf.fields,
-    })),
-    fieldToSources: Array.from(fieldToSources.entries()).map(
-      ([field, sourceIds]) => ({
-        field,
-        sourceCount: sourceIds.size,
-        sourceIds: Array.from(sourceIds),
-      }),
-    ),
-  });
 
   // Obtener todos los campos únicos en orden: comunes primero, luego específicos
   let allFields;
