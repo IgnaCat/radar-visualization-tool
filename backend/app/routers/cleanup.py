@@ -14,7 +14,7 @@ from ..core.cache import (
     _W_OPERATOR_LOCKS,
     _W_OPERATOR_LOCKS_MASTER
 )
-from ..models import CleanupRequest
+from ..models import CleanupRequest, FileCleanupRequest
 
 router = APIRouter(prefix="/cleanup", tags=["cleanup"])
 
@@ -104,6 +104,47 @@ def _delete_path(p: Path) -> bool:
             return True
     except Exception:
         return False
+
+@router.post("/files")
+def cleanup_files(req: FileCleanupRequest):
+    """
+    Elimina archivos específicos subidos por el usuario.
+    Borra el NetCDF, sus COGs asociados y entradas de cache en memoria.
+    Devuelve lista de archivos efectivamente eliminados para que el frontend
+    actualice su estado.
+    """
+    deleted_files: list[str] = []
+    file_hashes: set[str] = set()
+    deleted = {"uploads": 0, "cogs": 0, "cache_entries": 0}
+
+    for filepath in req.filepaths:
+        rp = _first_safe_under(
+            filepath, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=req.session_id
+        )
+        if rp and rp.exists():
+            # Calcular hash antes de borrar (para limpiar COGs y cache)
+            try:
+                from ..services.radar_common import md5_file
+                file_hash = md5_file(str(rp))[:12]
+                file_hashes.add(file_hash)
+            except Exception:
+                pass
+
+            if _delete_path(rp):
+                deleted["uploads"] += 1
+                deleted_files.append(filepath)
+
+    # Borrar COGs y cache relacionados
+    if file_hashes:
+        deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=req.session_id)
+        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
+
+    # Limpiar carpetas vacías
+    if req.session_id:
+        _cleanup_empty_session_dirs(req.session_id)
+
+    return {"deleted": deleted, "removed_files": deleted_files}
+
 
 @router.post("/close")
 def cleanup_close(req: CleanupRequest):

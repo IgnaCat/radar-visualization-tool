@@ -4,7 +4,7 @@ Divididos por responsabilidad funcional.
 """
 from .common import RangeFilter
 from .process import ProcessRequest, ProcessResponse, LayerResult, RadarProcessResult
-from .cleanup import CleanupRequest
+from .cleanup import CleanupRequest, FileCleanupRequest
 from .pseudo_rhi import PseudoRHIRequest, PseudoRHIResponse
 from .stats import RadarStatsRequest, RadarStatsResponse, StatsResult
 from .pixel import RadarPixelRequest, RadarPixelResponse
@@ -20,6 +20,7 @@ __all__ = [
     'RadarProcessResult',
     # Cleanup
     'CleanupRequest',
+    'FileCleanupRequest',
     # Pseudo RHI
     'PseudoRHIRequest',
     'PseudoRHIResponse',

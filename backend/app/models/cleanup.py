@@ -14,3 +14,12 @@ class CleanupRequest(BaseModel):
         default=None,
         description="ID de sesión para cleanup selectivo"
     )
+
+
+class FileCleanupRequest(BaseModel):
+    """Request para eliminar archivos específicos subidos por el usuario."""
+    filepaths: list[str] = Field(..., min_length=1, description="Lista de rutas de archivos a eliminar")
+    session_id: Optional[str] = Field(
+        default=None,
+        description="ID de sesión para resolución de rutas y cleanup de cache"
+    )
