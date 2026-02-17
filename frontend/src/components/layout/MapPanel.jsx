@@ -7,6 +7,7 @@ import ColorLegend from "../map/ColorLegend";
 import BaseMapSelector from "../map/BaseMapSelector";
 import ColorPaletteSelector from "../controls/ColorPaletteSelector";
 import LayerManagerDialog from "../dialogs/LayerManagerDialog";
+import FileManagerDialog from "../dialogs/FileManagerDialog";
 import AnimationControls from "../controls/AnimationControls";
 import ActiveLayerPicker from "../controls/ActiveLayerPicker";
 import ProductSelectorDialog from "../dialogs/ProductSelectorDialog";
@@ -26,7 +27,9 @@ export default function MapPanel({
   panelId = "main",
 
   // Datos del mapa
-  overlayData, // El frame actual (array de capas)
+  overlayData, // El frame actual (array de capas visibles para el mapa)
+  allLayersOverlay, // Todas las capas del frame (incluye ocultas) para LayerManager
+  hiddenLayers, // Set de "field::source_file" keys ocultas
   mergedOutputs, // Todos los frames para AnimationControls
   opacity,
   opacityByField,
@@ -91,6 +94,7 @@ export default function MapPanel({
   onPixelStatClick,
   onGenerateElevationProfile,
   onLayerReorder,
+  onToggleLayerVisibility, // (field, source_file) => void - toggle visibilidad de capa
   onMapReady,
   onScreenshot,
   onPrint,
@@ -113,6 +117,11 @@ export default function MapPanel({
   warnings,
   availableDownloads,
   product, // El producto actual (PPI, CAPPI, etc.)
+
+  // File manager
+  fileManagerOpen,
+  setFileManagerOpen,
+  onRemoveFile,
 
   // Refs
   drawnLayerRef,
@@ -215,6 +224,10 @@ export default function MapPanel({
     setLayerManagerOpen((prev) => !prev);
   };
 
+  const handleToggleFileManager = () => {
+    setFileManagerOpen?.((prev) => !prev);
+  };
+
   const handleRequestLineDrawing = () => {
     setDrawnLineCoords([]);
     setLineDrawingFinished(false);
@@ -304,10 +317,12 @@ export default function MapPanel({
         onPaletteSelectorToggle={handleTogglePaletteSelector}
         onElevationProfileClick={handleOpenElevationProfile}
         onLayerManagerToggle={handleToggleLayerManager}
+        onFileManagerToggle={handleToggleFileManager}
         pixelStatActive={pixelStatMode}
         mapSelectorActive={mapSelectorOpen}
         paletteSelectorActive={paletteSelectorOpen}
         layerManagerActive={layerManagerOpen}
+        fileManagerActive={fileManagerOpen}
       />
 
       <MapToolbar
@@ -345,8 +360,23 @@ export default function MapPanel({
       <LayerManagerDialog
         open={layerManagerOpen}
         onClose={() => setLayerManagerOpen(false)}
-        layers={Array.isArray(overlayData) ? overlayData : []}
+        layers={
+          Array.isArray(allLayersOverlay)
+            ? allLayersOverlay
+            : Array.isArray(overlayData)
+              ? overlayData
+              : []
+        }
         onReorder={onLayerReorder}
+        onToggleLayerVisibility={onToggleLayerVisibility}
+        hiddenLayers={hiddenLayers}
+      />
+
+      <FileManagerDialog
+        open={fileManagerOpen}
+        onClose={() => setFileManagerOpen?.(false)}
+        filesInfo={filesInfo}
+        onRemoveFile={onRemoveFile}
       />
 
       <ZoomControls map={localMapInstance} />

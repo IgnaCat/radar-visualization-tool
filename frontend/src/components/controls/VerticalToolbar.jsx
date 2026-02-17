@@ -7,6 +7,7 @@ import LayersIcon from "@mui/icons-material/Layers";
 import TimelineIcon from "@mui/icons-material/Timeline";
 import MapIcon from "@mui/icons-material/Map";
 import PaletteIcon from "@mui/icons-material/Palette";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 
 export default function VerticalToolbar({
   onChangeProductClick,
@@ -17,10 +18,12 @@ export default function VerticalToolbar({
   onPaletteSelectorToggle,
   onElevationProfileClick,
   onLayerManagerToggle,
+  onFileManagerToggle,
   pixelStatActive = false,
   mapSelectorActive = false,
   paletteSelectorActive = false,
   layerManagerActive = false,
+  fileManagerActive = false,
 }) {
   const tools = [
     {
@@ -34,6 +37,12 @@ export default function VerticalToolbar({
       tooltip: "Capas",
       action: onLayerManagerToggle,
       active: layerManagerActive,
+    },
+    {
+      icon: <FolderOpenIcon />,
+      tooltip: "Archivos cargados",
+      action: onFileManagerToggle,
+      active: fileManagerActive,
     },
     {
       icon: <MapIcon />,
@@ -120,7 +129,7 @@ export default function VerticalToolbar({
             </IconButton>
           </Tooltip>
           {/* Divider opcional después del 4to elemento (después de paletas) */}
-          {index === 3 && (
+          {index === 4 && (
             <Box
               sx={{
                 height: "1px",

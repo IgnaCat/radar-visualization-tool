@@ -7,6 +7,7 @@ import {
   generateAreaStats,
   generatePixelStat,
   generateElevationProfile,
+  removeFiles,
 } from "./api/backend";
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
@@ -82,7 +83,7 @@ function mergeRadarFrames(results, toleranceSec = 240) {
     b.members
       .flat()
       .slice()
-      .sort((L, R) => (L.order ?? 0) - (R.order ?? 0))
+      .sort((L, R) => (L.order ?? 0) - (R.order ?? 0)),
   );
 }
 
@@ -183,6 +184,8 @@ export default function App() {
   const [initialColormaps, setInitialColormaps] = useState({});
   const [paletteSelectorOpen, setPaletteSelectorOpen] = useState(false);
   const [layerManagerOpen, setLayerManagerOpen] = useState(false);
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [hiddenLayers, setHiddenLayers] = useState(new Set());
 
   // Estado para split screen
   const [splitScreenActive, setSplitScreenActive] = useState(false);
@@ -238,6 +241,16 @@ export default function App() {
   }
   var currentOverlay = mergedOutputs[currentIndex] || null;
 
+  // Filtrar capas ocultas para el renderizado del mapa
+  const visibleOverlay = useMemo(() => {
+    if (!Array.isArray(currentOverlay) || hiddenLayers.size === 0)
+      return currentOverlay;
+    const filtered = currentOverlay.filter(
+      (l) => !hiddenLayers.has(`${l.field}::${l.source_file}`),
+    );
+    return filtered.length > 0 ? filtered : [];
+  }, [currentOverlay, hiddenLayers]);
+
   // Sincronizar archivo activo con las capas visibles del frame actual
   // Solo se setea activeToolFile cuando hay múltiples RADARES diferentes (no múltiples fields del mismo radar)
   useEffect(() => {
@@ -256,7 +269,7 @@ export default function App() {
     if (radarNames.length > 1) {
       // Múltiples radares: setear activeToolFile al primero (o mantener el actual si está en la lista)
       setActiveToolFile((prev) =>
-        prev && sources.includes(prev) ? prev : sources[0]
+        prev && sources.includes(prev) ? prev : sources[0],
       );
     } else {
       // Un solo radar (aunque tenga múltiples fields): NO setear activeToolFile
@@ -308,7 +321,7 @@ export default function App() {
           const response = await fetch(cogUrl);
           if (!response.ok) {
             console.error(
-              `Error descargando ${filename}: HTTP ${response.status}`
+              `Error descargando ${filename}: HTTP ${response.status}`,
             );
             continue;
           }
@@ -409,7 +422,9 @@ export default function App() {
       setFilesInfo((prev) => {
         // Merge con archivos anteriores, evitando duplicados por filepath
         const existingPaths = new Set(prev.map((f) => f.filepath));
-        const newFiles = filesInfo.filter((f) => !existingPaths.has(f.filepath));
+        const newFiles = filesInfo.filter(
+          (f) => !existingPaths.has(f.filepath),
+        );
         return [...prev, ...newFiles];
       });
       setVolumes((prev) => {
@@ -466,7 +481,7 @@ export default function App() {
         enabledLayerObjs.map((l) => [
           String(l.label || l.field).toUpperCase(),
           Number(l.opacity ?? 1),
-        ])
+        ]),
       );
 
       setOpacity(opacities);
@@ -527,6 +542,7 @@ export default function App() {
       setWarnings(processResp.data.warnings || []);
       setCurrentIndex(0);
       setComputeKey(nextKey);
+      setHiddenLayers(new Set()); // Limpiar capas ocultas al reprocesar
       // Guardar las paletas usadas como "iniciales" para futuras comparaciones
       setInitialColormaps({ ...selectedColormaps });
       // Animación se calcula dinámicamente más abajo
@@ -676,6 +692,232 @@ export default function App() {
     setLayerManagerOpen((prev) => !prev);
   };
 
+  /**
+   * Alterna la visibilidad de una capa en el mapa.
+   * La capa permanece en la lista de capas pero se oculta/muestra en el mapa.
+   */
+  const handleToggleLayerVisibility = useCallback(
+    (field, sourceFile) => {
+      const key = `${field}::${sourceFile}`;
+
+      setHiddenLayers((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+
+      // Actualizar savedLayers (enabled flag)
+      setSavedLayers((prev) =>
+        prev.map((layer) =>
+          layer.field === field || layer.label === field
+            ? { ...layer, enabled: !hiddenLayers.has(key) ? false : true }
+            : layer,
+        ),
+      );
+
+      // Actualizar fieldsUsed (solo campos visibles)
+      const allFields = mergedOutputs.flatMap((frame) =>
+        Array.isArray(frame) ? frame.map((l) => l.field) : [],
+      );
+      const uniqueFields = [...new Set(allFields)];
+
+      // Recalcular qué campos quedan visibles después del toggle
+      const updatedHidden = new Set(hiddenLayers);
+      if (updatedHidden.has(key)) {
+        updatedHidden.delete(key);
+      } else {
+        updatedHidden.add(key);
+      }
+      const visibleFields = uniqueFields.filter((f) => {
+        // Un campo es visible si al menos una capa con ese field no está oculta
+        return mergedOutputs.some(
+          (frame) =>
+            Array.isArray(frame) &&
+            frame.some(
+              (l) =>
+                l.field === f &&
+                !updatedHidden.has(`${l.field}::${l.source_file}`),
+            ),
+        );
+      });
+      setFieldsUsed(visibleFields.length > 0 ? visibleFields : uniqueFields);
+    },
+    [mergedOutputs, hiddenLayers],
+  );
+
+  /**
+   * Elimina un archivo subido del servidor y actualiza todo el estado.
+   * Borra el NetCDF, COGs y cache en backend. En frontend filtra el archivo
+   * de todos los estados derivados.
+   */
+  const handleRemoveFile = useCallback(
+    async (filepath) => {
+      try {
+        setLoading(true);
+
+        // 1. Llamar al backend para borrar archivo, COGs y cache
+        await removeFiles([filepath], sessionId);
+
+        // 2. Actualizar uploadedFiles
+        const newUploadedFiles = uploadedFiles.filter((f) => f !== filepath);
+        setUploadedFiles(newUploadedFiles);
+
+        // 3. Actualizar filesInfo
+        const newFilesInfo = filesInfo.filter((f) => f.filepath !== filepath);
+        setFilesInfo(newFilesInfo);
+
+        // 4. Recalcular volumes y availableRadars
+        const newVolumes = [
+          ...new Set(
+            newFilesInfo
+              .map((f) => {
+                const parts = f.filepath.split("_");
+                return parts.length >= 3 ? parts[2] : null;
+              })
+              .filter(Boolean),
+          ),
+        ];
+        setVolumes(newVolumes);
+
+        const newRadars = [
+          ...new Set(
+            newFilesInfo
+              .map((f) => {
+                const parts = f.filepath.split("_");
+                return parts.length >= 1 ? parts[0] : null;
+              })
+              .filter(Boolean),
+          ),
+        ];
+        setAvailableRadars(newRadars);
+
+        // 5. Filtrar capas del archivo eliminado de mergedOutputs
+        if (mergedOutputs.length > 0) {
+          const updatedOutputs = mergedOutputs
+            .map((frame) => {
+              if (!Array.isArray(frame)) return frame;
+              return frame.filter((layer) => {
+                // Comparar por nombre de archivo (el source_file puede tener ruta completa)
+                const layerFile = String(layer.source_file || "")
+                  .replace(/\\/g, "/")
+                  .split("/")
+                  .pop();
+                const removedFile = String(filepath)
+                  .replace(/\\/g, "/")
+                  .split("/")
+                  .pop();
+                return layerFile !== removedFile;
+              });
+            })
+            .filter((frame) => Array.isArray(frame) && frame.length > 0);
+
+          if (updatedOutputs.length === 0) {
+            setOverlayData({ outputs: [], animation: false, metadata: {} });
+            setCurrentIndex(0);
+          } else {
+            setCurrentIndex((prev) =>
+              prev >= updatedOutputs.length ? updatedOutputs.length - 1 : prev,
+            );
+            setOverlayData({
+              ...overlayData,
+              outputs: updatedOutputs,
+              results: null,
+            });
+          }
+
+          // Calcular campos que quedan en los outputs restantes
+          const remainingFields = new Set(
+            updatedOutputs.flatMap((frame) =>
+              Array.isArray(frame) ? frame.map((l) => l.field) : [],
+            ),
+          );
+
+          // Actualizar savedLayers: quitar campos que ya no existen en ningún output
+          setSavedLayers((prev) =>
+            prev.filter(
+              (layer) =>
+                remainingFields.has(layer.field) ||
+                remainingFields.has(layer.label),
+            ),
+          );
+
+          // Actualizar fieldsUsed: solo los campos que siguen presentes
+          setFieldsUsed((prev) => {
+            const filtered = prev.filter((f) => remainingFields.has(f));
+            return filtered.length > 0 ? filtered : ["DBZH"];
+          });
+
+          // Limpiar opacityByField de campos eliminados
+          setOpacityByField((prev) => {
+            const next = { ...prev };
+            for (const key of Object.keys(next)) {
+              if (
+                !remainingFields.has(key) &&
+                !remainingFields.has(key.toUpperCase())
+              ) {
+                delete next[key];
+              }
+            }
+            return next;
+          });
+        }
+
+        // 6. Si no quedan archivos, resetear a estado inicial
+        if (newUploadedFiles.length === 0) {
+          setOverlayData({ outputs: [], animation: false, metadata: {} });
+          setCurrentIndex(0);
+          setSavedLayers([]);
+          setFieldsUsed(["DBZH"]);
+          setFiltersUsed([]);
+          setComputeKey("");
+          setWarnings([]);
+          setHiddenLayers(new Set());
+          setOpacityByField({});
+        } else {
+          // Limpiar hiddenLayers de entries del archivo eliminado
+          setHiddenLayers((prev) => {
+            const next = new Set(prev);
+            for (const key of prev) {
+              if (
+                key.includes(filepath) ||
+                key.includes(
+                  String(filepath).split("/").pop().split("\\").pop(),
+                )
+              ) {
+                next.delete(key);
+              }
+            }
+            return next;
+          });
+        }
+
+        enqueueSnackbar(`Archivo eliminado correctamente`, {
+          variant: "success",
+        });
+      } catch (err) {
+        console.error("Error eliminando archivo:", err);
+        enqueueSnackbar(
+          err?.response?.data?.detail || "Error al eliminar archivo",
+          { variant: "error" },
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      uploadedFiles,
+      filesInfo,
+      mergedOutputs,
+      overlayData,
+      sessionId,
+      enqueueSnackbar,
+    ],
+  );
+
   const handleLayerReorder = (reorderedLayers) => {
     // Actualizar el orden de las capas en currentOverlay
     // Asignar nuevo 'order' basado en el índice
@@ -695,7 +937,7 @@ export default function App() {
     // Primero agregar los campos activos en el nuevo orden
     uniqueFields.forEach((field) => {
       const existingLayer = savedLayers.find(
-        (l) => l.field === field || l.label === field
+        (l) => l.field === field || l.label === field,
       );
       if (existingLayer) {
         reorderedSavedLayers.push(existingLayer);
@@ -732,10 +974,10 @@ export default function App() {
       // Reordenar las capas de este frame según el nuevo orden
       const reordered = [...frame].sort((a, b) => {
         const aIdx = updatedLayers.findIndex(
-          (l) => l.field === a.field && l.source_file === a.source_file
+          (l) => l.field === a.field && l.source_file === a.source_file,
         );
         const bIdx = updatedLayers.findIndex(
-          (l) => l.field === b.field && l.source_file === b.source_file
+          (l) => l.field === b.field && l.source_file === b.source_file,
         );
 
         // Si no se encuentra, mantener al final
@@ -846,17 +1088,16 @@ export default function App() {
       style={{ height: "100vh", width: "100%", position: "relative" }}
     >
       {/* Header común para ambas vistas */}
-      <HeaderCard
-        onUploadClick={handleFileUpload}
-        logoSrc="/assets/lrsr_logo.png"
-      />
+      <HeaderCard onUploadClick={handleFileUpload} />
 
       {/* Contenedor de split screen que maneja uno o dos mapas */}
       <SplitScreenContainer
         splitScreenActive={splitScreenActive}
         setSplitScreenActive={setSplitScreenActive}
         map1Props={{
-          currentOverlay,
+          currentOverlay: visibleOverlay,
+          allLayersOverlay: currentOverlay,
+          hiddenLayers,
           mergedOutputs,
           opacity,
           opacityByField,
@@ -911,6 +1152,10 @@ export default function App() {
           onPixelStatClick: handleMapClickPixelStat,
           onGenerateElevationProfile: handleGenerateElevationProfile,
           onLayerReorder: handleLayerReorder,
+          onToggleLayerVisibility: handleToggleLayerVisibility,
+          fileManagerOpen,
+          setFileManagerOpen,
+          onRemoveFile: handleRemoveFile,
           mapInstance,
           setMapInstance,
           onScreenshot: handleScreenshot,
@@ -955,6 +1200,7 @@ export default function App() {
         severity={alert.severity}
         onClose={() => setAlert({ ...alert, open: false })}
       />
+
       <Loader open={loading} />
     </div>
   );

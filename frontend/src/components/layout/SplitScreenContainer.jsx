@@ -53,7 +53,7 @@ export default function SplitScreenContainer({
 
   // Estados compartibles entre mapas (pero independientes inicialmente)
   const [selectedBaseMap2, setSelectedBaseMap2] = useState(
-    map1Props.selectedBaseMap
+    map1Props.selectedBaseMap,
   );
   const [selectedColormaps2, setSelectedColormaps2] = useState({});
   const [initialColormaps2, setInitialColormaps2] = useState({});
@@ -76,7 +76,7 @@ export default function SplitScreenContainer({
     locked,
     map1Props.currentIndex,
     currentIndex2,
-    setCurrentIndex2
+    setCurrentIndex2,
   );
 
   // Recalcular tamaño del mapa principal cuando se activa/desactiva split
@@ -150,7 +150,7 @@ export default function SplitScreenContainer({
         enabledLayerObjs.map((l) => [
           String(l.label || l.field).toUpperCase(),
           Number(l.opacity ?? 1),
-        ])
+        ]),
       );
       const opacities = enabledLayerObjs.map((l) => l.opacity);
 
@@ -173,7 +173,7 @@ export default function SplitScreenContainer({
       if (processResp.data) {
         // Merge frames similar al mapa 1
         const mergedOutputs = sharedProps.mergeRadarFrames(
-          processResp.data.results || []
+          processResp.data.results || [],
         );
         setOverlayData2(mergedOutputs);
         setWarnings2(processResp.data.warnings || []);
@@ -256,6 +256,8 @@ export default function SplitScreenContainer({
         <MapPanel
           panelId="main"
           overlayData={map1Props.currentOverlay}
+          allLayersOverlay={map1Props.allLayersOverlay}
+          hiddenLayers={map1Props.hiddenLayers}
           mergedOutputs={map1Props.mergedOutputs}
           opacity={map1Props.opacity}
           opacityByField={map1Props.opacityByField}
@@ -310,6 +312,10 @@ export default function SplitScreenContainer({
           onPixelStatClick={map1Props.onPixelStatClick}
           onGenerateElevationProfile={map1Props.onGenerateElevationProfile}
           onLayerReorder={map1Props.onLayerReorder}
+          onToggleLayerVisibility={map1Props.onToggleLayerVisibility}
+          fileManagerOpen={map1Props.fileManagerOpen}
+          setFileManagerOpen={map1Props.setFileManagerOpen}
+          onRemoveFile={map1Props.onRemoveFile}
           onMapReady={map1Props.setMapInstance}
           onScreenshot={() =>
             map1Props.onScreenshot(map1Props.mapInstance, "map-container-main")
@@ -418,7 +424,7 @@ export default function SplitScreenContainer({
               const updatedOverlay = [...(overlayData2[currentIndex2] || [])];
               layers.forEach((layer, idx) => {
                 const foundIdx = updatedOverlay.findIndex(
-                  (l) => l.field === layer.field
+                  (l) => l.field === layer.field,
                 );
                 if (foundIdx !== -1) {
                   updatedOverlay[foundIdx] = {

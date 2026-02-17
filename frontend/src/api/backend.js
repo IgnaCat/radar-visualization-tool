@@ -177,3 +177,17 @@ export async function clearCache(cacheType = "all") {
   const response = await api.post(`/admin/clear-cache?cache_type=${cacheType}`);
   return response.data;
 }
+
+/**
+ * Elimina archivos subidos específicos del servidor.
+ * Borra el NetCDF, COGs asociados y entradas de cache.
+ * @param {string[]} filepaths - Rutas de archivos a eliminar
+ * @param {string|null} sessionId - ID de sesión
+ * @returns {{ deleted: object, removed_files: string[] }}
+ */
+export async function removeFiles(filepaths, sessionId = null) {
+  return api.post("/cleanup/files", {
+    filepaths,
+    ...(sessionId && { session_id: sessionId }),
+  });
+}
