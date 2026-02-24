@@ -99,7 +99,7 @@ def generate_grid2d_on_demand(
     # Calcular puntos de grilla
     z_points, y_points, x_points = calculate_grid_points(
         grid_limits[0], grid_limits[1], grid_limits[2],
-        grid_resolution_z, grid_resolution_xy
+        grid_resolution_xy, grid_resolution_z
     )
     grid_shape = (z_points, y_points, x_points)
     

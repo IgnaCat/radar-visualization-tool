@@ -166,8 +166,8 @@ def calculate_grid_points(
         Tupla (z_points, y_points, x_points) con cantidad de puntos en cada eje
     """
     z_points = int(np.ceil(z_limits[1] / resolution_z)) + 1
-    y_points = int((y_limits[1] - y_limits[0]) / resolution_xy)
-    x_points = int((x_limits[1] - x_limits[0]) / resolution_xy)
+    y_points = int((y_limits[1] - y_limits[0]) / resolution_xy) + 1
+    x_points = int((x_limits[1] - x_limits[0]) / resolution_xy) + 1
     
     return z_points, y_points, x_points
 

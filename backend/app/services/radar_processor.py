@@ -1,10 +1,11 @@
 import os
 import pyart
-import uuid
 import pyproj
 import numpy as np
 from pathlib import Path
 import rasterio
+import rasterio.transform
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 from urllib.parse import quote
 from affine import Affine
 
@@ -326,66 +327,65 @@ def process_radar_to_cog(
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # WARPING: Warpear si es la primera vez (sin filtros visuales, se aplican después)
+    # WARPING: Reproyectar de AzEq a Web Mercator usando rasterio directamente.
+    # Se usa el Affine transform correcto (con offset de medio pixel) calculado
+    # al construir pkg_cached, evitando PyART write_grid_geotiff que tiene
+    # errores de GeoTransform (sin half-pixel offset + asume grilla cuadrada).
     if pkg_cached.get("arr_warped") is None:
-        # Crear grid PyART temporal con arr2d sin filtros visuales
         arr2d = pkg_cached["arr"]
+        src_transform = pkg_cached["transform"]
+        src_crs = pkg_cached["crs"]
         ny, nx = arr2d.shape
-        grid_temp = pyart.core.Grid(
-            time={'data': np.array([0])},
-            fields={field_to_use: {'data': arr2d[np.newaxis, :, :], '_FillValue': -9999.0}},
-            metadata={'instrument_name': 'RADAR'},
-            origin_latitude={'data': radar.latitude['data']},
-            origin_longitude={'data': radar.longitude['data']},
-            origin_altitude={'data': radar.altitude['data']},
-            x={'data': np.linspace(x_grid_limits[0], x_grid_limits[1], nx).astype(np.float32)},
-            y={'data': np.linspace(y_grid_limits[0], y_grid_limits[1], ny).astype(np.float32)},
-            z={'data': np.array([0.0], dtype=np.float32)}
-        )
-        
-        # Generar GeoTIFF numérico warped con PyART
-        temp_numeric_tif = Path(output_dir) / f"numeric_{uuid.uuid4().hex}.tif"
-        
-        pyart.io.write_grid_geotiff(
-            grid=grid_temp,
-            filename=str(temp_numeric_tif),
-            field=field_to_use,
-            level=0,
-            rgb=False,
-            warp_to_mercator=True
+
+        # CRS destino: Web Mercator
+        dst_crs = 'EPSG:3857'
+
+        # Bounds del raster fuente (edge-to-edge, calculados desde el Affine transform)
+        src_bounds = rasterio.transform.array_bounds(ny, nx, src_transform)
+
+        # Calcular transform y dimensiones en Web Mercator
+        dst_transform, dst_width, dst_height = calculate_default_transform(
+            src_crs, dst_crs, nx, ny,
+            left=src_bounds[0], bottom=src_bounds[1],
+            right=src_bounds[2], top=src_bounds[3]
         )
 
-        # Leer el GeoTIFF numérico warped
-        with rasterio.open(temp_numeric_tif) as src_numeric:
-            arr_warped = src_numeric.read(1, masked=True)
-            transform_warped = src_numeric.transform
-            crs_warped = src_numeric.crs.to_wkt()
-            
-            # Asegurar que arr_warped sea MaskedArray
-            if not np.ma.is_masked(arr_warped):
-                arr_warped = np.ma.array(arr_warped, mask=np.zeros_like(arr_warped, dtype=bool))
-            
-            # Enmascarar valores extremadamente bajos (ruido de interpolación en bordes)
-            arr_warped = np.ma.masked_less(arr_warped, vmin)
-            
-            pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
-            pkg_cached["transform_warped"] = transform_warped
-            pkg_cached["crs_warped"] = crs_warped
-            GRID2D_CACHE[cache_key] = pkg_cached
-                
-            # Registrar en índice de sesión si existe session_id
-            if session_id:
-                if session_id not in SESSION_CACHE_INDEX:
-                    SESSION_CACHE_INDEX[session_id] = set()
-                SESSION_CACHE_INDEX[session_id].add(cache_key)
-        
-        # Limpiar GeoTIFF numérico temporal
-        try:
-            temp_numeric_tif.unlink()
-        except OSError:
-            pass
+        # Preparar arrays: NaN para datos enmascarados
+        src_data = np.ma.filled(arr2d, fill_value=np.nan).astype(np.float32)
+        dst_data = np.full((dst_height, dst_width), np.nan, dtype=np.float32)
+
+        # Reproyectar de Azimuthal Equidistant a Web Mercator
+        reproject(
+            source=src_data,
+            destination=dst_data,
+            src_transform=src_transform,
+            src_crs=src_crs,
+            dst_transform=dst_transform,
+            dst_crs=dst_crs,
+            resampling=Resampling.nearest,
+            src_nodata=np.nan,
+            dst_nodata=np.nan
+        )
+
+        # Crear MaskedArray y enmascarar ruido de bordes
+        arr_warped = np.ma.masked_invalid(dst_data)
+        arr_warped = np.ma.masked_less(arr_warped, vmin)
+
+        transform_warped = dst_transform
+        crs_warped = dst_crs
+
+        pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
+        pkg_cached["transform_warped"] = transform_warped
+        pkg_cached["crs_warped"] = crs_warped
+        GRID2D_CACHE[cache_key] = pkg_cached
+
+        # Registrar en índice de sesión si existe session_id
+        if session_id:
+            if session_id not in SESSION_CACHE_INDEX:
+                SESSION_CACHE_INDEX[session_id] = set()
+            SESSION_CACHE_INDEX[session_id].add(cache_key)
     else:
-        # Sino usar el warp cachea
+        # Usar el warp cacheado
         arr_warped = pkg_cached["arr_warped"]
         transform_warped = pkg_cached["transform_warped"]
         crs_warped = pkg_cached["crs_warped"]
