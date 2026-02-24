@@ -8,10 +8,12 @@ import {
   Tooltip,
   Paper,
   Collapse,
+  Slider,
 } from "@mui/material";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import OpacityIcon from "@mui/icons-material/Opacity";
 import CloseIcon from "@mui/icons-material/Close";
 
 /**
@@ -27,6 +29,8 @@ export default function LayerManagerDialog({
   onReorder, // (newOrder) => void - callback para notificar nuevo orden
   onToggleLayerVisibility, // (field, source_file) => void - toggle visibilidad
   hiddenLayers = new Set(), // Set de "field::source_file" keys ocultas
+  opacityByLayer = {}, // { "FIELD::source_file": number } opacidades por capa
+  onLayerOpacityChange, // (field, source_file, opacity) => void
 }) {
   const [orderedLayers, setOrderedLayers] = useState([]);
   const lastUpdateRef = React.useRef(0);
@@ -114,6 +118,23 @@ export default function LayerManagerDialog({
     [onToggleLayerVisibility],
   );
 
+  /** Clave compuesta para identificar una capa única (field + archivo fuente) */
+  const getLayerKey = (layer) =>
+    `${String(layer.field || "").toUpperCase()}::${layer.source_file || ""}`;
+
+  /** Opacidad actual de una capa (default 1) */
+  const getLayerOpacity = (layer) => {
+    const key = getLayerKey(layer);
+    return typeof opacityByLayer[key] === "number" ? opacityByLayer[key] : 1;
+  };
+
+  const handleOpacityChange = useCallback(
+    (layer, value) => {
+      onLayerOpacityChange?.(layer.field, layer.source_file, value);
+    },
+    [onLayerOpacityChange],
+  );
+
   return (
     <Collapse
       in={open}
@@ -131,7 +152,7 @@ export default function LayerManagerDialog({
           top: 70,
           left: 68,
           zIndex: 999,
-          width: 320,
+          width: 370,
           maxHeight: "calc(100vh - 100px)",
           overflowY: "auto",
           backgroundColor: "rgba(255, 255, 255, 0.98)",
@@ -238,6 +259,45 @@ export default function LayerManagerDialog({
 
                       <Typography variant="caption" color="text.secondary">
                         #{idx + 1}
+                      </Typography>
+                    </Box>
+
+                    {/* Slider de opacidad por capa */}
+                    <Box
+                      display="flex"
+                      alignItems="center"
+                      width="100%"
+                      gap={1}
+                      sx={{ pl: 1.5, pr: 1, mt: 0.5 }}
+                    >
+                      <Tooltip title="Opacidad">
+                        <OpacityIcon
+                          fontSize="small"
+                          sx={{ color: "text.secondary", fontSize: 16 }}
+                        />
+                      </Tooltip>
+                      <Slider
+                        size="small"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={getLayerOpacity(layer)}
+                        onChange={(_e, val) => handleOpacityChange(layer, val)}
+                        valueLabelDisplay="auto"
+                        valueLabelFormat={(v) => `${Math.round(v * 100)}%`}
+                        sx={{
+                          flex: 1,
+                          "& .MuiSlider-thumb": { width: 14, height: 14 },
+                          "& .MuiSlider-track": { height: 3 },
+                          "& .MuiSlider-rail": { height: 3 },
+                        }}
+                      />
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{ minWidth: 32, textAlign: "right" }}
+                      >
+                        {Math.round(getLayerOpacity(layer) * 100)}%
                       </Typography>
 
                       <Tooltip

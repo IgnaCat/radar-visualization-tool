@@ -95,6 +95,8 @@ export default function MapPanel({
   onGenerateElevationProfile,
   onLayerReorder,
   onToggleLayerVisibility, // (field, source_file) => void - toggle visibilidad de capa
+  opacityByLayer, // { "FIELD::source_file": number } opacidades por capa individual
+  onLayerOpacityChange, // (field, source_file, opacity) => void
   onMapReady,
   onScreenshot,
   onPrint,
@@ -278,6 +280,7 @@ export default function MapPanel({
         overlayData={overlayData}
         opacities={opacity}
         opacityByField={opacityByField}
+        opacityByLayer={opacityByLayer}
         pickPointMode={pickPointMode}
         radarSite={radarSite}
         pickedPoint={pickedPoint}
@@ -370,6 +373,8 @@ export default function MapPanel({
         onReorder={onLayerReorder}
         onToggleLayerVisibility={onToggleLayerVisibility}
         hiddenLayers={hiddenLayers}
+        opacityByLayer={opacityByLayer}
+        onLayerOpacityChange={onLayerOpacityChange}
       />
 
       <FileManagerDialog

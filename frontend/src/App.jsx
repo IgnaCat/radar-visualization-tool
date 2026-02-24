@@ -117,8 +117,10 @@ export default function App() {
     animation: false,
     metadata: {},
   });
-  const [opacity, setOpacity] = useState([0.95]);
+  const [opacity, setOpacity] = useState([0.95]); // LEGACY: array posicional de opacidades por índice de layer
   const [opacityByField, setOpacityByField] = useState({});
+  // Opacidad por capa individual (key: "FIELD::source_file"). Prioridad máxima en MapView.
+  const [opacityByLayer, setOpacityByLayer] = useState({});
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
@@ -474,6 +476,7 @@ export default function App() {
       const selectedRadars = data.selectedRadars;
       const enabledLayers = layers.filter((l) => l.enabled).map((l) => l.label);
       const enabledLayerObjs = layers.filter((l) => l.enabled);
+      // LEGACY: array posicional, usado como fallback en MapView cuando opacityByField no tiene el field
       const opacities = enabledLayerObjs.map((l) => l.opacity);
 
       // Build field-based opacity map so all radars for the same field share opacity
@@ -486,6 +489,7 @@ export default function App() {
 
       setOpacity(opacities);
       setOpacityByField(opacityMap);
+      setOpacityByLayer({}); // Reset per-layer overrides al reprocesar
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
       setFiltersUsed(filters);
@@ -750,6 +754,15 @@ export default function App() {
   );
 
   /**
+   * Actualiza la opacidad de una capa individual identificada por field + sourceFile.
+   * Usa clave compuesta "FIELD::source_file" para soportar múltiples radares con el mismo field.
+   */
+  const handleLayerOpacityChange = useCallback((field, sourceFile, value) => {
+    const key = `${String(field || "").toUpperCase()}::${sourceFile || ""}`;
+    setOpacityByLayer((prev) => ({ ...prev, [key]: value }));
+  }, []);
+
+  /**
    * Elimina un archivo subido del servidor y actualiza todo el estado.
    * Borra el NetCDF, COGs y cache en backend. En frontend filtra el archivo
    * de todos los estados derivados.
@@ -864,6 +877,21 @@ export default function App() {
             }
             return next;
           });
+
+          // Limpiar opacityByLayer de capas del archivo eliminado
+          setOpacityByLayer((prev) => {
+            const next = { ...prev };
+            const removedFile = String(filepath)
+              .replace(/\\/g, "/")
+              .split("/")
+              .pop();
+            for (const key of Object.keys(next)) {
+              if (key.includes(filepath) || key.includes(removedFile)) {
+                delete next[key];
+              }
+            }
+            return next;
+          });
         }
 
         // 6. Si no quedan archivos, resetear a estado inicial
@@ -877,6 +905,7 @@ export default function App() {
           setWarnings([]);
           setHiddenLayers(new Set());
           setOpacityByField({});
+          setOpacityByLayer({});
         } else {
           // Limpiar hiddenLayers de entries del archivo eliminado
           setHiddenLayers((prev) => {
@@ -1101,6 +1130,7 @@ export default function App() {
           mergedOutputs,
           opacity,
           opacityByField,
+          opacityByLayer,
           currentIndex,
           setCurrentIndex,
           animation,
@@ -1153,6 +1183,7 @@ export default function App() {
           onGenerateElevationProfile: handleGenerateElevationProfile,
           onLayerReorder: handleLayerReorder,
           onToggleLayerVisibility: handleToggleLayerVisibility,
+          onLayerOpacityChange: handleLayerOpacityChange,
           fileManagerOpen,
           setFileManagerOpen,
           onRemoveFile: handleRemoveFile,

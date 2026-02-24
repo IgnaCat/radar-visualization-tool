@@ -149,6 +149,7 @@ export default function MapView({
   overlayData,
   opacities = [0.95],
   opacityByField = {},
+  opacityByLayer = {},
   pickPointMode = false,
   radarSite = null,
   pickedPoint = null,
@@ -220,10 +221,14 @@ export default function MapView({
       {Array.isArray(overlayData) &&
         overlayData.map((L, idx) => {
           const keyField = String(L.field || L.label || "").toUpperCase();
+          // Resolución de opacidad: opacityByLayer (per-layer) > opacityByField (per-field) > opacities[idx] (legacy)
+          const layerKey = `${keyField}::${L.source_file || ""}`;
           const fieldOpacity =
-            typeof opacityByField[keyField] === "number"
-              ? opacityByField[keyField]
-              : opacities[idx] ?? 1;
+            typeof opacityByLayer[layerKey] === "number"
+              ? opacityByLayer[layerKey]
+              : typeof opacityByField[keyField] === "number"
+                ? opacityByField[keyField]
+                : (opacities[idx] ?? 1);
 
           // Las capas del radar seleccionado se muestran arriba (mayor zIndex)
           // El orden en el array es bottom-to-top, así que invertimos idx para zIndex

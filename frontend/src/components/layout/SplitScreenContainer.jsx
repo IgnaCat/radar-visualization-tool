@@ -26,6 +26,7 @@ export default function SplitScreenContainer({
   const [overlayData2, setOverlayData2] = useState(null);
   const [opacity2, setOpacity2] = useState([0.95]);
   const [opacityByField2, setOpacityByField2] = useState({});
+  const [opacityByLayer2, setOpacityByLayer2] = useState({});
   const [currentIndex2, setCurrentIndex2] = useState(0);
   const [pixelStatMode2, setPixelStatMode2] = useState(false);
   const [pixelStatMarker2, setPixelStatMarker2] = useState(null);
@@ -313,6 +314,8 @@ export default function SplitScreenContainer({
           onGenerateElevationProfile={map1Props.onGenerateElevationProfile}
           onLayerReorder={map1Props.onLayerReorder}
           onToggleLayerVisibility={map1Props.onToggleLayerVisibility}
+          opacityByLayer={map1Props.opacityByLayer}
+          onLayerOpacityChange={map1Props.onLayerOpacityChange}
           fileManagerOpen={map1Props.fileManagerOpen}
           setFileManagerOpen={map1Props.setFileManagerOpen}
           onRemoveFile={map1Props.onRemoveFile}
@@ -369,6 +372,7 @@ export default function SplitScreenContainer({
             mergedOutputs={overlayData2}
             opacity={opacity2}
             opacityByField={opacityByField2}
+            opacityByLayer={opacityByLayer2}
             currentIndex={currentIndex2}
             setCurrentIndex={setCurrentIndex2}
             animation={Array.isArray(overlayData2) && overlayData2.length > 1}
@@ -436,6 +440,10 @@ export default function SplitScreenContainer({
               const newData = [...overlayData2];
               newData[currentIndex2] = updatedOverlay;
               setOverlayData2(newData);
+            }}
+            onLayerOpacityChange={(field, sourceFile, value) => {
+              const key = `${String(field || "").toUpperCase()}::${sourceFile || ""}`;
+              setOpacityByLayer2((prev) => ({ ...prev, [key]: value }));
             }}
             onMapReady={setMap2Instance}
             onScreenshot={() =>
