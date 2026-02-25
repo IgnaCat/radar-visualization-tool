@@ -19,10 +19,18 @@ logging.basicConfig(
     stream=sys.stdout,       # stdout is captured by Docker logs
     force=True,              # override any prior basicConfig
 )
+
+# Filter to exclude /health endpoint from access logs
+class HealthCheckFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        return "/health" not in record.getMessage()
+
 # Reduce noise from chatty libraries
 logging.getLogger("rasterio").setLevel(logging.WARNING)
 logging.getLogger("blib2to3").setLevel(logging.WARNING)
-logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+uvicorn_logger = logging.getLogger("uvicorn.access")
+uvicorn_logger.setLevel(logging.INFO)
+uvicorn_logger.addFilter(HealthCheckFilter())
 
 logger = logging.getLogger(__name__)
 
