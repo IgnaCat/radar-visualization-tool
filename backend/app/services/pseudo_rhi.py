@@ -4,6 +4,7 @@ import copy
 import numpy as np
 import rasterio
 from matplotlib import pyplot as plt
+from matplotlib.colors import Normalize
 from fastapi import HTTPException
 from pathlib import Path
 from typing import List, Optional
@@ -15,13 +16,21 @@ from ..core.constants import VARIABLE_UNITS
 from ..core.config import settings
 
 from ..models import RangeFilter
-from .radar_processing import beam_height_max_km, calculate_grid_points
+from .radar_processing import (
+    beam_height_max_km,
+    calculate_grid_points,
+    calculate_grid_resolution,
+    calculate_z_limits,
+    get_or_build_grid3d_with_operator,
+    get_or_build_W_operator,
+    apply_operator,
+    separate_filters,
+)
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
     safe_range_max_m, get_radar_site, md5_file, limit_line_to_range,
     normalize_proj_dict, qc_signature,
 )
-from .radar_processing import get_or_build_W_operator, apply_operator
 
 def calcule_radial_angle(radar_lat, radar_lon, punto_lat, punto_lon):
     """
@@ -202,10 +211,10 @@ def variable_radar_cross_section(
     # Texto con el ángulo radial
     ax2.text(0.98, 0.95, f'Ángulo Radial: {radial_angle:.2f}°',
              horizontalalignment='right', verticalalignment='top',
-             transform=ax2.transAxes, fontsize=12, bbox=dict(facecolor='white', alpha=0.7))
+             transform=ax2.transAxes, fontsize=16, bbox=dict(facecolor='white', alpha=0.7))
 
-    plt.xlabel('Distancia (km)', fontsize=14)
-    plt.ylabel(f'Altura (km)', fontsize=14)
+    plt.xlabel('Distancia (km)', fontsize=18)
+    plt.ylabel(f'Altura (km)', fontsize=18)
     plt.grid()
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
@@ -384,231 +393,238 @@ def _generate_segment_transect_png(
     session_id: Optional[str] = None,
 ):
     """
-    Genera transecto vertical entre dos puntos usando GridMapDisplay.plot_cross_section.
-    Construye grilla 3D directamente usando operador W.
+    Genera transecto vertical entre dos puntos arbitrarios (no necesariamente radiales).
+    
+    1. Construye grilla 3D usando get_or_build_grid3d_with_operator (igual que radar_processor.py).
+    2. Samplea la grilla 3D a lo largo de la línea entre los dos puntos con RegularGridInterpolator.
+    3. Genera un gráfico similar a variable_radar_cross_section con perfil de terreno.
     """
     from pyproj import Geod
     from ..utils.helpers import extract_metadata_from_filename
-    from ..core.constants import AFFECTS_INTERP_FIELDS
     
-    site_lon, site_lat, _ = get_radar_site(radar)
     _geod = Geod(ellps="WGS84")
+    site_lon, site_lat, site_alt = get_radar_site(radar)
     
-    # Extraer metadata del archivo (radar, estrategia, volumen)
+    # ── Extraer metadata del filename ──
     try:
         radar_name, estrategia, volume, _ = extract_metadata_from_filename(Path(filepath).name)
         if volume is None or radar_name is None or estrategia is None:
             raise ValueError("No se pudo extraer metadata completa del filename")
     except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No se pudo extraer metadata del archivo: {e}"
-        )
+        raise HTTPException(status_code=400, detail=f"No se pudo extraer metadata del archivo: {e}")
     
-    # Calcular parámetros de grilla
+    # ── Parámetros de grilla (idéntico a radar_processor.py) ──
     range_max_m = safe_range_max_m(radar)
     
-    elev_deg = 0.0
-    if radar.nsweeps > 0:
-        try:
-            elev_deg = float(radar.fixed_angle['data'][0])
-        except Exception:
-            elev_deg = 0.0
+    _, z_top_m, elev_deg = calculate_z_limits(
+        range_max_m, elevation=0, cappi_height=4000,
+        radar_fixed_angles=radar.fixed_angle['data']
+    )
+    toa = 12000
     
-    hmax_km = beam_height_max_km(range_max_m, elev_deg)
-    z_top_m = int((hmax_km + 3) * 1000)
+    grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
     
-    grid_resolution_xy = 300 if volume == '03' else 1200
-    grid_resolution_z = 300
-    
-    # Calcular límites y shape de grilla
-    z_grid_limits = (0, z_top_m)
+    z_grid_limits = (0.0, toa)
     y_grid_limits = (-range_max_m, range_max_m)
     x_grid_limits = (-range_max_m, range_max_m)
     grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
     
     z_points, y_points, x_points = calculate_grid_points(
         z_grid_limits, y_grid_limits, x_grid_limits,
-        grid_resolution_z, grid_resolution_xy
+        grid_resolution_xy, grid_resolution_z
     )
     grid_shape = (z_points, y_points, x_points)
     
-    # Usar parámetros ROI por volumen (consistente con grillas 3D)
-    # None = lookup automático según volumen en build_W_operator
-    h_factor = None
-    nb = None
-    bsp = None
-    min_radius = None
-    max_neighbors = 40
+    # ── Separar filtros QC vs visuales ──
+    qc_filters, _ = separate_filters(filters, field_name)
     
-    # Construir operador W (compartido, sin session_id)
-    W = get_or_build_W_operator(
+    # ── Construir grilla 3D (con cache de operador W) ──
+    grid = get_or_build_grid3d_with_operator(
         radar_to_use=radar,
+        file_hash=file_hash,
         radar=radar_name,
         estrategia=estrategia,
-        volumen=volume,
-        grid_shape=grid_shape,
+        volume=volume,
+        toa=toa,
         grid_limits=grid_limits,
-        h_factor=h_factor,
-        nb=nb,
-        bsp=bsp,
-        min_radius=min_radius,
+        grid_shape=grid_shape,
+        grid_resolution_xy=grid_resolution_xy,
+        grid_resolution_z=grid_resolution_z,
         weight_func='Barnes2',
-        max_neighbors=max_neighbors,
+        qc_filters=qc_filters,
         session_id=session_id,
     )
     
-    # Aplicar operador W a todos los campos del radar
-    all_fields = list(radar.fields.keys())
-    fields_dict = {}
-    
-    for fname in all_fields:
-        field_data = radar.fields[fname]['data']
-        
-        # Aplicar operador W
-        grid3d_field = apply_operator(W, field_data, grid_shape, handle_mask=True)
-        
-        # Guardar en formato PyART
-        field_dict = {
-            'data': grid3d_field[np.newaxis, :, :, :],
-            'long_name': radar.fields[fname].get('long_name', fname),
-            'units': radar.fields[fname].get('units', ''),
-            'standard_name': radar.fields[fname].get('standard_name', fname),
-            '_FillValue': -9999.0,
-        }
-        fields_dict[fname] = field_dict
-    
-    # Verificar que el campo solicitado existe
-    if field_name not in fields_dict:
-        available = list(fields_dict.keys())
+    # Verificar que el campo solicitado existe en la grilla
+    if field_name not in grid.fields:
+        available = list(grid.fields.keys())
         raise HTTPException(
             status_code=400,
-            detail=f"Campo '{field_name}' no encontrado. Disponibles: {available}"
+            detail=f"Campo '{field_name}' no encontrado en grilla. Disponibles: {available}"
         )
     
-    # Generar coordenadas de la grilla
-    x_coords = np.linspace(x_grid_limits[0], x_grid_limits[1], grid_shape[2]).astype(np.float32)
-    y_coords = np.linspace(y_grid_limits[0], y_grid_limits[1], grid_shape[1]).astype(np.float32)
-    z_coords = np.linspace(z_grid_limits[0], z_grid_limits[1], grid_shape[0]).astype(np.float32)
+    # ── Coordenadas de la grilla ──
+    x_coords = grid.x['data'].astype(np.float64)  # metros, centrado en radar
+    y_coords = grid.y['data'].astype(np.float64)
+    z_coords = grid.z['data'].astype(np.float64)
     
-    # Crear Grid PyART
-    grid_origin = (
-        float(radar.latitude['data'][0]),
-        float(radar.longitude['data'][0]),
-    )
+    # Datos 3D del campo: shape (1, nz, ny, nx) → (nz, ny, nx)
+    field_data_3d = grid.fields[field_name]['data'][0, :, :, :]
+    # Convertir masked array a float con NaN
+    if hasattr(field_data_3d, 'filled'):
+        field_data_3d = field_data_3d.filled(np.nan).astype(np.float64)
+    else:
+        field_data_3d = np.asarray(field_data_3d, dtype=np.float64)
     
-    grid = pyart.core.Grid(
-        time={
-            'data': np.array([0]),
-            'units': 'seconds since 2000-01-01T00:00:00Z',
-            'calendar': 'gregorian',
-            'standard_name': 'time'
-        },
-        fields=fields_dict,
-        metadata={'instrument_name': 'RADAR'},
-        origin_latitude={'data': radar.latitude['data']},
-        origin_longitude={'data': radar.longitude['data']},
-        origin_altitude={'data': radar.altitude['data']},
-        x={'data': x_coords},
-        y={'data': y_coords},
-        z={'data': z_coords},
-    )
-    
-    grid.projection = {
-        'proj': 'pyart_aeqd',
-        'lat_0': grid_origin[0],
-        'lon_0': grid_origin[1],
-        '_include_lon_0_lat_0': True,
-    }
-    
-    # Limitar línea a max_length_km
+    # ── Limitar línea a max_length_km ──
     end_lon_eff, end_lat_eff, length_km = limit_line_to_range(
         start_lon, start_lat, end_lon, end_lat, max_length_km
     )
     
-    # Calcular distancia acumulada para eje X
-    _, _, dist_total_m = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
-    dkm = dist_total_m / 1000.0
+    # ── Samplear puntos a lo largo de la línea (en lat/lon) ──
+    step_m = 150.0 #m
+    n_sample = max(2, int((length_km * 1000.0) // step_m) + 1)
     
-    # Usar GridMapDisplay.plot_cross_section
+    az12, _, _ = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
+    sample_lons = np.empty(n_sample, dtype=np.float64)
+    sample_lats = np.empty(n_sample, dtype=np.float64)
+    sample_dists_km = np.empty(n_sample, dtype=np.float64)
+    
+    for i in range(n_sample):
+        d_m = i * step_m
+        lon_i, lat_i, _ = _geod.fwd(start_lon, start_lat, az12, d_m)
+        sample_lons[i], sample_lats[i] = lon_i, lat_i
+        sample_dists_km[i] = d_m / 1000.0
+    
+    # ── Convertir lat/lon a coordenadas de grilla (x, y en metros relativo al radar) ──
+    # La grilla usa proyección AEQD centrada en el radar
+    # Aproximación precisa: usar pyproj para convertir lat/lon → x,y del radar
+    from pyproj import Transformer, CRS
+    
+    aeqd_crs = CRS.from_dict({
+        'proj': 'aeqd',
+        'lat_0': site_lat,
+        'lon_0': site_lon,
+        'datum': 'WGS84',
+        'units': 'm',
+    })
+    wgs84_crs = CRS.from_epsg(4326)
+    transformer = Transformer.from_crs(wgs84_crs, aeqd_crs, always_xy=True)
+    
+    sample_x, sample_y = transformer.transform(sample_lons, sample_lats)
+    
+    z_km = z_coords / 1000.0  # metros → km
+    
+    # ── Muestreo directo de la grilla 3D en todos los niveles Z ──
+    interpolator = RegularGridInterpolator(
+        (z_coords, y_coords, x_coords),
+        field_data_3d,
+        method='nearest',
+        bounds_error=False,
+        fill_value=np.nan,
+    )
+    
+    # Para cada punto (x_i, y_i) a lo largo de la línea, samplear TODOS los
+    # niveles Z de la grilla.  Resultado: imagen 2D (n_z, n_sample).
+    n_z = len(z_coords)
+    zz = np.repeat(z_coords, n_sample)
+    yy = np.tile(sample_y, n_z)
+    xx = np.tile(sample_x, n_z)
+    pts = np.column_stack([zz, yy, xx])
+    
+    image = interpolator(pts).reshape(n_z, n_sample)
+    
+    z_fine_km = z_km  # eje vertical = niveles Z reales de la grilla
+    
+    # Límite vertical para el gráfico
+    y_max_val = max_height_km if max_height_km else float(z_km[-1])
+    y_max_val = max(0.5, min(y_max_val, 30.0))
+    
+    # ── Obtener unidades de la variable ──
+    units = VARIABLE_UNITS.get(field_name, '')
+    
+    # ── Samplear perfil de terreno (DEM) ──
+    tif_path = Path(settings.DATA_DIR) / "mosaico_argentina_2.tif"
+    offset_dem = 439.0423493233697
+    terrain_dists_km = None
+    terrain_elev_km = None
+    
+    try:
+        with rasterio.open(tif_path) as src:
+            with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
+                coords = list(zip(sample_lons, sample_lats))
+                elev_raw = np.fromiter(
+                    (v[0] for v in vrt.sample(coords)),
+                    dtype=np.float32, count=n_sample,
+                )
+                nodata = vrt.nodata
+                if nodata is not None:
+                    elev_raw[elev_raw == nodata] = np.nan
+                
+                terrain_dists_km = sample_dists_km.copy()
+                terrain_elev_km = (elev_raw - offset_dem) / 1000.0
+    except Exception as e:
+        print(f"Warning: No se pudo leer perfil de terreno: {e}")
+    
+    # ── Elevación del punto final (para marcador) ──
+    end_elev_km = None
+    try:
+        with rasterio.open(tif_path) as src:
+            with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
+                val = next(vrt.sample([(end_lon_eff, end_lat_eff)]))[0]
+                if vrt.nodata is not None and val == vrt.nodata:
+                    val = np.nan
+                if np.isfinite(val):
+                    end_elev_km = (float(val) - offset_dem) / 1000.0
+    except Exception:
+        pass
+    
+    # ── Graficar con forma de haz ──
     fig = plt.figure(figsize=[15, 5.5])
     ax = plt.subplot(1, 1, 1)
     
-    display = pyart.graph.GridMapDisplay(grid)
+    # Meshgrid sobre grilla fina
+    D, Z = np.meshgrid(sample_dists_km, z_fine_km)
     
-    # plot_cross_section espera (start_lat, start_lon) y (end_lat, end_lon)
-    try:
-        display.plot_cross_section(
-            field_name,
-            (start_lat, start_lon),
-            (end_lat_eff, end_lon_eff),
-            ax=ax,
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
+    norm = Normalize(vmin=vmin, vmax=vmax)
+    im = ax.pcolormesh(D, Z, image, cmap=cmap, norm=norm, shading='auto')
+    
+    # Colorbar
+    cbar = plt.colorbar(im, ax=ax, pad=0.02)
+    cbar.set_label(f'{field_name} ({units})', fontsize=16)
+    
+    # Perfil de terreno
+    if terrain_dists_km is not None and terrain_elev_km is not None:
+        ax.plot(terrain_dists_km, terrain_elev_km, color='black', linewidth=2)
+        ax.fill_between(
+            terrain_dists_km, -1, terrain_elev_km,
+            color='saddlebrown', alpha=0.6,
         )
-    except Exception as e:
-        # Si falla plot_cross_section, mostrar error
-        print(f"Warning: plot_cross_section falló ({e}), usando fallback")
-        import traceback
-        traceback.print_exc()
-        ax.text(0.5, 0.5, f"Error: {str(e)}", ha="center", va="center", fontsize=12)
-
-    # Ajustar límites verticales basados en niveles z reales (m -> km)
-    try:
-        zvals = grid.z['data']
-        zmax_km = float(np.nanmax(zvals)) / 1000.0
-        y_max_km = max_height_km if max_height_km else zmax_km
-        y_max_km = max(0.5, min(y_max_km, max(zmax_km, 30.0)))
-        ax.set_ylim(0.0, y_max_km)
-        ax.set_aspect('auto')
-    except Exception as e:
-        print(f"WARNING: No se pudo ajustar límites verticales: {e}")
     
-    # Agregar perfil de terreno
-    tif_path = Path(settings.DATA_DIR) / "mosaico_argentina_2.tif"
-    try:
-        # Samplear terreno a lo largo de la línea
-        step_m = 500.0  # puntos cada 500m
-        n_pts = max(2, int((length_km * 1000.0) // step_m) + 1)
-        lons = np.empty(n_pts, dtype=np.float64)
-        lats = np.empty(n_pts, dtype=np.float64)
-        
-        az12, _, _ = _geod.inv(start_lon, start_lat, end_lon_eff, end_lat_eff)
-        for i in range(n_pts):
-            d = i * step_m
-            lon_i, lat_i, _ = _geod.fwd(start_lon, start_lat, az12, d)
-            lons[i], lats[i] = lon_i, lat_i
-        
-        with rasterio.open(tif_path) as src:
-            with WarpedVRT(src, resampling=Resampling.nearest, add_alpha=False) as vrt:
-                coords = list(zip(lons, lats))
-                elev = np.fromiter((v[0] for v in vrt.sample(coords)), dtype=np.float32, count=len(coords))
-                nodata = vrt.nodata
-                if nodata is not None:
-                    elev[elev == nodata] = np.nan
-                
-                # Calcular distancias acumuladas
-                dkm_terrain = np.zeros(n_pts, dtype=np.float64)
-                for i in range(1, n_pts):
-                    _, _, dd = _geod.inv(lons[i-1], lats[i-1], lons[i], lats[i])
-                    dkm_terrain[i] = dkm_terrain[i-1] + dd / 1000.0
-                
-                offset = 439.0423493233697
-                ground_km = (elev - offset) / 1000.0
-                ax.plot(dkm_terrain, ground_km, color="black", linewidth=2, label="Terreno")
-    except Exception as e:
-        print(f"Warning: No se pudo graficar terreno: {e}")
+    # Marcador del punto final
+    dist_end_km = length_km
+    if end_elev_km is not None:
+        ax.plot(dist_end_km, end_elev_km, 'r*', markersize=15, label='Punto final')
     
-    # Configurar ejes y límites
-    ax.set_xlabel("Distancia (km)", fontsize=14)
-    ax.set_ylabel("Altura (km)", fontsize=14)
+    # Texto informativo con azimut y distancia
+    azimuth_deg = az12 % 360
+    info_text = f'Azimut: {azimuth_deg:.1f}°  |  Dist: {length_km:.1f} km'
+    ax.text(
+        0.98, 0.95, info_text,
+        horizontalalignment='right', verticalalignment='top',
+        transform=ax.transAxes, fontsize=16,
+        bbox=dict(facecolor='white', alpha=0.7),
+    )
     
-    if max_height_km:
-        ax.set_ylim(0, max_height_km)
+    # Límites
+    x_max = length_km
+    ax.set_xlim(0, x_max)
+    ax.set_ylim(-0.5, y_max_val)
     
+    ax.set_xlabel('Distancia (km)', fontsize=18)
+    ax.set_ylabel('Altura (km)', fontsize=18)
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.savefig(output_path, dpi=150, bbox_inches='tight')
     plt.close()
