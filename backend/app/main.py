@@ -1,4 +1,6 @@
 import os
+import sys
+import logging
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +10,21 @@ from fastapi.responses import HTMLResponse
 
 from .core.config import settings
 from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin
+
+# Logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-8s  [%(name)s]  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    stream=sys.stdout,       # stdout is captured by Docker logs
+    force=True,              # override any prior basicConfig
+)
+# Reduce noise from chatty libraries
+logging.getLogger("rasterio").setLevel(logging.WARNING)
+logging.getLogger("blib2to3").setLevel(logging.WARNING)
+logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.APP_NAME)
 

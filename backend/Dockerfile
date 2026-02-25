@@ -26,7 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Set GDAL environment variables
 ENV GDAL_CONFIG=/usr/bin/gdal-config \
     CPLUS_INCLUDE_PATH=/usr/include/gdal \
-    C_INCLUDE_PATH=/usr/include/gdal
+    C_INCLUDE_PATH=/usr/include/gdal \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
 
 # Set working directory
 WORKDIR /app
@@ -65,4 +67,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Run uvicorn
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --log-level info: show request logs and our custom logging
+# --timeout-keep-alive 120: prevent premature disconnection during long W operator builds
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info", "--timeout-keep-alive", "120"]

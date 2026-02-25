@@ -66,10 +66,8 @@ def create_cog_from_warped_array(
         'crs': crs,
         'transform': transform,
         'compress': 'DEFLATE',
-        'tiled': True,
-        'blockxsize': 512,
-        'blockysize': 512,
-        'photometric': 'RGB',
+        # COG driver options (NOT GTiff — TILED/BLOCKXSIZE/BLOCKYSIZE/PHOTOMETRIC are invalid here)
+        'BLOCKSIZE': 512,
         'OVERVIEW_RESAMPLING': 'NEAREST',
         'RESAMPLING': 'NEAREST',
         'NUM_THREADS': 'ALL_CPUS',
@@ -127,14 +125,16 @@ def convert_to_cog(src_path, cog_path):
             profile = src.profile.copy()
             profile.update(
                 driver='COG',
-                tiled=True,
-                blockxsize=512,
-                blockysize=512,
                 compress='DEFLATE',
+                # COG driver options (TILED/BLOCKXSIZE/BLOCKYSIZE are GTiff-only)
+                BLOCKSIZE=512,
                 BIGTIFF='IF_NEEDED',
                 NUM_THREADS='ALL_CPUS',
                 COPY_SRC_OVERVIEWS='YES',
             )
+            # Remove GTiff-specific keys that leaked from src.profile
+            for gtiff_key in ('tiled', 'blockxsize', 'blockysize', 'photometric', 'interleave'):
+                profile.pop(gtiff_key, None)
             
             # Escribir archivo intermedio tiled
             temp_tiled = Path(cog_path.parent) / f"temp_{cog_path.name}"

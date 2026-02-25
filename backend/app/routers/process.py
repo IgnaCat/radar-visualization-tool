@@ -1,7 +1,11 @@
+import logging
 from fastapi import APIRouter, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 
 from ..models import ProcessRequest, ProcessResponse
 from ..services.orchestrators import ProcessingOrchestrator
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/process", tags=["process"])
 
@@ -10,9 +14,16 @@ router = APIRouter(prefix="/process", tags=["process"])
 async def process_file(payload: ProcessRequest):
     """
     Endpoint para procesar archivos de radar previamente subidos.
+
+    IMPORTANT: The heavy computation is offloaded to a thread via
+    run_in_threadpool so that the asyncio event-loop is never blocked.
+    Without this, a single long /process request (e.g. building the W
+    operator) would freeze the entire server for ALL clients.
     """
     try:
-        return ProcessingOrchestrator.process_radar_files(payload)
+        return await run_in_threadpool(
+            ProcessingOrchestrator.process_radar_files, payload
+        )
     except ValueError as e:
         # Errores de validación se convierten en 400 Bad Request
         raise HTTPException(
@@ -30,7 +41,7 @@ async def process_file(payload: ProcessRequest):
         raise
     except Exception as e:
         # 500 Internal Server Error para cualquier otro error
-        print(f"Error procesando archivos: {e}")
+        logger.exception("Error procesando archivos")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error procesando archivos: {e}"

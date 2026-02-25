@@ -24,6 +24,9 @@ services:
       # Upload rules
       - MAX_UPLOAD_MB=500
 
+      # Python output buffering (critical for Docker logs)
+      - PYTHONUNBUFFERED=1
+
       # GDAL optimizations
       - GDAL_CACHEMAX=256
       - GDAL_NUM_THREADS=4
