@@ -235,28 +235,6 @@ def collapse_ppi(data3d, z_coords, x_coords, y_coords, elevation_deg):
     # Interpolación lineal entre niveles Z
     z_step = (z_max - z_min) / (nz - 1) if nz > 1 else 1.0
     
-    # DIAGNÓSTICO: Analizar patrón espacial de target_z
-    print(f"[collapse_ppi] target_z estadísticas:")
-    print(f"  - min: {np.min(target_z):.1f}m, max: {np.max(target_z):.1f}m")
-    print(f"  - mean: {np.mean(target_z):.1f}m, median: {np.median(target_z):.1f}m")
-    
-    # Analizar cuántos pixeles caen en cada nivel Z
-    z_frac_test = (target_z - z_min) / z_step
-    z_idx_test = np.floor(z_frac_test).astype(int)
-    print(f"[collapse_ppi] Distribución de pixeles por nivel Z:")
-    for iz in range(nz):
-        count = np.sum(z_idx_test == iz)
-        if count > 0:
-            pct = 100 * count / (ny * nx)
-            # Ver cuántos datos válidos hay en ese nivel de la grilla 3D
-            if np.ma.is_masked(data3d):
-                valid_in_level = np.sum(~data3d[iz, :, :].mask)
-                total_in_level = data3d[iz, :, :].size
-                valid_pct = 100 * valid_in_level / total_in_level
-                print(f"  - Nivel Z[{iz}] ({z_coords[iz]:.0f}m): {count} pixeles ({pct:.1f}%) | Grilla 3D: {valid_pct:.1f}% datos válidos")
-            else:
-                print(f"  - Nivel Z[{iz}] ({z_coords[iz]:.0f}m): {count} pixeles ({pct:.1f}%)")
-    
     # Inicializar resultado
     result = np.full((ny, nx), np.nan, dtype='float32')
     
