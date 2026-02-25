@@ -1,4 +1,4 @@
-import { Marker, Polyline, useMapEvent } from "react-leaflet";
+import { CircleMarker, useMapEvent } from "react-leaflet";
 
 export default function MapPickOverlay({
   enabled,
@@ -16,7 +16,18 @@ export default function MapPickOverlay({
 
   return (
     <>
-      {pp && <Marker position={pp} />}
+      {pp && (
+        <CircleMarker
+          center={pp}
+          radius={7}
+          pathOptions={{
+            color: "#00aaff",
+            weight: 2,
+            fillOpacity: 0.7,
+            fillColor: "#00aaff",
+          }}
+        />
+      )}
     </>
   );
 }
