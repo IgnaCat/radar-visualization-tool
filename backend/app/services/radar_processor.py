@@ -290,6 +290,10 @@ def process_radar_to_cog(
         arr2d = grid.fields[field_to_use]['data'][0, :, :]
         arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
 
+        # PyART grid: y[0]=ymin (sur), y[-1]=ymax (norte).
+        # GeoTIFF north-up: fila 0 = norte.  Flip para que coincidan.
+        arr2d = arr2d[::-1, :]
+
         # Obtener grid_origin para normalize_proj_dict
         grid_origin = (
             float(radar.latitude['data'][0]),
