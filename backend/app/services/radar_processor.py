@@ -307,6 +307,10 @@ def process_radar_to_cog(
         dy = float(np.mean(np.diff(y))) if y.size > 1 else (y_grid_limits[1]-y_grid_limits[0]) / max(ny-1, 1)
         xmin = float(x.min()) if x.size else x_grid_limits[0]
         ymax = float(y.max()) if y.size else y_grid_limits[1]
+        # Los valores de linspace(-R, R, N) representan CENTROS de píxeles.
+        # El dominio va desde (xmin - dx/2) hasta (xmax + dx/2).
+        # Después del flip [::-1], fila 0 = pixel con centro en ymax.
+        # Transform debe mapear (col=0, row=0) a la ESQUINA superior izquierda del dominio.
         transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
         proj_dict_norm = normalize_proj_dict(grid, grid_origin)
         crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()

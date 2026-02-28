@@ -251,7 +251,7 @@ class StatsOrchestrator:
         arr = pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
         crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
         transform = pkg["transform_warped"] if pkg.get("transform_warped") is not None else pkg["transform"]
-        crs = pyproj.CRS.from_wkt(crs_wkt)
+        crs = pyproj.CRS.from_user_input(crs_wkt)
         
         # Aplicar filtros dinámicamente
         arr = StatsOrchestrator.apply_filters_to_cached_data(arr, pkg, filters, field)
@@ -354,7 +354,7 @@ class StatsOrchestrator:
         arr = apply_visual_filters(arr, visual_filters, field_upper)
         
         # Reproyectar polígono al CRS de la grilla
-        crs = pyproj.CRS.from_wkt(crs_wkt)
+        crs = pyproj.CRS.from_user_input(crs_wkt)
         gj_dst = StatsOrchestrator.reproject_polygon(polygon_gj_4326, crs)
         g_dst = shape(gj_dst)
         

@@ -7,7 +7,6 @@ import pyproj
 from pathlib import Path
 from typing import Optional, List, Dict
 from pyproj import Transformer
-from rasterio.transform import xy
 
 from ...models import RadarPixelRequest, RadarPixelResponse
 from ...core.cache import GRID2D_CACHE
@@ -179,7 +178,9 @@ class PixelOrchestrator:
         row_f: float,
         col_f: float,
         transform,
-        crs: pyproj.CRS
+        crs: pyproj.CRS,
+        user_lat: float,
+        user_lon: float
     ) -> RadarPixelResponse:
         """
         Obtiene valor del píxel más cercano (sin interpolación).
@@ -190,12 +191,16 @@ class PixelOrchestrator:
             col_f: Columna fraccionaria
             transform: Affine transform
             crs: CRS del grid
+            user_lat: Latitud original del usuario (para respuesta)
+            user_lon: Longitud original del usuario (para respuesta)
         
         Returns:
-            RadarPixelResponse con el valor o masked
+            RadarPixelResponse con el valor y coordenadas originales del usuario
         """
-        row_int = int(round(row_f))
-        col_int = int(round(col_f))
+        # Usar floor en lugar de round porque el transform mapea índices a esquinas de píxeles:
+        # col_f ∈ [N, N+1) corresponde al pixel N
+        row_int = int(np.floor(row_f))
+        col_int = int(np.floor(col_f))
         ny, nx = arr.shape
         
         if row_int < 0 or row_int >= ny or col_int < 0 or col_int >= nx:
@@ -219,18 +224,14 @@ class PixelOrchestrator:
         
         val = float(arr[row_int, col_int])
         
-        # Coordenada del centro del pixel para respuesta
-        xc, yc = xy(transform, row_int, col_int, offset="center")
-        to_wgs84 = Transformer.from_crs(crs, "EPSG:4326", always_xy=True)
-        lonc, latc = to_wgs84.transform(xc, yc)
-        
+        # Devolver coordenadas originales del usuario (no del centro del pixel)
         return RadarPixelResponse(
             value=round(val, 2), 
             masked=False, 
             row=row_int, 
             col=col_int, 
-            lat=latc, 
-            lon=lonc
+            lat=user_lat, 
+            lon=user_lon
         )
 
     @staticmethod
@@ -238,6 +239,8 @@ class PixelOrchestrator:
         arr: np.ma.MaskedArray,
         row_f: float,
         col_f: float,
+        transform,
+        crs: pyproj.CRS,
         user_lat: float,
         user_lon: float
     ) -> RadarPixelResponse:
@@ -248,11 +251,13 @@ class PixelOrchestrator:
             arr: Array de datos
             row_f: Fila fraccionaria
             col_f: Columna fraccionaria
-            user_lat: Latitud original del usuario
-            user_lon: Longitud original del usuario
+            transform: Affine transform del grid
+            crs: CRS del grid
+            user_lat: Latitud original del usuario (para respuesta)
+            user_lon: Longitud original del usuario (para respuesta)
         
         Returns:
-            RadarPixelResponse con el valor interpolado
+            RadarPixelResponse con el valor interpolado y coordenadas originales del usuario
         """
         # Encontrar los 4 píxeles vecinos
         r0 = int(np.floor(row_f))
@@ -274,8 +279,8 @@ class PixelOrchestrator:
         
         # Si todos masked -> retornar masked
         if np.isnan([v00, v01, v10, v11]).all():
-            row_int = int(round(row_f))
-            col_int = int(round(col_f))
+            row_int = int(np.floor(row_f))
+            col_int = int(np.floor(col_f))
             return RadarPixelResponse(
                 value=None, 
                 masked=True, 
@@ -309,8 +314,8 @@ class PixelOrchestrator:
         if total_weight > 0:
             val_interp /= total_weight
         else:
-            row_int = int(round(row_f))
-            col_int = int(round(col_f))
+            row_int = int(np.floor(row_f))
+            col_int = int(np.floor(col_f))
             return RadarPixelResponse(
                 value=None, 
                 masked=True, 
@@ -319,9 +324,10 @@ class PixelOrchestrator:
                 message="masked"
             )
         
-        row_int = int(round(row_f))
-        col_int = int(round(col_f))
+        row_int = int(np.floor(row_f))
+        col_int = int(np.floor(col_f))
         
+        # Devolver coordenadas originales del usuario (no del centro del pixel)
         return RadarPixelResponse(
             value=round(val_interp, 2), 
             masked=False, 
@@ -376,7 +382,7 @@ class PixelOrchestrator:
         arr = pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
         crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
         transform = pkg["transform_warped"] if pkg.get("transform_warped") is not None else pkg["transform"]
-        crs = pyproj.CRS.from_wkt(crs_wkt)
+        crs = pyproj.CRS.from_user_input(crs_wkt)
 
         # 7. Aplicar filtros dinámicamente
         arr = PixelOrchestrator.apply_filters_to_cached_data(
@@ -396,18 +402,30 @@ class PixelOrchestrator:
 
         ny, nx = arr.shape
 
-        # 9. Verificar si está en bordes (no se puede interpolar)
-        if row_f < 0 or row_f >= ny - 1 or col_f < 0 or col_f >= nx - 1:
-            # Fuera de límites o en borde -> usar nearest
-            return PixelOrchestrator.get_pixel_value_nearest(
-                arr, row_f, col_f, transform, crs
-            )
-
-        # 10. Interpolación bilinear (dentro de la grilla)
-        return PixelOrchestrator.get_pixel_value_bilinear(
-            arr, 
-            row_f, 
-            col_f, 
-            payload.lat, 
-            payload.lon
+        # Usar valor directo del pixel (sin interpolación bilinear)
+        # Esto asegura que cualquier click dentro del mismo pixel devuelva el mismo valor
+        return PixelOrchestrator.get_pixel_value_nearest(
+            arr, row_f, col_f, transform, crs, payload.lat, payload.lon
         )
+        
+        # NOTA: Interpolación bilinear comentada - producía valores diferentes
+        # para clicks dentro del mismo pixel debido a los pesos fraccionarios.
+        # Si se desea reactivar, descomentar el bloque siguiente:
+        
+        # # 9. Verificar si está en bordes (no se puede interpolar)
+        # if row_f < 0 or row_f >= ny - 1 or col_f < 0 or col_f >= nx - 1:
+        #     # Fuera de límites o en borde -> usar nearest
+        #     return PixelOrchestrator.get_pixel_value_nearest(
+        #         arr, row_f, col_f, transform, crs, payload.lat, payload.lon
+        #     )
+        #
+        # # 10. Interpolación bilinear (dentro de la grilla)
+        # return PixelOrchestrator.get_pixel_value_bilinear(
+        #     arr, 
+        #     row_f, 
+        #     col_f, 
+        #     transform, 
+        #     crs,
+        #     payload.lat,
+        #     payload.lon
+        # )

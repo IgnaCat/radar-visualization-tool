@@ -144,6 +144,10 @@ def generate_grid2d_on_demand(
     # Extraer array 2D colapsado
     arr2d = grid.fields[field_to_use]['data'][0, :, :]  # (ny, nx)
     arr2d = np.ma.masked_invalid(arr2d)
+    
+    # PyART grid: y[0]=ymin (sur), y[-1]=ymax (norte).
+    # GeoTIFF north-up: fila 0 = norte. Flip para consistencia con radar_processor.
+    arr2d = arr2d[::-1, :]
 
     # Obtener grid_origin para normalize_proj_dict
     grid_origin = (
@@ -160,7 +164,9 @@ def generate_grid2d_on_demand(
     xmin = float(x.min()) if x.size else x_grid_limits[0]
     ymax = float(y.max()) if y.size else y_grid_limits[1]
 
-    # CRS de la grilla (normalizado)
+    # Los valores de linspace(-R, R, N) representan CENTROS de píxeles.
+    # El dominio va desde (xmin - dx/2) hasta (xmax + dx/2).
+    # Transform debe mapear (col=0, row=0) a la ESQUINA superior izquierda del dominio.
     transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
     proj_dict_norm = normalize_proj_dict(grid, grid_origin)
     crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
@@ -191,6 +197,8 @@ def generate_grid2d_on_demand(
             )
         
         qc_arr = grid.fields[qc_field_name]['data'][0, :, :]
+        # Aplicar mismo flip que al array principal para consistencia
+        qc_arr = qc_arr[::-1, :]
         qc_dict[qc_field_name] = np.ma.masked_invalid(qc_arr)
     
     return {
