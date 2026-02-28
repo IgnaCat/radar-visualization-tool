@@ -24,10 +24,47 @@ export default function CacheStats() {
   };
 
   useEffect(() => {
-    loadStats();
-    // Auto-refresh cada 10 segundos
-    const interval = setInterval(loadStats, 10000);
-    return () => clearInterval(interval);
+    // Auto-refresh cada 10 segundos, pero SOLO cuando la pestaña está visible
+    let interval = null;
+
+    const startPolling = () => {
+      if (!interval) {
+        loadStats(); // Carga inmediata
+        interval = setInterval(loadStats, 10000);
+      }
+    };
+
+    const stopPolling = () => {
+      if (interval) {
+        clearInterval(interval);
+        interval = null;
+      }
+    };
+
+    // Función que detecta si la pestaña está visible u oculta
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Pestaña oculta → DETENER polling
+        stopPolling();
+        console.log("Cache stats polling detenido: pestaña oculta");
+      } else {
+        // Pestaña visible → REANUDAR polling
+        console.log("Cache stats polling reanudado: pestaña visible");
+        startPolling();
+      }
+    };
+
+    // Iniciar polling al montar el componente
+    startPolling();
+
+    // Escuchar cambios de visibilidad de la pestaña
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    // Cleanup al desmontar
+    return () => {
+      stopPolling();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const handleClearCache = async (type) => {
