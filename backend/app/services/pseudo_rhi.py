@@ -188,8 +188,14 @@ def variable_radar_cross_section(
     # Limites solicitados por el usuario (con fallback)
     x_max = min(range_max, plot_max_length_km) if plot_max_length_km else range_max
     y_max = plot_max_height_km if plot_max_height_km else 30
-    y_max = max(0.5, min(y_max, 30))  # clamp razonable
-    display.set_limits(xlim=[0, x_max], ylim=[-0.5, y_max])
+    y_max = max(0.1, min(y_max, 30))  # clamp razonable
+    display.set_limits(xlim=[0, x_max], ylim=[0, y_max])
+    
+    # Ajustar tamaño de fuente del colorbar generado por PyART
+    for ax_cbar in fig.axes:
+        if ax_cbar != ax2:  # El colorbar es el otro axes
+            ax_cbar.tick_params(labelsize=14)  # Tamaño de los valores numéricos del colorbar
+            ax_cbar.yaxis.label.set_size(16)  # Tamaño de la etiqueta del colorbar
 
     # Grafico el perfil de elevación del terreno
     ax2.plot(distances, perfil_elevacion_km, label=None, color='black', linewidth=2)
@@ -216,6 +222,7 @@ def variable_radar_cross_section(
 
     plt.xlabel('Distancia (km)', fontsize=18)
     plt.ylabel(f'Altura (km)', fontsize=18)
+    ax2.tick_params(axis='both', which='major', labelsize=14)  # Tamaño de los valores numéricos de los ejes
     plt.grid()
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
@@ -547,7 +554,7 @@ def _generate_segment_transect_png(
     
     # Límite vertical para el gráfico
     y_max_val = max_height_km if max_height_km else float(z_km[-1])
-    y_max_val = max(0.5, min(y_max_val, 30.0))
+    y_max_val = max(0.1, min(y_max_val, 30.0))
     
     # ── Obtener unidades de la variable ──
     units = VARIABLE_UNITS.get(field_name, '')
@@ -601,6 +608,7 @@ def _generate_segment_transect_png(
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, pad=0.02)
     cbar.set_label(f'{field_name} ({units})', fontsize=16)
+    cbar.ax.tick_params(labelsize=14)  # Tamaño de los valores numéricos del colorbar
     
     # Perfil de terreno
     if terrain_dists_km is not None and terrain_elev_km is not None:
@@ -628,10 +636,11 @@ def _generate_segment_transect_png(
     # Límites
     x_max = length_km
     ax.set_xlim(0, x_max)
-    ax.set_ylim(-0.5, y_max_val)
+    ax.set_ylim(0, y_max_val)
     
     ax.set_xlabel('Distancia (km)', fontsize=18)
     ax.set_ylabel('Altura (km)', fontsize=18)
+    ax.tick_params(axis='both', which='major', labelsize=14)  # Tamaño de los valores numéricos de los ejes
     ax.grid(True, alpha=0.3)
     
     plt.tight_layout()

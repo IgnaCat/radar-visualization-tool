@@ -134,8 +134,8 @@ export default function PseudoRHIDialog({
       const start = hasStart
         ? { lat: Number(startLat), lon: Number(startLon) }
         : radarSite
-        ? { lat: radarSite.lat, lon: radarSite.lon }
-        : null;
+          ? { lat: radarSite.lat, lon: radarSite.lon }
+          : null;
 
       if (!start) {
         setElevationProfile(null);
@@ -487,7 +487,7 @@ export default function PseudoRHIDialog({
                     onChange={(e) => {
                       const v = Number(e.target.value);
                       if (!Number.isFinite(v)) return;
-                      setMaxHeightKm(Math.min(30, Math.max(0.5, v)));
+                      setMaxHeightKm(Math.min(30, Math.max(0.1, v)));
                     }}
                     helperText="Altura vertical del corte"
                   />
