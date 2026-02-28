@@ -25,6 +25,7 @@ from .radar_processing import (
     get_or_build_W_operator,
     apply_operator,
     separate_filters,
+    apply_visual_filters,
 )
 from .radar_common import (
     resolve_field, colormap_for, build_gatefilter,
@@ -436,7 +437,7 @@ def _generate_segment_transect_png(
     grid_shape = (z_points, y_points, x_points)
     
     # ── Separar filtros QC vs visuales ──
-    qc_filters, _ = separate_filters(filters, field_name)
+    qc_filters, visual_filters = separate_filters(filters, field_name)
     
     # ── Construir grilla 3D (con cache de operador W) ──
     grid = get_or_build_grid3d_with_operator(
@@ -533,6 +534,14 @@ def _generate_segment_transect_png(
     pts = np.column_stack([zz, yy, xx])
     
     image = interpolator(pts).reshape(n_z, n_sample)
+    
+    # ── Aplicar filtros visuales (máscaras post-interpolación) ──
+    # Convertir a masked array
+    image_ma = np.ma.masked_invalid(image)
+    # Aplicar filtros visuales sobre el mismo campo
+    image_filtered = apply_visual_filters(image_ma, visual_filters, field_name)
+    # Convertir de vuelta: masked values → NaN para matplotlib
+    image = np.ma.filled(image_filtered, np.nan)
     
     z_fine_km = z_km  # eje vertical = niveles Z reales de la grilla
     
