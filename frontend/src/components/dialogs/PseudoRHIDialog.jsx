@@ -55,9 +55,11 @@ export default function PseudoRHIDialog({
   onAutoClose,
   onAutoReopen,
 }) {
-  const [selectedFields, setSelectedFields] = useState([
-    fields_present[0] || "DBZH",
-  ]);
+  const [selectedFields, setSelectedFields] = useState(() => {
+    const available =
+      fields_present.length > 0 ? fields_present : FIELD_OPTIONS;
+    return [available[0]];
+  });
   const [startLat, setStartLat] = useState("");
   const [startLon, setStartLon] = useState("");
   const [endLat, setEndLat] = useState("");
@@ -77,6 +79,16 @@ export default function PseudoRHIDialog({
 
   const { downloadImage, generateFilename } = useDownloads();
   const { enqueueSnackbar } = useSnackbar();
+
+  // Actualizar los campos seleccionados cuando cambie fields_present
+  useEffect(() => {
+    const available =
+      fields_present.length > 0 ? fields_present : FIELD_OPTIONS;
+    // Solo actualizar si el campo actual ya no está disponible
+    if (selectedFields.length === 0 || !available.includes(selectedFields[0])) {
+      setSelectedFields([available[0]]);
+    }
+  }, [fields_present]);
 
   const handleDownloadRHI = async (imageUrl, fieldName) => {
     if (!imageUrl) return;
@@ -299,6 +311,9 @@ export default function PseudoRHIDialog({
   };
 
   const handleClose = () => {
+    // Limpiar resultados visuales pero mantener la configuración
+    setResultImgs([]);
+    setElevationProfile(null);
     setError("");
     onClearPickedPoint?.();
     // Cancelar cualquier flujo automático pendiente
