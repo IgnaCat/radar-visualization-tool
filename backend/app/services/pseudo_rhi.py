@@ -582,6 +582,23 @@ def _generate_segment_transect_png(
     except Exception as e:
         print(f"Warning: No se pudo leer perfil de terreno: {e}")
     
+    # ── Enmascarar datos debajo del terreno (vectorizado) ──
+    if terrain_elev_km is not None:
+        # Calcular bordes de cada pixel Z
+        if len(z_fine_km) > 1:
+            delta_z = z_fine_km[1] - z_fine_km[0]  # Espaciado vertical
+        else:
+            delta_z = 0.05  # Fallback de 50m si solo hay un nivel
+        
+        z_bottom = z_fine_km - (delta_z / 2)  # Borde inferior de cada nivel (n_z,)
+        z_top = z_fine_km + (delta_z / 2)     # Borde superior de cada nivel (n_z,)
+        
+        # Enmascarar si el borde inferior está debajo del terreno
+        # Esto asegura que cualquier pixel que "toque" o esté debajo del terreno se enmascara
+        below_terrain = z_bottom[:, np.newaxis] < terrain_elev_km
+        
+        image[below_terrain] = np.nan
+    
     # ── Elevación del punto final (para marcador) ──
     end_elev_km = None
     try:
@@ -622,16 +639,6 @@ def _generate_segment_transect_png(
     dist_end_km = length_km
     if end_elev_km is not None:
         ax.plot(dist_end_km, end_elev_km, 'r*', markersize=15, label='Punto final')
-    
-    # Texto informativo con azimut y distancia
-    azimuth_deg = az12 % 360
-    info_text = f'Azimut: {azimuth_deg:.1f}°  |  Dist: {length_km:.1f} km'
-    ax.text(
-        0.98, 0.95, info_text,
-        horizontalalignment='right', verticalalignment='top',
-        transform=ax.transAxes, fontsize=16,
-        bbox=dict(facecolor='white', alpha=0.7),
-    )
     
     # Límites
     x_max = length_km
