@@ -10,6 +10,7 @@ import DownloadIcon from "@mui/icons-material/Download";
 import VerticalSplitIcon from "@mui/icons-material/VerticalSplit";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
 import DownloadMenu from "../ui/DownloadMenu";
 
 /**
@@ -27,6 +28,8 @@ import DownloadMenu from "../ui/DownloadMenu";
  * - locked: booleano que indica si los mapas están sincronizados
  * - onToggleSplit: función para alternar split screen
  * - onToggleLock: función para alternar lock de sincronización
+ * - markerMode: booleano que indica si está activo el modo de marcadores
+ * - onToggleMarkerMode: función para alternar modo de marcadores
  */
 export default function MapToolbar({
   onScreenshot,
@@ -40,6 +43,8 @@ export default function MapToolbar({
   locked = false,
   onToggleSplit,
   onToggleLock,
+  markerMode = false,
+  onToggleMarkerMode,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
@@ -89,7 +94,7 @@ export default function MapToolbar({
         isSplitScreen
           ? "Pantalla simple activada"
           : "Pantalla dividida activada",
-        { variant: "info" }
+        { variant: "info" },
       );
     } catch {
       enqueueSnackbar("Error al cambiar modo de pantalla", {
@@ -103,10 +108,22 @@ export default function MapToolbar({
       onToggleLock?.();
       enqueueSnackbar(
         locked ? "Sincronización desactivada" : "Sincronización activada",
-        { variant: "info" }
+        { variant: "info" },
       );
     } catch {
       enqueueSnackbar("Error al cambiar sincronización", { variant: "error" });
+    }
+  };
+
+  const handleMarkerClick = () => {
+    try {
+      onToggleMarkerMode?.();
+      enqueueSnackbar(
+        markerMode ? "Modo marcador desactivado" : "Modo marcador activado",
+        { variant: "info" },
+      );
+    } catch {
+      enqueueSnackbar("Error al cambiar modo marcador", { variant: "error" });
     }
   };
 
@@ -131,6 +148,12 @@ export default function MapToolbar({
           },
         ]
       : []),
+    {
+      icon: <LocationOnIcon />,
+      tooltip: markerMode ? "Desactivar marcadores" : "Agregar marcadores",
+      action: handleMarkerClick,
+      active: markerMode,
+    },
     {
       icon: <ScreenshotMonitorIcon />,
       tooltip: "Capturar pantalla",

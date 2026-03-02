@@ -58,6 +58,10 @@ export default function MapPanel({
   setLineDrawingFinished,
   highlightedPoint,
   setHighlightedPoint,
+  markerMode,
+  setMarkerMode,
+  markers,
+  setMarkers,
   rhiLinePreview,
   setRhiLinePreview,
 
@@ -93,6 +97,9 @@ export default function MapPanel({
   onAreaStatsRequest,
   onPixelStatClick,
   onGenerateElevationProfile,
+  onToggleMarkerMode,
+  onAddMarker,
+  onRemoveMarker,
   onLayerReorder,
   onToggleLayerVisibility, // (field, source_file) => void - toggle visibilidad de capa
   opacityByLayer, // { "FIELD::source_file": number } opacidades por capa individual
@@ -309,6 +316,10 @@ export default function MapPanel({
         onLineComplete={handleLineComplete}
         onLinePointsChange={setDrawnLineCoords}
         highlightedPoint={highlightedPoint}
+        markerMode={markerMode}
+        markers={markers}
+        onAddMarker={onAddMarker}
+        onRemoveMarker={onRemoveMarker}
       />
 
       <VerticalToolbar
@@ -340,6 +351,8 @@ export default function MapPanel({
         locked={locked}
         onToggleSplit={onToggleSplit}
         onToggleLock={onToggleLock}
+        markerMode={markerMode}
+        onToggleMarkerMode={onToggleMarkerMode}
       />
 
       <BaseMapSelector
@@ -423,11 +436,12 @@ export default function MapPanel({
         onClose={() => setRhiOpen(false)}
         filepath={activeToolFile || uploadedFiles[currentIndex]}
         radarSite={radarSite}
-        fields_present={
-          Array.from(
+        fields_present={(() => {
+          const fields = Array.from(
             new Set(filesInfo.map((f) => f.metadata.fields_present).flat()),
-          ) || ["DBZH", "KDP", "RHOHV", "ZDR"]
-        }
+          );
+          return fields.length > 0 ? fields : ["DBZH", "KDP", "RHOHV", "ZDR"];
+        })()}
         onRequestPickPoint={handleRequestPickPoint}
         pickedPoint={pickedPoint}
         onClearPickedPoint={handleClearPickedPoint}
@@ -450,11 +464,12 @@ export default function MapPanel({
           filters: filtersUsed,
           polygon: areaPolygon,
         }}
-        fields_present={
-          Array.from(
+        fields_present={(() => {
+          const fields = Array.from(
             new Set(filesInfo.map((f) => f.metadata.fields_present).flat()),
-          ) || ["DBZH", "KDP", "RHOHV", "ZDR"]
-        }
+          );
+          return fields.length > 0 ? fields : ["DBZH", "KDP", "RHOHV", "ZDR"];
+        })()}
       />
 
       <ElevationProfileDialog

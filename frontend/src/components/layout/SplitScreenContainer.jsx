@@ -38,6 +38,8 @@ export default function SplitScreenContainer({
   const [drawnLineCoords2, setDrawnLineCoords2] = useState([]);
   const [lineDrawingFinished2, setLineDrawingFinished2] = useState(false);
   const [highlightedPoint2, setHighlightedPoint2] = useState(null);
+  const [markerMode2, setMarkerMode2] = useState(false);
+  const [markers2, setMarkers2] = useState([]);
   const [rhiLinePreview2, setRhiLinePreview2] = useState({
     start: null,
     end: null,
@@ -285,6 +287,10 @@ export default function SplitScreenContainer({
           setLineDrawingFinished={map1Props.setLineDrawingFinished}
           highlightedPoint={map1Props.highlightedPoint}
           setHighlightedPoint={map1Props.setHighlightedPoint}
+          markerMode={map1Props.markerMode}
+          setMarkerMode={map1Props.setMarkerMode}
+          markers={map1Props.markers}
+          setMarkers={map1Props.setMarkers}
           rhiLinePreview={map1Props.rhiLinePreview}
           setRhiLinePreview={map1Props.setRhiLinePreview}
           selectorOpen={map1Props.selectorOpen}
@@ -312,6 +318,9 @@ export default function SplitScreenContainer({
           onAreaStatsRequest={map1Props.onAreaStatsRequest}
           onPixelStatClick={map1Props.onPixelStatClick}
           onGenerateElevationProfile={map1Props.onGenerateElevationProfile}
+          onToggleMarkerMode={map1Props.onToggleMarkerMode}
+          onAddMarker={map1Props.onAddMarker}
+          onRemoveMarker={map1Props.onRemoveMarker}
           onLayerReorder={map1Props.onLayerReorder}
           onToggleLayerVisibility={map1Props.onToggleLayerVisibility}
           opacityByLayer={map1Props.opacityByLayer}
@@ -396,6 +405,10 @@ export default function SplitScreenContainer({
             setLineDrawingFinished={setLineDrawingFinished2}
             highlightedPoint={highlightedPoint2}
             setHighlightedPoint={setHighlightedPoint2}
+            markerMode={markerMode2}
+            setMarkerMode={setMarkerMode2}
+            markers={markers2}
+            setMarkers={setMarkers2}
             rhiLinePreview={rhiLinePreview2}
             setRhiLinePreview={setRhiLinePreview2}
             selectorOpen={selectorOpen2}
@@ -423,6 +436,11 @@ export default function SplitScreenContainer({
             onAreaStatsRequest={map1Props.onAreaStatsRequest}
             onPixelStatClick={handlePixelStatClick2}
             onGenerateElevationProfile={map1Props.onGenerateElevationProfile}
+            onToggleMarkerMode={() => setMarkerMode2((v) => !v)}
+            onAddMarker={(marker) => setMarkers2((prev) => [...prev, marker])}
+            onRemoveMarker={(markerId) =>
+              setMarkers2((prev) => prev.filter((m) => m.id !== markerId))
+            }
             onLayerReorder={(layers) => {
               // Aplicar reorden en mapa 2
               const updatedOverlay = [...(overlayData2[currentIndex2] || [])];

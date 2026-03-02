@@ -11,6 +11,7 @@ import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "../overlays/MapPickOverlay";
 import AreaDrawOverlay from "../overlays/AreaDrawOverlay";
 import LineDrawOverlay from "../overlays/LineDrawOverlay";
+import MarkersOverlay from "../overlays/MarkersOverlay";
 import UsePixelStatClick from "../overlays/UsePixelStatClick";
 
 function COGTile({
@@ -172,6 +173,11 @@ export default function MapView({
   onLineComplete,
   onLinePointsChange,
   highlightedPoint = null,
+  // Props para marcadores
+  markerMode = false,
+  markers = [],
+  onAddMarker,
+  onRemoveMarker,
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -263,6 +269,12 @@ export default function MapView({
         points={drawnLineCoords}
         onComplete={onLineComplete}
         onPointsChange={onLinePointsChange}
+      />
+      <MarkersOverlay
+        enabled={markerMode}
+        markers={markers}
+        onAddMarker={onAddMarker}
+        onRemoveMarker={onRemoveMarker}
       />
       <UsePixelStatClick
         enabled={pixelStatMode}

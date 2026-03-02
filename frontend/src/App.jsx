@@ -174,6 +174,9 @@ export default function App() {
   const [drawnLineCoords, setDrawnLineCoords] = useState([]);
   const [lineDrawingFinished, setLineDrawingFinished] = useState(false);
   const [highlightedPoint, setHighlightedPoint] = useState(null);
+  // Estado para modo de marcadores
+  const [markerMode, setMarkerMode] = useState(false);
+  const [markers, setMarkers] = useState([]);
   const [selectedBaseMap, setSelectedBaseMap] = useState({
     id: "osm",
     name: "Argenmap",
@@ -661,6 +664,19 @@ export default function App() {
       if (!next) setPixelStatMarker(null);
       return next;
     });
+  };
+
+  // Handlers para modo de marcadores
+  const handleToggleMarkerMode = () => {
+    setMarkerMode((prev) => !prev);
+  };
+
+  const handleAddMarker = (marker) => {
+    setMarkers((prev) => [...prev, marker]);
+  };
+
+  const handleRemoveMarker = (markerId) => {
+    setMarkers((prev) => prev.filter((m) => m.id !== markerId));
   };
 
   const handleToggleMapSelector = () => {
@@ -1154,6 +1170,10 @@ export default function App() {
           setLineDrawingFinished,
           highlightedPoint,
           setHighlightedPoint,
+          markerMode,
+          setMarkerMode,
+          markers,
+          setMarkers,
           rhiLinePreview,
           setRhiLinePreview,
           selectorOpen,
@@ -1181,6 +1201,9 @@ export default function App() {
           onAreaStatsRequest: handleAreaStatsRequest,
           onPixelStatClick: handleMapClickPixelStat,
           onGenerateElevationProfile: handleGenerateElevationProfile,
+          onToggleMarkerMode: handleToggleMarkerMode,
+          onAddMarker: handleAddMarker,
+          onRemoveMarker: handleRemoveMarker,
           onLayerReorder: handleLayerReorder,
           onToggleLayerVisibility: handleToggleLayerVisibility,
           onLayerOpacityChange: handleLayerOpacityChange,
