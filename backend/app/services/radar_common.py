@@ -123,20 +123,41 @@ def get_radar_site(radar: pyart.core.Radar) -> Tuple[float, float, float]:
         pass
     return lon, lat, alt
 
-def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3) -> float:
+def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3, round_to_km: int = 20) -> float:
     """
     Devuelve el alcance máximo (último gate) en metros, con fallback.
+    Redondea hacia arriba al múltiplo de round_to_km km para alinear grids.
+    
+    Args:
+        radar: Objeto radar de PyART
+        default: Valor por defecto si no se puede determinar
+        round_to_km: Redondear hacia arriba a múltiplos de este valor en km (default: 20km)
+                     Ejemplos: 116580m → 120000m, 236460m → 240000m
+    
+    Returns:
+        Rango máximo redondeado en metros
     """
+    import math
+    
     r = radar.range["data"]
     arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)
     if arr.size == 0:
-        return float(default)
-    last = float(arr[-1])
-    if np.isfinite(last):
-        return last
-    # fallback al máximo finito
-    finite = arr[np.isfinite(arr)]
-    return float(finite.max()) if finite.size else float(default)
+        range_m = float(default)
+    else:
+        last = float(arr[-1])
+        if np.isfinite(last):
+            range_m = last
+        else:
+            # fallback al máximo finito
+            finite = arr[np.isfinite(arr)]
+            range_m = float(finite.max()) if finite.size else float(default)
+    
+    # Redondear hacia arriba al múltiplo más cercano
+    if round_to_km > 0:
+        step_m = round_to_km * 1000.0
+        range_m = math.ceil(range_m / step_m) * step_m
+    
+    return float(range_m)
 
 
 # ------------------------------

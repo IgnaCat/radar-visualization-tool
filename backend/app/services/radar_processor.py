@@ -176,7 +176,7 @@ def process_radar_to_cog(
     cmap, vmin, vmax, cmap_key = colormap_for(field_key, override_cmap=cmap_override_key)
 
     # Calcular límites Z según producto ANTES de prepare_radar_for_product
-    range_max_m = safe_range_max_m(radar)
+    range_max_m = safe_range_max_m(radar, round_to_km=20)
     z_min, z_max, elev_deg = calculate_z_limits(
         range_max_m, elevation, cappi_height, radar.fixed_angle['data']
     )
