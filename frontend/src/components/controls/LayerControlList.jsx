@@ -34,6 +34,8 @@ function LayerControlList({
   onChange,
   initialVisible = 4,
   showOpacity = true,
+  disableToggle = false,
+  hideChips = false,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -159,8 +161,9 @@ function LayerControlList({
                     checked={!!it.enabled}
                     onChange={() => toggleEnabled(actualIdx)}
                     disabled={
-                      !it.enabled &&
-                      sortedItems.filter((l) => l.enabled).length >= 5
+                      disableToggle ||
+                      (!it.enabled &&
+                        sortedItems.filter((l) => l.enabled).length >= 5)
                     }
                     inputProps={{ "aria-label": `activar ${it.label}` }}
                   />
@@ -176,34 +179,17 @@ function LayerControlList({
                     </Typography>
 
                     {/* Mostrar origen del campo */}
-                    {it.isCommon ? (
-                      <Chip
-                        label="Común"
-                        size="small"
-                        color="success"
-                        variant="outlined"
-                        sx={{
-                          height: 18,
-                          fontSize: "0.65rem",
-                          fontWeight: 400,
-                          px: 0.5,
-                          "& .MuiChip-label": {
-                            px: 0.5,
-                          },
-                        }}
-                      />
-                    ) : it.sources && it.sources.length > 0 ? (
-                      <Box display="flex" flexWrap="wrap" gap={0.5}>
-                        {it.sources.map((source, idx) => (
+                    {!hideChips && (
+                      <>
+                        {it.isCommon ? (
                           <Chip
-                            key={idx}
-                            label={formatSourceDisplay(source, it.simplified)}
+                            label="Común"
                             size="small"
-                            color="info"
+                            color="success"
                             variant="outlined"
                             sx={{
                               height: 18,
-                              fontSize: "0.6rem",
+                              fontSize: "0.65rem",
                               fontWeight: 400,
                               px: 0.5,
                               "& .MuiChip-label": {
@@ -211,9 +197,30 @@ function LayerControlList({
                               },
                             }}
                           />
-                        ))}
-                      </Box>
-                    ) : null}
+                        ) : it.sources && it.sources.length > 0 ? (
+                          <Box display="flex" flexWrap="wrap" gap={0.5}>
+                            {it.sources.map((source, idx) => (
+                              <Chip
+                                key={idx}
+                                label={formatSourceDisplay(source, it.simplified)}
+                                size="small"
+                                color="info"
+                                variant="outlined"
+                                sx={{
+                                  height: 18,
+                                  fontSize: "0.6rem",
+                                  fontWeight: 400,
+                                  px: 0.5,
+                                  "& .MuiChip-label": {
+                                    px: 0.5,
+                                  },
+                                }}
+                              />
+                            ))}
+                          </Box>
+                        ) : null}
+                      </>
+                    )}
                   </Box>
 
                   {showOpacity && (
@@ -275,6 +282,8 @@ LayerControlList.propTypes = {
   onChange: PropTypes.func.isRequired,
   initialVisible: PropTypes.number, // Número de elementos visibles inicialmente
   showOpacity: PropTypes.bool, // Mostrar slider de opacidad
+  disableToggle: PropTypes.bool, // Deshabilitar la selección/deselección de campos
+  hideChips: PropTypes.bool, // Ocultar chips de origen (Común, Vol, etc.)
 };
 
 export default LayerControlList;

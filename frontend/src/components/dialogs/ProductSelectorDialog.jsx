@@ -439,11 +439,14 @@ export default function ProductSelectorDialog({
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
   const handleAccept = () => {
-    // Validar que haya al menos un campo habilitado
-    const enabledCount = layers.filter((l) => l.enabled).length;
-    if (enabledCount === 0 && product !== "colmax") {
-      alert("Debe seleccionar al menos un campo para visualizar");
-      return;
+    // Para COLMAX, no validar campos (siempre forzar DBZH)
+    if (product !== "colmax") {
+      // Validar que haya al menos un campo habilitado
+      const enabledCount = layers.filter((l) => l.enabled).length;
+      if (enabledCount === 0) {
+        alert("Debe seleccionar al menos un campo para visualizar");
+        return;
+      }
     }
 
     const filtersOut = [];
@@ -672,13 +675,37 @@ export default function ProductSelectorDialog({
 
         <Divider sx={{ my: 2 }} />
 
-        {/* Variables reales del archivo - Ocultar para COLMAX */}
-        {product !== "colmax" && (
-          <Box mt={2}>
-            {/* Información sobre campos comunes y específicos */}
-            <LayerControlList items={layers} onChange={setLayers} showOpacity={false} />
-          </Box>
-        )}
+        {/* Variables reales del archivo */}
+        <Box mt={2}>
+          {/* Para COLMAX, solo mostrar DBZH bloqueado */}
+          {product === "colmax" ? (
+            <LayerControlList
+              items={[
+                {
+                  id: "dbzh",
+                  label: "DBZH",
+                  field: "DBZH",
+                  enabled: true,
+                  opacity: 1,
+                  isCommon: true,
+                  sources: [],
+                },
+              ]}
+              onChange={() => { }} // No-op para COLMAX
+              showOpacity={false}
+              disableToggle={true}
+              hideChips={true}
+            />
+          ) : (
+            <LayerControlList
+              items={layers}
+              onChange={setLayers}
+              showOpacity={false}
+              disableToggle={false}
+              hideChips={false}
+            />
+          )}
+        </Box>
 
         {isPPI && (
           <Box mt={2}>
