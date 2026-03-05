@@ -300,9 +300,9 @@ export default function MapPanel({
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-              ]
+              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+            ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
@@ -421,9 +421,17 @@ export default function MapPanel({
       <ProductSelectorDialog
         open={selectorOpen}
         fieldAnalysis={fieldAnalysis}
-        elevations={Array.from(
-          new Set(filesInfo.map((f) => f.metadata.elevations).flat()),
-        )}
+        elevations={
+          filesInfo.length > 0
+            ? filesInfo.reduce(
+              (longest, f) =>
+                f.metadata.elevations.length > longest.length
+                  ? f.metadata.elevations
+                  : longest,
+              filesInfo[0].metadata.elevations || [],
+            )
+            : []
+        }
         volumes={volumes}
         radars={availableRadars}
         initialLayers={savedLayers}

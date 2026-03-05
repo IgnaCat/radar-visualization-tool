@@ -199,7 +199,7 @@ export function formatSourceDisplay(source, simplified = false) {
   }
 
   if (source.strategy && source.strategy !== "Unknown") {
-    parts.push(`Strat ${source.strategy}`);
+    parts.push(source.strategy);
   }
 
   return parts.length > 0 ? parts.join(" · ") : "Unknown";

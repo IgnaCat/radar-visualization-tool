@@ -19,6 +19,7 @@ import {
   IconButton,
   Collapse,
   Chip,
+  Tooltip,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
@@ -477,14 +478,14 @@ export default function ProductSelectorDialog({
     const finalLayers =
       product === "colmax"
         ? [
-            {
-              id: "dbzh",
-              label: "DBZH",
-              field: "DBZH",
-              enabled: true,
-              opacity: 1,
-            },
-          ]
+          {
+            id: "dbzh",
+            label: "DBZH",
+            field: "DBZH",
+            enabled: true,
+            opacity: 1,
+          },
+        ]
         : layers;
 
     onConfirm({
@@ -565,35 +566,38 @@ export default function ProductSelectorDialog({
                   {volumes.map((vol, idx) => {
                     const isSelected = selectedVolumes.includes(vol);
                     return (
-                      <Button
-                        key={vol}
-                        variant={isSelected ? "contained" : "outlined"}
-                        onClick={() => {
-                          setSelectedVolumes((prev) =>
-                            prev.includes(vol)
-                              ? prev.filter((v) => v !== vol)
-                              : [...prev, vol],
-                          );
-                        }}
-                        sx={{
-                          borderRadius: 999,
-                          backgroundColor: isSelected ? "#888" : "#eee",
-                          color: isSelected ? "#fff" : "#333",
-                          fontWeight: 500,
-                          textTransform: "none",
-                          boxShadow: isSelected ? 2 : 0,
-                          transition: "all 0.2s",
-                          "&:hover": {
-                            backgroundColor: isSelected ? "#555" : "#ccc",
-                            color: isSelected ? "#fff" : "#111",
-                          },
-                          minWidth: 90,
-                          px: 2,
-                          py: 1,
-                        }}
-                      >
-                        {`Volumen ${vol}`}
-                      </Button>
+                      <Tooltip key={vol} title={isSelected ? "Deseleccionar" : "Seleccionar"} arrow>
+                        <Button
+                          variant={isSelected ? "contained" : "outlined"}
+                          onClick={() => {
+                            setSelectedVolumes((prev) =>
+                              prev.includes(vol)
+                                ? prev.filter((v) => v !== vol)
+                                : [...prev, vol],
+                            );
+                          }}
+                          sx={{
+                            borderRadius: 999,
+                            backgroundColor: isSelected ? "#999" : "#fff",
+                            color: isSelected ? "#fff" : "#333",
+                            fontWeight: 500,
+                            textTransform: "none",
+                            border: isSelected ? "none" : "1px solid #ddd",
+                            boxShadow: isSelected ? 2 : "0 2px 4px rgba(0,0,0,0.1)",
+                            transition: "all 0.2s",
+                            "&:hover": {
+                              backgroundColor: isSelected ? "#777" : "#f5f5f5",
+                              color: isSelected ? "#fff" : "#111",
+                              boxShadow: isSelected ? 3 : "0 3px 6px rgba(0,0,0,0.15)",
+                            },
+                            minWidth: 90,
+                            px: 2,
+                            py: 1,
+                          }}
+                        >
+                          {`Volumen ${vol}`}
+                        </Button>
+                      </Tooltip>
                     );
                   })}
                 </Box>
@@ -612,37 +616,46 @@ export default function ProductSelectorDialog({
                     const atMax =
                       !isSelected && selectedRadars.length >= MAX_RADARS;
                     return (
-                      <Button
+                      <Tooltip
                         key={site}
-                        variant={isSelected ? "contained" : "outlined"}
-                        disabled={atMax}
-                        onClick={() => {
-                          setSelectedRadars((prev) => {
-                            const already = prev.includes(site);
-                            if (already) return prev.filter((s) => s !== site);
-                            if (prev.length >= MAX_RADARS) return prev; // ignore if at limit
-                            return [...prev, site];
-                          });
-                        }}
-                        sx={{
-                          borderRadius: 999,
-                          backgroundColor: isSelected ? "#888" : "#eee",
-                          color: isSelected ? "#fff" : "#333",
-                          fontWeight: 500,
-                          textTransform: "none",
-                          boxShadow: isSelected ? 2 : 0,
-                          transition: "all 0.2s",
-                          "&:hover": {
-                            backgroundColor: isSelected ? "#555" : "#ccc",
-                            color: isSelected ? "#fff" : "#111",
-                          },
-                          minWidth: 90,
-                          px: 2,
-                          py: 1,
-                        }}
+                        title={atMax ? "Máximo alcanzado" : (isSelected ? "Deseleccionar" : "Seleccionar")}
+                        arrow
                       >
-                        {String(site)}
-                      </Button>
+                        <span>
+                          <Button
+                            variant={isSelected ? "contained" : "outlined"}
+                            disabled={atMax}
+                            onClick={() => {
+                              setSelectedRadars((prev) => {
+                                const already = prev.includes(site);
+                                if (already) return prev.filter((s) => s !== site);
+                                if (prev.length >= MAX_RADARS) return prev; // ignore if at limit
+                                return [...prev, site];
+                              });
+                            }}
+                            sx={{
+                              borderRadius: 999,
+                              backgroundColor: isSelected ? "#999" : "#fff",
+                              color: isSelected ? "#fff" : "#333",
+                              fontWeight: 500,
+                              textTransform: "none",
+                              border: isSelected ? "none" : "1px solid #ddd",
+                              boxShadow: isSelected ? 2 : "0 2px 4px rgba(0,0,0,0.1)",
+                              transition: "all 0.2s",
+                              "&:hover": {
+                                backgroundColor: isSelected ? "#777" : "#f5f5f5",
+                                color: isSelected ? "#fff" : "#111",
+                                boxShadow: isSelected ? 3 : "0 3px 6px rgba(0,0,0,0.15)",
+                              },
+                              minWidth: 90,
+                              px: 2,
+                              py: 1,
+                            }}
+                          >
+                            {String(site)}
+                          </Button>
+                        </span>
+                      </Tooltip>
                     );
                   })}
                 </Box>
@@ -663,7 +676,7 @@ export default function ProductSelectorDialog({
         {product !== "colmax" && (
           <Box mt={2}>
             {/* Información sobre campos comunes y específicos */}
-            <LayerControlList items={layers} onChange={setLayers} />
+            <LayerControlList items={layers} onChange={setLayers} showOpacity={false} />
           </Box>
         )}
 

@@ -33,6 +33,7 @@ function LayerControlList({
   items,
   onChange,
   initialVisible = 4,
+  showOpacity = true,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -96,9 +97,9 @@ function LayerControlList({
     const next = sortedItems.slice();
     const currentEnabledCount = next.filter((l) => l.enabled).length;
 
-    // Si intenta habilitar y ya hay 3 habilitadas no permitir
-    if (!next[idx].enabled && currentEnabledCount >= 3) {
-      alert("Solo se pueden habilitar hasta 3 capas al mismo tiempo.");
+    // Si intenta habilitar y ya hay 5 habilitadas no permitir
+    if (!next[idx].enabled && currentEnabledCount >= 5) {
+      alert("Solo se pueden habilitar hasta 5 capas al mismo tiempo.");
       return;
     }
 
@@ -159,7 +160,7 @@ function LayerControlList({
                     onChange={() => toggleEnabled(actualIdx)}
                     disabled={
                       !it.enabled &&
-                      sortedItems.filter((l) => l.enabled).length >= 3
+                      sortedItems.filter((l) => l.enabled).length >= 5
                     }
                     inputProps={{ "aria-label": `activar ${it.label}` }}
                   />
@@ -168,7 +169,7 @@ function LayerControlList({
                     display="flex"
                     flexDirection="column"
                     gap={0.5}
-                    sx={{ minWidth: 100 }}
+                    sx={{ minWidth: 80 }}
                   >
                     <Typography variant="body2" sx={{ fontWeight: 500 }}>
                       {it.label}
@@ -182,9 +183,13 @@ function LayerControlList({
                         color="success"
                         variant="outlined"
                         sx={{
-                          height: 20,
-                          fontSize: "0.7rem",
+                          height: 18,
+                          fontSize: "0.65rem",
                           fontWeight: 400,
+                          px: 0.5,
+                          "& .MuiChip-label": {
+                            px: 0.5,
+                          },
                         }}
                       />
                     ) : it.sources && it.sources.length > 0 ? (
@@ -197,9 +202,13 @@ function LayerControlList({
                             color="info"
                             variant="outlined"
                             sx={{
-                              height: 20,
-                              fontSize: "0.65rem",
+                              height: 18,
+                              fontSize: "0.6rem",
                               fontWeight: 400,
+                              px: 0.5,
+                              "& .MuiChip-label": {
+                                px: 0.5,
+                              },
                             }}
                           />
                         ))}
@@ -207,18 +216,20 @@ function LayerControlList({
                     ) : null}
                   </Box>
 
-                  <Slider
-                    value={Number(it.opacity ?? 1)}
-                    onChange={(_, v) => changeOpacity(actualIdx, v)}
-                    min={0}
-                    max={1}
-                    step={0.01}
-                    valueLabelDisplay="auto"
-                    sx={{ flex: 1 }}
-                  />
+                  {showOpacity && (
+                    <Slider
+                      value={Number(it.opacity ?? 1)}
+                      onChange={(_, v) => changeOpacity(actualIdx, v)}
+                      min={0}
+                      max={1}
+                      step={0.01}
+                      valueLabelDisplay="auto"
+                      sx={{ flex: 1 }}
+                    />
+                  )}
 
                   <Tooltip title="Arrastrar para cambiar el orden">
-                    <IconButton size="small" sx={{ cursor: "grab", px: 1 }}>
+                    <IconButton size="small" sx={{ cursor: "grab", px: 1, mx: 3 }}>
                       <DragIndicatorIcon />
                     </IconButton>
                   </Tooltip>
@@ -263,6 +274,7 @@ LayerControlList.propTypes = {
   ).isRequired,
   onChange: PropTypes.func.isRequired,
   initialVisible: PropTypes.number, // Número de elementos visibles inicialmente
+  showOpacity: PropTypes.bool, // Mostrar slider de opacidad
 };
 
 export default LayerControlList;
