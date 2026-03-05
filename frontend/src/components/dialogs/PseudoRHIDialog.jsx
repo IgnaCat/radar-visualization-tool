@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -16,10 +16,10 @@ import {
   Autocomplete,
   Chip,
 } from "@mui/material";
+import { useDraggableResizable } from "../../hooks/useDraggableResizable";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import DownloadIcon from "@mui/icons-material/Download";
-import Draggable from "react-draggable";
 import RadarFilterControls from "../controls/RadarFilterControls";
 import ElevationChart from "../ui/ElevationChart";
 import { useDownloads } from "../../hooks/useDownloads";
@@ -28,16 +28,55 @@ import { generateElevationProfile } from "../../api/backend";
 
 const FIELD_OPTIONS = ["DBZH", "KDP", "RHOHV", "ZDR"];
 
-function PaperComponent(props) {
-  const nodeRef = useRef(null);
+function PaperComponent({ dialogStateRef, ...props }) {
+  const savedPos = dialogStateRef.current.position;
+  const savedSize = dialogStateRef.current.size;
+  const initWidth = savedSize?.width || 600;
+  const initHeight = savedSize?.height || 600;
+  const initX = savedPos?.x ?? Math.max(0, Math.floor((window.innerWidth - initWidth) / 2));
+  const initY = savedPos?.y ?? Math.max(0, Math.floor((window.innerHeight - initHeight) / 2));
+
+  const {
+    nodeRef,
+    position,
+    size,
+    cursor,
+    handleMouseDown,
+    handleMouseMove,
+  } = useDraggableResizable({
+    initialX: initX,
+    initialY: initY,
+    initialWidth: initWidth,
+    initialHeight: initHeight,
+    minWidth: 500,
+    minHeight: 400,
+    edgeSize: 15,
+    onPositionChange: (pos) => { dialogStateRef.current.position = pos; },
+    onSizeChange: (sz) => { dialogStateRef.current.size = sz; },
+  });
+
   return (
-    <Draggable
-      nodeRef={nodeRef}
-      handle="#draggable-dialog-title"
-      cancel={'[class*="MuiDialogContent-root"]'}
-    >
-      <Paper {...props} ref={nodeRef} />
-    </Draggable>
+    <Paper
+      {...props}
+      ref={nodeRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      sx={{
+        position: 'fixed',
+        left: position.x,
+        top: position.y,
+        width: size.width,
+        height: size.height,
+        m: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        pointerEvents: 'auto',
+        cursor: cursor,
+        zIndex: 1300,
+        userSelect: 'none',
+      }}
+    />
   );
 }
 
@@ -55,6 +94,15 @@ export default function PseudoRHIDialog({
   onAutoClose,
   onAutoReopen,
 }) {
+  // Ref estable para posición/tamaño - no causa re-renders
+  const dialogStateRef = useRef({ position: null, size: null });
+
+  // PaperWithState estable (empty deps) - MUI nunca desmonta/remonta el Paper
+  const PaperWithState = useCallback(
+    (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
+    []
+  );
+
   const [selectedFields, setSelectedFields] = useState(() => {
     const available =
       fields_present.length > 0 ? fields_present : FIELD_OPTIONS;
@@ -327,8 +375,6 @@ export default function PseudoRHIDialog({
       <Dialog
         open={open}
         onClose={handleClose}
-        fullWidth
-        maxWidth="sm"
         hideBackdrop
         disableEnforceFocus
         disableAutoFocus
@@ -338,15 +384,23 @@ export default function PseudoRHIDialog({
           root: { sx: { pointerEvents: "none" } },
         }}
         PaperProps={{
-          sx: { pointerEvents: "auto" },
+          sx: {
+            pointerEvents: "auto",
+            maxWidth: "none",
+            m: 0,
+          },
         }}
-        PaperComponent={PaperComponent}
+        PaperComponent={PaperWithState}
         aria-labelledby="draggable-dialog-title"
       >
-        <DialogTitle id="draggable-dialog-title">
+        <DialogTitle
+          id="draggable-dialog-title"
+          className="draggable-dialog-title"
+          sx={{ cursor: 'move', userSelect: 'none', flexShrink: 0 }}
+        >
           Pseudo-RHI (corte vertical)
         </DialogTitle>
-        <DialogContent id="draggable-dialog-title" dividers>
+        <DialogContent dividers sx={{ flex: 1, overflow: 'auto' }}>
           <Box display="grid" gridTemplateColumns="1fr" gap={2} mt={2}>
             <Box display="grid" gridTemplateColumns="1fr" gap={1}>
               <Autocomplete
@@ -605,7 +659,7 @@ export default function PseudoRHIDialog({
           )}
         </DialogContent>
 
-        <DialogActions>
+        <DialogActions sx={{ flexShrink: 0 }}>
           <Button onClick={handleClose} color="secondary">
             Cerrar
           </Button>

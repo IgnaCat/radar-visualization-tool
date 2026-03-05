@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -20,7 +20,9 @@ import {
   Collapse,
   Chip,
   Tooltip,
+  Paper
 } from "@mui/material";
+import { useDraggableResizable } from "../../hooks/useDraggableResizable";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import LayerControlList from "../controls/LayerControlList";
@@ -61,6 +63,58 @@ const CANON = {
 function canonize(name = "") {
   const k = String(name).toLowerCase();
   return CANON[k] || name.toUpperCase();
+}
+
+function PaperComponent({ dialogStateRef, ...props }) {
+  const savedPos = dialogStateRef.current.position;
+  const savedSize = dialogStateRef.current.size;
+  const initWidth = savedSize?.width || 600;
+  const initHeight = savedSize?.height || 700;
+  const initX = savedPos?.x ?? Math.max(0, Math.floor((window.innerWidth - initWidth) / 2));
+  const initY = savedPos?.y ?? Math.max(0, Math.floor((window.innerHeight - initHeight) / 2));
+
+  const {
+    nodeRef,
+    position,
+    size,
+    cursor,
+    handleMouseDown,
+    handleMouseMove,
+  } = useDraggableResizable({
+    initialX: initX,
+    initialY: initY,
+    initialWidth: initWidth,
+    initialHeight: initHeight,
+    minWidth: 500,
+    minHeight: 400,
+    edgeSize: 15,
+    onPositionChange: (pos) => { dialogStateRef.current.position = pos; },
+    onSizeChange: (sz) => { dialogStateRef.current.size = sz; },
+  });
+
+  return (
+    <Paper
+      {...props}
+      ref={nodeRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      sx={{
+        position: 'fixed',
+        left: position.x,
+        top: position.y,
+        width: size.width,
+        height: size.height,
+        m: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        pointerEvents: 'auto',
+        cursor: cursor,
+        zIndex: 1300,
+        userSelect: 'none',
+      }}
+    />
+  );
 }
 
 // Crear capas a partir del análisis de campos
@@ -223,6 +277,15 @@ export default function ProductSelectorDialog({
   },
 }) {
   const MAX_RADARS = 3;
+
+  // Ref estable para posición/tamaño - no causa re-renders
+  const dialogStateRef = useRef({ position: null, size: null });
+
+  // PaperWithState estable (empty deps) - MUI nunca desmonta/remonta el Paper
+  const PaperWithState = useCallback(
+    (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
+    []
+  );
 
   // Siempre recalcular desde fieldAnalysis si está disponible
   // Solo usar initialLayers para preservar el estado enabled/opacity del usuario
@@ -526,10 +589,36 @@ export default function ProductSelectorDialog({
   const maxIdx = Math.max(0, (elevations?.length || 1) - 1);
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>Opciones de Visualización</DialogTitle>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      hideBackdrop
+      disableEnforceFocus
+      disableAutoFocus
+      disableRestoreFocus
+      disableScrollLock
+      slotProps={{
+        root: { sx: { pointerEvents: "none" } },
+      }}
+      PaperProps={{
+        sx: {
+          pointerEvents: "auto",
+          minHeight: "320px",
+          maxWidth: "none",
+          m: 0,
+        },
+      }}
+      PaperComponent={PaperWithState}
+      aria-labelledby="draggable-dialog-title"
+    >
+      <DialogTitle
+        className="draggable-dialog-title"
+        sx={{ cursor: 'move', userSelect: 'none', flexShrink: 0 }}
+      >
+        Opciones de Visualización
+      </DialogTitle>
 
-      <DialogContent dividers>
+      <DialogContent dividers sx={{ flex: 1, overflow: 'auto' }}>
         {/* Grid layout: Vista a la izquierda, Volúmenes y Radares a la derecha */}
         <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
           {/* Columna izquierda: Seleccionar Vista */}
@@ -875,7 +964,7 @@ export default function ProductSelectorDialog({
         </Box>
       </DialogContent>
 
-      <DialogActions>
+      <DialogActions sx={{ flexShrink: 0 }}>
         <Button onClick={handleClose} color="secondary">
           Cancelar
         </Button>

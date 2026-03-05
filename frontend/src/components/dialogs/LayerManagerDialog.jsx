@@ -35,6 +35,48 @@ export default function LayerManagerDialog({
   const [orderedLayers, setOrderedLayers] = useState([]);
   const lastUpdateRef = React.useRef(0);
 
+  // Estado para drag del panel completo
+  const [position, setPosition] = useState({ x: 68, y: 70 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Handlers para drag del panel completo
+  const handlePanelMouseDown = useCallback((e) => {
+    // Solo permitir drag desde el header, no desde los elementos interactivos
+    if (e.target.closest('button') || e.target.closest('.MuiSlider-root')) {
+      return;
+    }
+    setIsDragging(true);
+    setDragOffset({
+      x: e.clientX - position.x,
+      y: e.clientY - position.y,
+    });
+  }, [position]);
+
+  const handlePanelMouseMove = useCallback((e) => {
+    if (!isDragging) return;
+    setPosition({
+      x: e.clientX - dragOffset.x,
+      y: e.clientY - dragOffset.y,
+    });
+  }, [isDragging, dragOffset]);
+
+  const handlePanelMouseUp = useCallback(() => {
+    setIsDragging(false);
+  }, []);
+
+  // Agregar/remover listeners globales para drag
+  useEffect(() => {
+    if (isDragging) {
+      document.addEventListener('mousemove', handlePanelMouseMove);
+      document.addEventListener('mouseup', handlePanelMouseUp);
+      return () => {
+        document.removeEventListener('mousemove', handlePanelMouseMove);
+        document.removeEventListener('mouseup', handlePanelMouseUp);
+      };
+    }
+  }, [isDragging, handlePanelMouseMove, handlePanelMouseUp]);
+
   // Sincronizar con las capas externas cuando cambien
   useEffect(() => {
     if (!open) return;
@@ -149,8 +191,8 @@ export default function LayerManagerDialog({
         elevation={3}
         sx={{
           position: "absolute",
-          top: 70,
-          left: 68,
+          top: position.y,
+          left: position.x,
           zIndex: 999,
           width: 370,
           maxHeight: "calc(100vh - 100px)",
@@ -158,17 +200,25 @@ export default function LayerManagerDialog({
           backgroundColor: "rgba(255, 255, 255, 0.98)",
           backdropFilter: "blur(8px)",
           borderRadius: "8px",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.2)",
-          transition: "opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+          boxShadow: isDragging
+            ? "0 8px 24px rgba(0,0,0,0.3)"
+            : "0 4px 12px rgba(0,0,0,0.2)",
+          transition: isDragging
+            ? "box-shadow 0.2s"
+            : "opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s",
+          userSelect: isDragging ? "none" : "auto",
         }}
       >
         <Box
+          onMouseDown={handlePanelMouseDown}
           sx={{
             padding: "12px 16px",
             borderBottom: "1px solid rgba(0, 0, 0, 0.08)",
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
+            cursor: isDragging ? "grabbing" : "grab",
+            userSelect: "none",
           }}
         >
           <Typography
