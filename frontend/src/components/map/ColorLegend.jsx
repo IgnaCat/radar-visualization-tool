@@ -9,9 +9,9 @@ function getTextColor(hex) {
   const bigint = parseInt(
     clean.length === 3
       ? clean
-          .split("")
-          .map((c) => c + c)
-          .join("")
+        .split("")
+        .map((c) => c + c)
+        .join("")
       : clean,
     16,
   );
@@ -275,144 +275,109 @@ export default function ColorLegend({
     const defaultCmap = DEFAULT_COLORMAPS[fieldKey];
     const isDefaultColormap = colormap === defaultCmap;
 
+    let legendData, colors, fieldValues, range;
+
     // Si es el colormap default, usar el hardcoded
     if (isDefaultColormap && LEGENDS[fieldKey]) {
-      const legendData = LEGENDS[fieldKey];
+      legendData = LEGENDS[fieldKey];
+      // Extraer colores en orden inverso (de mayor a menor valor)
+      colors = legendData.steps.map((s) => s.color);
+      fieldValues = legendData.steps.map((s) => s.value);
+    } else {
+      // Para colormaps no-default, usar el dinámico
+      colors = colormapCache[colormap];
+      if (!colors) {
+        return null; // Todavía cargando
+      }
 
-      return (
+      // Usar los mismos valores que el hardcoded para consistencia
+      fieldValues = FIELD_VALUES[fieldKey] || [];
+      if (fieldValues.length === 0) {
+        return null; // Sin valores definidos para este campo
+      }
+
+      // Obtener rango del campo
+      range = FIELD_RANGES[fieldKey] || { vmin: 0, vmax: 100 };
+    }
+
+    // Crear gradiente continuo
+    // Los colores van de arriba (mayor valor) hacia abajo (menor valor)
+    const gradient = `linear-gradient(to bottom, ${colors.join(", ")})`;
+
+    // Altura de la barra
+    const barHeight = 200;
+    const barWidth = 20;
+
+    return (
+      <div
+        key={`${fieldKey}_${colormap}`}
+        style={{
+          display: "flex",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 2,
+          marginLeft: 10,
+        }}
+      >
+        {/* Barra de colores continua */}
         <div
-          key={`${fieldKey}_${colormap}`}
           style={{
             display: "flex",
             flexDirection: "column",
             alignItems: "center",
-            minWidth: 60,
+            position: "relative",
+
           }}
         >
-          <Typography variant="subtitle" color="white" gutterBottom>
+          <Typography
+            variant="subtitle2"
+            color="white"
+            sx={{
+              marginBottom: 1,
+              fontWeight: "bold",
+              fontSize: "0.85rem",
+            }}
+          >
             {fieldKey}
           </Typography>
 
+          {/* Barra con gradiente */}
           <div
             style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 5,
+              width: barWidth,
+              height: barHeight,
+              background: gradient,
+              borderRadius: 6,
+              position: "relative",
             }}
-          >
-            {legendData.steps.map((item) => {
-              const textColor = getTextColor(item.color);
-              return (
-                <div
-                  key={`${fieldKey}-${item.value}`}
-                  title={item.label}
-                  style={{
-                    width: 23,
-                    height: 23,
-                    borderRadius: "50%",
-                    backgroundColor: item.color,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: "bold",
-                    color: textColor,
-                    fontSize: 15,
-                  }}
-                >
-                  {item.value}
-                </div>
-              );
-            })}
-          </div>
+          />
         </div>
-      );
-    }
 
-    // Para colormaps no-default, usar el dinámico
-    const key = `${field}_${colormap}`;
-    const colors = colormapCache[colormap];
-
-    if (!colors) {
-      return null; // Todavía cargando
-    }
-
-    // Usar los mismos valores que el hardcoded para consistencia
-    const fieldValues = FIELD_VALUES[fieldKey] || [];
-
-    if (fieldValues.length === 0) {
-      return null; // Sin valores definidos para este campo
-    }
-
-    // Obtener rango del campo
-    const range = FIELD_RANGES[fieldKey] || { vmin: 0, vmax: 100 };
-    const numColors = colors.length;
-
-    // Mapear cada valor a su color correspondiente según normalización
-    // colors[0] = vmin, colors[numColors-1] = vmax
-    const colorValuePairs = fieldValues.map((value) => {
-      // Normalizar el valor entre 0 y 1
-      const numValue = typeof value === "string" ? parseFloat(value) : value;
-      const normalized = (numValue - range.vmin) / (range.vmax - range.vmin);
-
-      // Obtener índice del color (clampeado entre 0 y numColors-1)
-      const colorIndex = Math.max(
-        0,
-        Math.min(numColors - 1, Math.round(normalized * (numColors - 1))),
-      );
-
-      return {
-        color: colors[colorIndex],
-        value: value,
-      };
-    });
-
-    return (
-      <div
-        key={key}
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          minWidth: 60,
-        }}
-      >
-        <Typography variant="subtitle" color="white" gutterBottom>
-          {fieldKey}
-        </Typography>
-
+        {/* Valores a la derecha de la barra */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
-            gap: 5,
+            justifyContent: "space-between",
+            height: barHeight,
+            marginTop: 24, // Compensar el título
           }}
         >
-          {colorValuePairs.map(({ color, value }, idx) => {
-            const textColor = getTextColor(color);
-
-            return (
-              <div
-                key={`${key}-${idx}`}
-                title={`${fieldKey}: ${value}`}
-                style={{
-                  width: 23,
-                  height: 23,
-                  borderRadius: "50%",
-                  backgroundColor: color,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontWeight: "bold",
-                  color: textColor,
-                  fontSize: 15,
-                }}
-              >
-                {value}
-              </div>
-            );
-          })}
+          {fieldValues.map((value, idx) => (
+            <div
+              key={`${fieldKey}-value-${idx}`}
+              style={{
+                fontSize: "0.7rem",
+                color: "white",
+                fontWeight: "350",
+                textShadow: "1px 1px 10px rgba(0,0,0,0.8)",
+                lineHeight: 1,
+              }}
+              title={legendData?.steps?.[idx]?.label || `${fieldKey}: ${value}`}
+            >
+              {value}
+            </div>
+          ))}
         </div>
       </div>
     );
