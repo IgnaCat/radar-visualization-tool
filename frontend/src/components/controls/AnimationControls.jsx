@@ -5,6 +5,32 @@ import PauseIcon from "@mui/icons-material/Pause";
 import SkipNextIcon from "@mui/icons-material/SkipNext";
 import SkipPreviousIcon from "@mui/icons-material/SkipPrevious";
 
+// Función para convertir timestamp UTC a hora local (UTC-3)
+function formatTimestampToLocal(timestamp) {
+  if (!timestamp) return null;
+
+  try {
+    // El timestamp viene en formato ISO (ej: "2025-08-19T00:17:15Z" o "2025-08-19T00:17:15.000Z")
+    const utcDate = new Date(timestamp);
+
+    // Restar 3 horas para convertir a hora local (UTC-3)
+    const localDate = new Date(utcDate.getTime() - 3 * 60 * 60 * 1000);
+
+    // Formatear como DD/MM/YYYY HH:mm:ss
+    const day = String(localDate.getUTCDate()).padStart(2, '0');
+    const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+    const year = localDate.getUTCFullYear();
+    const hour = String(localDate.getUTCHours()).padStart(2, '0');
+    const minute = String(localDate.getUTCMinutes()).padStart(2, '0');
+    const second = String(localDate.getUTCSeconds()).padStart(2, '0');
+
+    return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
+  } catch (error) {
+    console.error("Error al formatear timestamp:", error);
+    return timestamp;
+  }
+}
+
 export default function AnimationControls({
   overlayData,
   currentIndex,
@@ -175,11 +201,12 @@ export default function AnimationControls({
       <Box
         position="absolute"
         bottom={0}
-        left={0}
-        width="100%"
+        left="50%"
+        width="70%"
         bgcolor="white"
         py={1}
         px={2}
+        mt={2}
         textAlign="center"
         fontSize="0.875rem"
         fontFamily="Roboto, sans-serif"
@@ -187,24 +214,30 @@ export default function AnimationControls({
         borderRadius={3}
         color="black"
         zIndex={999}
+        sx={{
+          transform: "translateX(-50%)",
+        }}
       >
         <Box>
           {frameInfo.product && (
             <Box mt={0.5}>
-              Vista: {frameInfo.product.toUpperCase()}
+              {frameInfo.product.toUpperCase()}
               {frameInfo.radars.length > 0 && (
-                <> | Radar: {frameInfo.radars.join(", ")}</>
+                <> | {frameInfo.radars.join(", ")}</>
               )}
               {frameInfo.strategies.length > 0 && (
-                <> | Estrategia: {frameInfo.strategies.join(", ")}</>
+                <> | {frameInfo.strategies.join(", ")}</>
               )}
               {frameInfo.volumes.length > 0 && (
-                <> | Volumen: {frameInfo.volumes.join(", ")}</>
+                <> | Vol {frameInfo.volumes.join(", ")}</>
+              )}
+              {frameInfo.timestamp && (
+                <> | {formatTimestampToLocal(frameTimestamp) || `Imagen ${currentIndex + 1}`} (Frame{" "}
+                  {currentIndex + 1} de {overlayData.outputs.length})</>
               )}
             </Box>
           )}
-          Fecha: {frameTimestamp || `Imagen ${currentIndex + 1}`} (Frame{" "}
-          {currentIndex + 1} de {overlayData.outputs.length})
+
         </Box>
       </Box>
     </Box>
