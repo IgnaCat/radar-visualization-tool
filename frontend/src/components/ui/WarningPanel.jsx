@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Paper, Typography, IconButton } from "@mui/material";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import CloseIcon from "@mui/icons-material/Close";
@@ -8,6 +8,13 @@ export default function WarningPanel({ warnings = [] }) {
   const [pos, setPos] = useState({ x: 30, y: 80 });
   const [dragging, setDragging] = useState(false);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  // Mostrar el panel cuando cambien los warnings
+  useEffect(() => {
+    if (warnings.length > 0) {
+      setVisible(true);
+    }
+  }, [warnings]);
 
   if (!visible || !warnings.length) return null;
 
