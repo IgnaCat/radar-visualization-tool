@@ -132,20 +132,20 @@ const LEGENDS = {
   },
   PHIDP: {
     steps: [
-      { value: 180, color: "#800080", label: "Fase alta / ciclo completo" },
-      { value: 120, color: "#0000ff", label: "Fase positiva" },
-      { value: 60, color: "#00ffff", label: "Cambio de fase moderado" },
-      { value: 0, color: "#00ff00", label: "Sin cambio de fase" },
-      { value: -60, color: "#ffff00", label: "Cambio de fase leve (negativo)" },
+      { value: 360, color: "#800080", label: "Fase alta / ciclo completo" },
+      { value: 300, color: "#0000ff", label: "Fase positiva" },
+      { value: 240, color: "#00ffff", label: "Cambio de fase moderado" },
+      { value: 180, color: "#00ff00", label: "Fase media" },
+      { value: 120, color: "#ffff00", label: "Cambio de fase leve" },
       {
-        value: -120,
+        value: 60,
         color: "#ff8000",
-        label: "Cambio de fase moderado (negativo)",
+        label: "Cambio de fase bajo",
       },
       {
-        value: -180,
+        value: 0,
         color: "#ff0000",
-        label: "Fase negativa / ciclo completo",
+        label: "Fase inicial",
       },
     ],
   },
@@ -187,7 +187,7 @@ const FIELD_VALUES = {
   KDP: [7, 6, 5, 4, 3, 2, 1, 0],
   VRAD: [70, 30, 20, 10, 0, -10, -20, -30],
   WRAD: [8, 6, 4, 2, 1, 0],
-  PHIDP: [180, 120, 60, 0, -60, -120, -180],
+  PHIDP: [360, 300, 240, 180, 120, 60, 0],
 };
 
 export default function ColorLegend({
