@@ -20,7 +20,7 @@ import {
   Collapse,
   Chip,
   Tooltip,
-  Paper
+  Paper,
 } from "@mui/material";
 import { useDraggableResizable } from "../../hooks/useDraggableResizable";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -70,27 +70,26 @@ function PaperComponent({ dialogStateRef, ...props }) {
   const savedSize = dialogStateRef.current.size;
   const initWidth = savedSize?.width || 600;
   const initHeight = savedSize?.height || 700;
-  const initX = savedPos?.x ?? Math.max(0, Math.floor((window.innerWidth - initWidth) / 2));
-  const initY = savedPos?.y ?? Math.max(0, Math.floor((window.innerHeight - initHeight) / 2));
+  const initX = savedPos?.x ?? 0;
+  const initY = savedPos?.y ?? 0;
 
-  const {
-    nodeRef,
-    position,
-    size,
-    cursor,
-    handleMouseDown,
-    handleMouseMove,
-  } = useDraggableResizable({
-    initialX: initX,
-    initialY: initY,
-    initialWidth: initWidth,
-    initialHeight: initHeight,
-    minWidth: 500,
-    minHeight: 400,
-    edgeSize: 15,
-    onPositionChange: (pos) => { dialogStateRef.current.position = pos; },
-    onSizeChange: (sz) => { dialogStateRef.current.size = sz; },
-  });
+  const { nodeRef, position, size, cursor, handleMouseDown, handleMouseMove } =
+    useDraggableResizable({
+      initialX: initX,
+      initialY: initY,
+      initialWidth: initWidth,
+      initialHeight: initHeight,
+      minWidth: 500,
+      minHeight: 400,
+      edgeSize: 15,
+      centerOnMount: !savedPos,
+      onPositionChange: (pos) => {
+        dialogStateRef.current.position = pos;
+      },
+      onSizeChange: (sz) => {
+        dialogStateRef.current.size = sz;
+      },
+    });
 
   return (
     <Paper
@@ -99,19 +98,26 @@ function PaperComponent({ dialogStateRef, ...props }) {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       sx={{
-        position: 'fixed',
-        left: position.x,
-        top: position.y,
-        width: size.width,
-        height: size.height,
-        m: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        pointerEvents: 'auto',
+        // "&&" duplica el selector CSS para ganar especificidad sobre
+        // los estilos internos de MUI Dialog (.MuiDialog-paper) que
+        // aplican position:relative y margin:32px.
+        "&&": {
+          position: "fixed",
+          left: position.x,
+          top: position.y,
+          width: size.width,
+          height: size.height,
+          m: 0,
+          maxWidth: "none",
+          maxHeight: "none",
+        },
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        pointerEvents: "auto",
         cursor: cursor,
         zIndex: 1300,
-        userSelect: 'none',
+        userSelect: "none",
       }}
     />
   );
@@ -284,7 +290,7 @@ export default function ProductSelectorDialog({
   // PaperWithState estable (empty deps) - MUI nunca desmonta/remonta el Paper
   const PaperWithState = useCallback(
     (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
-    []
+    [],
   );
 
   // Siempre recalcular desde fieldAnalysis si está disponible
@@ -544,14 +550,14 @@ export default function ProductSelectorDialog({
     const finalLayers =
       product === "colmax"
         ? [
-          {
-            id: "dbzh",
-            label: "DBZH",
-            field: "DBZH",
-            enabled: true,
-            opacity: 1,
-          },
-        ]
+            {
+              id: "dbzh",
+              label: "DBZH",
+              field: "DBZH",
+              enabled: true,
+              opacity: 1,
+            },
+          ]
         : layers;
 
     onConfirm({
@@ -613,12 +619,12 @@ export default function ProductSelectorDialog({
     >
       <DialogTitle
         className="draggable-dialog-title"
-        sx={{ cursor: 'move', userSelect: 'none', flexShrink: 0 }}
+        sx={{ cursor: "move", userSelect: "none", flexShrink: 0 }}
       >
         Opciones de Visualización
       </DialogTitle>
 
-      <DialogContent dividers sx={{ flex: 1, overflow: 'auto' }}>
+      <DialogContent dividers sx={{ flex: 1, overflow: "auto" }}>
         {/* Grid layout: Vista a la izquierda, Volúmenes y Radares a la derecha */}
         <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
           {/* Columna izquierda: Seleccionar Vista */}
@@ -658,7 +664,11 @@ export default function ProductSelectorDialog({
                   {volumes.map((vol, idx) => {
                     const isSelected = selectedVolumes.includes(vol);
                     return (
-                      <Tooltip key={vol} title={isSelected ? "Deseleccionar" : "Seleccionar"} arrow>
+                      <Tooltip
+                        key={vol}
+                        title={isSelected ? "Deseleccionar" : "Seleccionar"}
+                        arrow
+                      >
                         <Button
                           variant={isSelected ? "contained" : "outlined"}
                           onClick={() => {
@@ -675,12 +685,16 @@ export default function ProductSelectorDialog({
                             fontWeight: 500,
                             textTransform: "none",
                             border: isSelected ? "none" : "1px solid #ddd",
-                            boxShadow: isSelected ? 2 : "0 2px 4px rgba(0,0,0,0.1)",
+                            boxShadow: isSelected
+                              ? 2
+                              : "0 2px 4px rgba(0,0,0,0.1)",
                             transition: "all 0.2s",
                             "&:hover": {
                               backgroundColor: isSelected ? "#777" : "#f5f5f5",
                               color: isSelected ? "#fff" : "#111",
-                              boxShadow: isSelected ? 3 : "0 3px 6px rgba(0,0,0,0.15)",
+                              boxShadow: isSelected
+                                ? 3
+                                : "0 3px 6px rgba(0,0,0,0.15)",
                             },
                             minWidth: 90,
                             px: 2,
@@ -710,7 +724,13 @@ export default function ProductSelectorDialog({
                     return (
                       <Tooltip
                         key={site}
-                        title={atMax ? "Máximo alcanzado" : (isSelected ? "Deseleccionar" : "Seleccionar")}
+                        title={
+                          atMax
+                            ? "Máximo alcanzado"
+                            : isSelected
+                              ? "Deseleccionar"
+                              : "Seleccionar"
+                        }
                         arrow
                       >
                         <span>
@@ -720,7 +740,8 @@ export default function ProductSelectorDialog({
                             onClick={() => {
                               setSelectedRadars((prev) => {
                                 const already = prev.includes(site);
-                                if (already) return prev.filter((s) => s !== site);
+                                if (already)
+                                  return prev.filter((s) => s !== site);
                                 if (prev.length >= MAX_RADARS) return prev; // ignore if at limit
                                 return [...prev, site];
                               });
@@ -732,12 +753,18 @@ export default function ProductSelectorDialog({
                               fontWeight: 500,
                               textTransform: "none",
                               border: isSelected ? "none" : "1px solid #ddd",
-                              boxShadow: isSelected ? 2 : "0 2px 4px rgba(0,0,0,0.1)",
+                              boxShadow: isSelected
+                                ? 2
+                                : "0 2px 4px rgba(0,0,0,0.1)",
                               transition: "all 0.2s",
                               "&:hover": {
-                                backgroundColor: isSelected ? "#777" : "#f5f5f5",
+                                backgroundColor: isSelected
+                                  ? "#777"
+                                  : "#f5f5f5",
                                 color: isSelected ? "#fff" : "#111",
-                                boxShadow: isSelected ? 3 : "0 3px 6px rgba(0,0,0,0.15)",
+                                boxShadow: isSelected
+                                  ? 3
+                                  : "0 3px 6px rgba(0,0,0,0.15)",
                               },
                               minWidth: 90,
                               px: 2,
@@ -780,7 +807,7 @@ export default function ProductSelectorDialog({
                   sources: [],
                 },
               ]}
-              onChange={() => { }} // No-op para COLMAX
+              onChange={() => {}} // No-op para COLMAX
               showOpacity={false}
               disableToggle={true}
               hideChips={true}

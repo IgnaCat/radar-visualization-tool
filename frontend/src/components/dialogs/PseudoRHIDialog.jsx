@@ -33,27 +33,26 @@ function PaperComponent({ dialogStateRef, ...props }) {
   const savedSize = dialogStateRef.current.size;
   const initWidth = savedSize?.width || 600;
   const initHeight = savedSize?.height || 600;
-  const initX = savedPos?.x ?? Math.max(0, Math.floor((window.innerWidth - initWidth) / 2));
-  const initY = savedPos?.y ?? Math.max(0, Math.floor((window.innerHeight - initHeight) / 2));
+  const initX = savedPos?.x ?? 0;
+  const initY = savedPos?.y ?? 0;
 
-  const {
-    nodeRef,
-    position,
-    size,
-    cursor,
-    handleMouseDown,
-    handleMouseMove,
-  } = useDraggableResizable({
-    initialX: initX,
-    initialY: initY,
-    initialWidth: initWidth,
-    initialHeight: initHeight,
-    minWidth: 500,
-    minHeight: 400,
-    edgeSize: 15,
-    onPositionChange: (pos) => { dialogStateRef.current.position = pos; },
-    onSizeChange: (sz) => { dialogStateRef.current.size = sz; },
-  });
+  const { nodeRef, position, size, cursor, handleMouseDown, handleMouseMove } =
+    useDraggableResizable({
+      initialX: initX,
+      initialY: initY,
+      initialWidth: initWidth,
+      initialHeight: initHeight,
+      minWidth: 500,
+      minHeight: 400,
+      edgeSize: 15,
+      centerOnMount: !savedPos,
+      onPositionChange: (pos) => {
+        dialogStateRef.current.position = pos;
+      },
+      onSizeChange: (sz) => {
+        dialogStateRef.current.size = sz;
+      },
+    });
 
   return (
     <Paper
@@ -62,19 +61,26 @@ function PaperComponent({ dialogStateRef, ...props }) {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       sx={{
-        position: 'fixed',
-        left: position.x,
-        top: position.y,
-        width: size.width,
-        height: size.height,
-        m: 0,
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        pointerEvents: 'auto',
+        // "&&" duplica el selector CSS para ganar especificidad sobre
+        // los estilos internos de MUI Dialog (.MuiDialog-paper) que
+        // aplican position:relative y margin:32px.
+        "&&": {
+          position: "fixed",
+          left: position.x,
+          top: position.y,
+          width: size.width,
+          height: size.height,
+          m: 0,
+          maxWidth: "none",
+          maxHeight: "none",
+        },
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        pointerEvents: "auto",
         cursor: cursor,
         zIndex: 1300,
-        userSelect: 'none',
+        userSelect: "none",
       }}
     />
   );
@@ -100,7 +106,7 @@ export default function PseudoRHIDialog({
   // PaperWithState estable (empty deps) - MUI nunca desmonta/remonta el Paper
   const PaperWithState = useCallback(
     (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
-    []
+    [],
   );
 
   const [selectedFields, setSelectedFields] = useState(() => {
@@ -396,11 +402,11 @@ export default function PseudoRHIDialog({
         <DialogTitle
           id="draggable-dialog-title"
           className="draggable-dialog-title"
-          sx={{ cursor: 'move', userSelect: 'none', flexShrink: 0 }}
+          sx={{ cursor: "move", userSelect: "none", flexShrink: 0 }}
         >
           Pseudo-RHI (corte vertical)
         </DialogTitle>
-        <DialogContent dividers sx={{ flex: 1, overflow: 'auto' }}>
+        <DialogContent dividers sx={{ flex: 1, overflow: "auto" }}>
           <Box display="grid" gridTemplateColumns="1fr" gap={2} mt={2}>
             <Box display="grid" gridTemplateColumns="1fr" gap={1}>
               <Autocomplete
