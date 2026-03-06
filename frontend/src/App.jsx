@@ -1003,12 +1003,15 @@ export default function App() {
       setSavedLayers(reorderedSavedLayers);
     }
 
-    // Actualizar activeToolFile si cambió el primer radar
+    // Actualizar activeToolFile y fieldsUsed según la primera capa del nuevo orden
     if (updatedLayers.length > 0) {
       const firstRadarFile = updatedLayers[0].source_file;
       if (firstRadarFile !== activeToolFile) {
         setActiveToolFile(firstRadarFile);
       }
+      // Sincronizar fieldsUsed con el nuevo orden para que pixel/area stats
+      // usen el campo de la primera capa visible
+      setFieldsUsed(uniqueFields);
     }
 
     // Actualizar TODOS los frames con el nuevo orden
