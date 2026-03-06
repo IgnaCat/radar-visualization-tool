@@ -113,8 +113,9 @@ export default function ColorPaletteSelector({
           left: 68,
           zIndex: 999,
           width: 320,
-          maxHeight: "calc(100vh - 100px)",
-          overflowY: "auto",
+          maxHeight: 520,
+          display: "flex",
+          flexDirection: "column",
           backgroundColor: "rgba(255, 255, 255, 0.98)",
           backdropFilter: "blur(8px)",
           borderRadius: "8px",
@@ -130,10 +131,7 @@ export default function ColorPaletteSelector({
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            position: "sticky",
-            top: 0,
-            backgroundColor: "rgba(255, 255, 255, 0.98)",
-            zIndex: 1,
+            flexShrink: 0,
           }}
         >
           <Typography
@@ -181,111 +179,115 @@ export default function ColorPaletteSelector({
         </Box>
 
         {/* Lista por campo */}
-        {fieldsToShow.length === 0 ? (
-          <Box sx={{ padding: "20px", textAlign: "center" }}>
-            <Typography variant="body2" color="text.secondary">
-              No hay campos disponibles
-            </Typography>
-          </Box>
-        ) : (
-          fieldsToShow.map((field) => {
-            const options = colormapOptions[field] || [];
-            const currentSelection =
-              selectedColormaps[field] || defaultColormaps[field];
+        <Box sx={{ flex: 1, overflowY: "auto" }}>
+          {fieldsToShow.length === 0 ? (
+            <Box sx={{ padding: "20px", textAlign: "center" }}>
+              <Typography variant="body2" color="text.secondary">
+                No hay campos disponibles
+              </Typography>
+            </Box>
+          ) : (
+            fieldsToShow.map((field) => {
+              const options = colormapOptions[field] || [];
+              const currentSelection =
+                selectedColormaps[field] || defaultColormaps[field];
 
-            return (
-              <Box key={field}>
-                <Box
-                  sx={{
-                    padding: "8px 16px",
-                    backgroundColor: "rgba(74, 144, 226, 0.05)",
-                  }}
-                >
-                  <Typography
-                    variant="caption"
+              return (
+                <Box key={field}>
+                  <Box
                     sx={{
-                      fontWeight: 600,
-                      fontSize: "11px",
-                      color: "#4A90E2",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.5px",
+                      padding: "8px 16px",
+                      backgroundColor: "rgba(74, 144, 226, 0.05)",
                     }}
                   >
-                    {field}
-                  </Typography>
-                </Box>
-                <List sx={{ padding: "4px 0" }}>
-                  {options.map((colormap) => {
-                    const isSelected = currentSelection === colormap;
-                    const isDefault = defaultColormaps[field] === colormap;
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        fontWeight: 600,
+                        fontSize: "11px",
+                        color: "#4A90E2",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.5px",
+                      }}
+                    >
+                      {field}
+                    </Typography>
+                  </Box>
+                  <List sx={{ padding: "4px 0" }}>
+                    {options.map((colormap) => {
+                      const isSelected = currentSelection === colormap;
+                      const isDefault = defaultColormaps[field] === colormap;
 
-                    return (
-                      <ListItem key={`${field}-${colormap}`} disablePadding>
-                        <ListItemButton
-                          onClick={() => handleSelect(field, colormap)}
-                          selected={isSelected}
-                          sx={{
-                            padding: "8px 16px 8px 24px",
-                            "&.Mui-selected": {
-                              backgroundColor: "rgba(74, 144, 226, 0.08)",
-                              "&:hover": {
-                                backgroundColor: "rgba(74, 144, 226, 0.12)",
+                      return (
+                        <ListItem key={`${field}-${colormap}`} disablePadding>
+                          <ListItemButton
+                            onClick={() => handleSelect(field, colormap)}
+                            selected={isSelected}
+                            sx={{
+                              padding: "8px 16px 8px 24px",
+                              "&.Mui-selected": {
+                                backgroundColor: "rgba(74, 144, 226, 0.08)",
+                                "&:hover": {
+                                  backgroundColor: "rgba(74, 144, 226, 0.12)",
+                                },
                               },
-                            },
-                            "&:hover": {
-                              backgroundColor: "rgba(0, 0, 0, 0.04)",
-                            },
-                          }}
-                        >
-                          <ListItemText
-                            primary={
-                              <Box
-                                sx={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 1,
-                                }}
-                              >
-                                <span>{getColormapDisplayName(colormap)}</span>
-                                {isDefault && (
-                                  <Typography
-                                    component="span"
-                                    sx={{
-                                      fontSize: "10px",
-                                      color: "#999",
-                                      fontStyle: "italic",
-                                    }}
-                                  >
-                                    (default)
-                                  </Typography>
-                                )}
-                              </Box>
-                            }
-                            primaryTypographyProps={{
-                              fontSize: "13px",
-                              fontWeight: isSelected ? 600 : 400,
-                              color: isSelected ? "#4A90E2" : "#212121",
+                              "&:hover": {
+                                backgroundColor: "rgba(0, 0, 0, 0.04)",
+                              },
                             }}
-                          />
-                          {isSelected && (
-                            <CheckIcon
-                              sx={{
-                                fontSize: "18px",
-                                color: "#4A90E2",
-                                marginLeft: 1,
+                          >
+                            <ListItemText
+                              primary={
+                                <Box
+                                  sx={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 1,
+                                  }}
+                                >
+                                  <span>
+                                    {getColormapDisplayName(colormap)}
+                                  </span>
+                                  {isDefault && (
+                                    <Typography
+                                      component="span"
+                                      sx={{
+                                        fontSize: "10px",
+                                        color: "#999",
+                                        fontStyle: "italic",
+                                      }}
+                                    >
+                                      (default)
+                                    </Typography>
+                                  )}
+                                </Box>
+                              }
+                              primaryTypographyProps={{
+                                fontSize: "13px",
+                                fontWeight: isSelected ? 600 : 400,
+                                color: isSelected ? "#4A90E2" : "#212121",
                               }}
                             />
-                          )}
-                        </ListItemButton>
-                      </ListItem>
-                    );
-                  })}
-                </List>
-                <Divider />
-              </Box>
-            );
-          })
-        )}
+                            {isSelected && (
+                              <CheckIcon
+                                sx={{
+                                  fontSize: "18px",
+                                  color: "#4A90E2",
+                                  marginLeft: 1,
+                                }}
+                              />
+                            )}
+                          </ListItemButton>
+                        </ListItem>
+                      );
+                    })}
+                  </List>
+                  <Divider />
+                </Box>
+              );
+            })
+          )}
+        </Box>
       </Paper>
     </Collapse>
   );
