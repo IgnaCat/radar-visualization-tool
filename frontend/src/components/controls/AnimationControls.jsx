@@ -17,12 +17,12 @@ function formatTimestampToLocal(timestamp) {
     const localDate = new Date(utcDate.getTime() - 3 * 60 * 60 * 1000);
 
     // Formatear como DD/MM/YYYY HH:mm:ss
-    const day = String(localDate.getUTCDate()).padStart(2, '0');
-    const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(localDate.getUTCDate()).padStart(2, "0");
+    const month = String(localDate.getUTCMonth() + 1).padStart(2, "0");
     const year = localDate.getUTCFullYear();
-    const hour = String(localDate.getUTCHours()).padStart(2, '0');
-    const minute = String(localDate.getUTCMinutes()).padStart(2, '0');
-    const second = String(localDate.getUTCSeconds()).padStart(2, '0');
+    const hour = String(localDate.getUTCHours()).padStart(2, "0");
+    const minute = String(localDate.getUTCMinutes()).padStart(2, "0");
+    const second = String(localDate.getUTCSeconds()).padStart(2, "0");
 
     return `${day}/${month}/${year} ${hour}:${minute}:${second}`;
   } catch (error) {
@@ -36,8 +36,10 @@ export default function AnimationControls({
   currentIndex,
   setCurrentIndex,
   showPlayButton = false,
+  isSplitScreen = false,
 }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const metadataBoxWidth = isSplitScreen ? "122%" : "65%";
 
   useEffect(() => {
     let interval = null;
@@ -202,7 +204,7 @@ export default function AnimationControls({
         position="absolute"
         bottom={0}
         left="50%"
-        width="70%"
+        width={metadataBoxWidth}
         bgcolor="white"
         py={1}
         px={2}
@@ -232,12 +234,16 @@ export default function AnimationControls({
                 <> | Vol {frameInfo.volumes.join(", ")}</>
               )}
               {frameInfo.timestamp && (
-                <> | {formatTimestampToLocal(frameTimestamp) || `Imagen ${currentIndex + 1}`} (Frame{" "}
-                  {currentIndex + 1} de {overlayData.outputs.length})</>
+                <>
+                  {" "}
+                  |{" "}
+                  {formatTimestampToLocal(frameTimestamp) ||
+                    `Imagen ${currentIndex + 1}`}{" "}
+                  (Frame {currentIndex + 1} de {overlayData.outputs.length})
+                </>
               )}
             </Box>
           )}
-
         </Box>
       </Box>
     </Box>
