@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -12,19 +12,61 @@ import {
   IconButton,
 } from "@mui/material";
 import { Close as CloseIcon, Add as AddIcon } from "@mui/icons-material";
-import Draggable from "react-draggable";
+import { useDraggableResizable } from "../../hooks/useDraggableResizable";
 import ElevationChart from "../ui/ElevationChart";
 
-function PaperComponent(props) {
-  const nodeRef = useRef(null);
+function PaperComponent({ dialogStateRef, ...props }) {
+  const savedPos = dialogStateRef.current.position;
+  const savedSize = dialogStateRef.current.size;
+  const initWidth = savedSize?.width || 700;
+  const initHeight = savedSize?.height || 350;
+  const initX = savedPos?.x ?? 0;
+  const initY = savedPos?.y ?? 0;
+
+  const { nodeRef, position, size, cursor, handleMouseDown, handleMouseMove } =
+    useDraggableResizable({
+      initialX: initX,
+      initialY: initY,
+      initialWidth: initWidth,
+      initialHeight: initHeight,
+      minWidth: 400,
+      minHeight: 320,
+      edgeSize: 15,
+      centerOnMount: !savedPos,
+      onPositionChange: (pos) => {
+        dialogStateRef.current.position = pos;
+      },
+      onSizeChange: (sz) => {
+        dialogStateRef.current.size = sz;
+      },
+    });
+
   return (
-    <Draggable
-      nodeRef={nodeRef}
-      handle="#draggable-dialog-title"
-      cancel={'[class*="MuiDialogContent-root"]'}
-    >
-      <Paper {...props} ref={nodeRef} />
-    </Draggable>
+    <Paper
+      {...props}
+      ref={nodeRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      sx={{
+        "&&": {
+          position: "fixed",
+          left: position.x,
+          top: position.y,
+          width: size.width,
+          height: size.height,
+          m: 0,
+          maxWidth: "none",
+          maxHeight: "none",
+        },
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        pointerEvents: "auto",
+        cursor: cursor,
+        zIndex: 1300,
+        userSelect: "none",
+      }}
+    />
   );
 }
 
@@ -55,6 +97,12 @@ export default function ElevationProfileDialog({
   const [isDrawing, setIsDrawing] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [expandedChart, setExpandedChart] = useState(false);
+
+  const dialogStateRef = useRef({ position: null, size: null });
+  const PaperWithState = useCallback(
+    (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
+    [],
+  );
 
   // Limpiar al cerrar
   const handleClose = () => {
@@ -107,28 +155,11 @@ export default function ElevationProfileDialog({
     onHighlightPoint?.(point?.lat || null, point?.lon || null);
   };
 
-  // Calcular ancho dinámico basado en la distancia total
-  const calculateDialogWidth = () => {
-    if (!profileData?.profile || profileData.profile.length === 0) {
-      return "sm";
-    }
-    const lastPoint = profileData.profile[profileData.profile.length - 1];
-    const totalDistance = lastPoint?.distance || 0;
-
-    // Escalar el ancho según la distancia
-    if (totalDistance < 80) return "sm"; // ~600px
-    if (totalDistance < 600) return "md"; // ~900px
-    if (totalDistance < 900) return "lg"; // ~1200px
-    return "xl"; // ~1536px
-  };
-
   return (
     <>
       <Dialog
         open={open && !isMinimized}
         onClose={handleClose}
-        fullWidth
-        maxWidth={calculateDialogWidth()}
         hideBackdrop
         disableEnforceFocus
         disableAutoFocus
@@ -138,9 +169,14 @@ export default function ElevationProfileDialog({
           root: { sx: { pointerEvents: "none" } },
         }}
         PaperProps={{
-          sx: { pointerEvents: "auto", minHeight: "320px" },
+          sx: {
+            pointerEvents: "auto",
+            minHeight: "320px",
+            maxWidth: "none",
+            m: 0,
+          },
         }}
-        PaperComponent={PaperComponent}
+        PaperComponent={PaperWithState}
         aria-labelledby="draggable-dialog-title"
       >
         <DialogTitle
@@ -221,8 +257,8 @@ export default function ElevationProfileDialog({
                 variant="caption"
                 sx={{ mt: 2, color: "text.secondary" }}
               >
-                Atajos: ESC para cancelar, Enter para terminar, Delete para borrar
-                último punto
+                Atajos: ESC para cancelar, Enter para terminar, Delete para
+                borrar último punto
               </Typography>
             </Box>
           )}

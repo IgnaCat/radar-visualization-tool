@@ -1,5 +1,5 @@
 // components/AreaStatsDialog.jsx
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -33,7 +33,7 @@ import {
   Add as AddIcon,
   Close as CloseIcon,
 } from "@mui/icons-material";
-import Draggable from "react-draggable";
+import { useDraggableResizable } from "../../hooks/useDraggableResizable";
 
 // Mapeo de unidades para cada campo
 const FIELD_UNITS = {
@@ -61,16 +61,58 @@ const FIELD_LABELS = {
   PHIDP: "Fase Diferencial",
 };
 
-function PaperComponent(props) {
-  const nodeRef = useRef(null);
+function PaperComponent({ dialogStateRef, ...props }) {
+  const savedPos = dialogStateRef.current.position;
+  const savedSize = dialogStateRef.current.size;
+  const initWidth = savedSize?.width || 760;
+  const initHeight = savedSize?.height || 600;
+  const initX = savedPos?.x ?? 0;
+  const initY = savedPos?.y ?? 0;
+
+  const { nodeRef, position, size, cursor, handleMouseDown, handleMouseMove } =
+    useDraggableResizable({
+      initialX: initX,
+      initialY: initY,
+      initialWidth: initWidth,
+      initialHeight: initHeight,
+      minWidth: 480,
+      minHeight: 400,
+      edgeSize: 15,
+      centerOnMount: !savedPos,
+      onPositionChange: (pos) => {
+        dialogStateRef.current.position = pos;
+      },
+      onSizeChange: (sz) => {
+        dialogStateRef.current.size = sz;
+      },
+    });
+
   return (
-    <Draggable
-      nodeRef={nodeRef}
-      handle="#draggable-dialog-title"
-      cancel={'[class*="MuiDialogContent-root"]'}
-    >
-      <Paper {...props} ref={nodeRef} />
-    </Draggable>
+    <Paper
+      {...props}
+      ref={nodeRef}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      sx={{
+        "&&": {
+          position: "fixed",
+          left: position.x,
+          top: position.y,
+          width: size.width,
+          height: size.height,
+          m: 0,
+          maxWidth: "none",
+          maxHeight: "none",
+        },
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        pointerEvents: "auto",
+        cursor: cursor,
+        zIndex: 1300,
+        userSelect: "none",
+      }}
+    />
   );
 }
 
@@ -130,7 +172,7 @@ export default function AreaStatsDialog({
         console.log(
           "Cargando estadísticas para campo adicional:",
           field,
-          fieldPayload
+          fieldPayload,
         );
         const result = await requestFn(fieldPayload);
         console.log(`Estadísticas cargadas para ${field}:`, result.stats);
@@ -211,12 +253,17 @@ export default function AreaStatsDialog({
     );
   };
 
+  const dialogStateRef = useRef({ position: null, size: null });
+
+  const PaperWithState = useCallback(
+    (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
+    [],
+  );
+
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      fullWidth
-      maxWidth="md"
       hideBackdrop
       disableEnforceFocus
       disableAutoFocus
@@ -226,9 +273,14 @@ export default function AreaStatsDialog({
         root: { sx: { pointerEvents: "none" } },
       }}
       PaperProps={{
-        sx: { pointerEvents: "auto" },
+        sx: {
+          pointerEvents: "auto",
+          minHeight: "320px",
+          maxWidth: "none",
+          m: 0,
+        },
       }}
-      PaperComponent={PaperComponent}
+      PaperComponent={PaperWithState}
       aria-labelledby="draggable-dialog-title"
     >
       <DialogTitle
@@ -248,7 +300,7 @@ export default function AreaStatsDialog({
         </Box>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 3 }}>
+      <DialogContent sx={{ p: 3, overflow: "auto", flex: 1 }}>
         {loading && (
           <Box sx={{ textAlign: "center", py: 4 }}>
             <Typography color="text.secondary">
