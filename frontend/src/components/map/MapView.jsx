@@ -163,7 +163,6 @@ export default function MapView({
   lineOverlay = null,
   onClearLineOverlay,
   rhiEndpoints = null, // { start: {lat, lon}, end: {lat, lon} }
-  activeToolFile = null, // radar seleccionado para herramientas
   onMapReady, // Callback para recibir la instancia del mapa
   baseMapUrl = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", // URL del mapa base
   baseMapAttribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
@@ -236,13 +235,9 @@ export default function MapView({
                 ? opacityByField[keyField]
                 : (opacities[idx] ?? 1);
 
-          // Las capas del radar seleccionado se muestran arriba (mayor zIndex)
-          // El orden en el array es bottom-to-top, así que invertimos idx para zIndex
-          const isActiveRadar =
-            activeToolFile && L.source_file === activeToolFile;
-          const zIndex = isActiveRadar
-            ? baseZ + 1000 + (n - 1 - idx) * 10 // radar activo: zIndex muy alto, orden invertido
-            : baseZ + (n - 1 - idx) * 10; // otros radares: zIndex normal, orden invertido
+          // El orden del array refleja la prioridad del LayerManager (bottom-to-top),
+          // invertimos idx para que la capa con mayor prioridad tenga mayor zIndex
+          const zIndex = baseZ + (n - 1 - idx) * 10;
 
           return (
             <COGTile

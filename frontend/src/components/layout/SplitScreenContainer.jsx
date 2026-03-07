@@ -65,10 +65,11 @@ export default function SplitScreenContainer({
   const [filtersUsed2, setFiltersUsed2] = useState([]);
   const [activeElevation2, setActiveElevation2] = useState(null);
   const [activeHeight2, setActiveHeight2] = useState(null);
-  const [activeToolFile2, setActiveToolFile2] = useState(null);
   const [warnings2, setWarnings2] = useState([]);
   const [product2, setProduct2] = useState("PPI");
   const [loading2, setLoading2] = useState(false);
+  // Capas ocultas del segundo mapa (independiente del primero)
+  const [hiddenLayers2, setHiddenLayers2] = useState(new Set());
 
   const drawnLayerRef2 = useRef(null);
 
@@ -188,6 +189,8 @@ export default function SplitScreenContainer({
         setActiveHeight2(data.height);
         setInitialColormaps2({ ...selectedColormaps2 });
         setProduct2(data.product || "PPI");
+        // Limpiar capas ocultas al reprocesar el mapa 2
+        setHiddenLayers2(new Set());
       }
     } catch (error) {
       console.error("Error al procesar producto en mapa 2:", error);
@@ -203,7 +206,11 @@ export default function SplitScreenContainer({
     // Similar al mapa 1
     try {
       const payload = {
-        filepath: activeToolFile2 || sharedProps.uploadedFiles[currentIndex2],
+        // Usar la capa con mayor prioridad del mapa 2 (primera en el overlay ordenado)
+        filepath:
+          (Array.isArray(overlayData2) &&
+            overlayData2[currentIndex2]?.[0]?.source_file) ||
+          sharedProps.uploadedFiles[currentIndex2],
         field: fieldsUsed2?.[0] || "DBZH",
         product: product2 || "PPI",
         elevation: activeElevation2,
@@ -344,8 +351,6 @@ export default function SplitScreenContainer({
           filtersUsed={map1Props.filtersUsed}
           activeElevation={map1Props.activeElevation}
           activeHeight={map1Props.activeHeight}
-          activeToolFile={map1Props.activeToolFile}
-          setActiveToolFile={map1Props.setActiveToolFile}
           radarSite={map1Props.radarSite}
           warnings={map1Props.warnings}
           availableDownloads={map1Props.availableDownloads}
@@ -373,11 +378,24 @@ export default function SplitScreenContainer({
         >
           <MapPanel
             panelId="secondary"
-            overlayData={
+            overlayData={(() => {
+              // Filtrar capas ocultas del mapa 2 para el render
+              const frame =
+                Array.isArray(overlayData2) && overlayData2.length > 0
+                  ? overlayData2[currentIndex2]
+                  : null;
+              if (!Array.isArray(frame) || hiddenLayers2.size === 0) return frame;
+              const filtered = frame.filter(
+                (l) => !hiddenLayers2.has(`${l.field}::${l.source_file}`),
+              );
+              return filtered.length > 0 ? filtered : [];
+            })()}
+            allLayersOverlay={
               Array.isArray(overlayData2) && overlayData2.length > 0
                 ? overlayData2[currentIndex2]
                 : null
             }
+            hiddenLayers={hiddenLayers2}
             mergedOutputs={overlayData2}
             opacity={opacity2}
             opacityByField={opacityByField2}
@@ -441,23 +459,36 @@ export default function SplitScreenContainer({
             onRemoveMarker={(markerId) =>
               setMarkers2((prev) => prev.filter((m) => m.id !== markerId))
             }
-            onLayerReorder={(layers) => {
-              // Aplicar reorden en mapa 2
-              const updatedOverlay = [...(overlayData2[currentIndex2] || [])];
-              layers.forEach((layer, idx) => {
-                const foundIdx = updatedOverlay.findIndex(
-                  (l) => l.field === layer.field,
-                );
-                if (foundIdx !== -1) {
-                  updatedOverlay[foundIdx] = {
-                    ...updatedOverlay[foundIdx],
-                    order: idx,
-                  };
-                }
+            onToggleLayerVisibility={(field, sourceFile) => {
+              const key = `${field}::${sourceFile}`;
+              setHiddenLayers2((prev) => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
               });
-              const newData = [...overlayData2];
-              newData[currentIndex2] = updatedOverlay;
-              setOverlayData2(newData);
+            }}
+            onLayerReorder={(layers) => {
+              if (!Array.isArray(overlayData2)) return;
+              // Aplicar el nuevo orden a TODOS los frames del mapa 2
+              const updated = overlayData2.map((frame) => {
+                if (!Array.isArray(frame)) return frame;
+                // Reubicar las capas según el nuevo orden, usando field + source_file como clave
+                const reordered = [...frame].sort((a, b) => {
+                  const aIdx = layers.findIndex(
+                    (l) => l.field === a.field && l.source_file === a.source_file,
+                  );
+                  const bIdx = layers.findIndex(
+                    (l) => l.field === b.field && l.source_file === b.source_file,
+                  );
+                  if (aIdx === -1 && bIdx === -1) return 0;
+                  if (aIdx === -1) return 1;
+                  if (bIdx === -1) return -1;
+                  return aIdx - bIdx;
+                });
+                return reordered.map((layer, idx) => ({ ...layer, order: idx }));
+              });
+              setOverlayData2(updated);
             }}
             onLayerOpacityChange={(field, sourceFile, value) => {
               const key = `${String(field || "").toUpperCase()}::${sourceFile || ""}`;
@@ -479,8 +510,6 @@ export default function SplitScreenContainer({
             filtersUsed={filtersUsed2}
             activeElevation={activeElevation2}
             activeHeight={activeHeight2}
-            activeToolFile={activeToolFile2}
-            setActiveToolFile={setActiveToolFile2}
             radarSite={map1Props.radarSite}
             warnings={warnings2}
             availableDownloads={{}}

@@ -9,7 +9,6 @@ import ColorPaletteSelector from "../controls/ColorPaletteSelector";
 import LayerManagerDialog from "../dialogs/LayerManagerDialog";
 import FileManagerDialog from "../dialogs/FileManagerDialog";
 import AnimationControls from "../controls/AnimationControls";
-import ActiveLayerPicker from "../controls/ActiveLayerPicker";
 import ProductSelectorDialog from "../dialogs/ProductSelectorDialog";
 import PseudoRHIDialog from "../dialogs/PseudoRHIDialog";
 import AreaStatsDialog from "../dialogs/AreaStatsDialog";
@@ -120,8 +119,6 @@ export default function MapPanel({
   filtersUsed,
   activeElevation,
   activeHeight,
-  activeToolFile,
-  setActiveToolFile,
   radarSite,
   warnings,
   availableDownloads,
@@ -300,14 +297,13 @@ export default function MapPanel({
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-            ]
+                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+              ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
         rhiEndpoints={{ start: rhiLinePreview.start, end: rhiLinePreview.end }}
-        activeToolFile={activeToolFile}
         onMapReady={handleMapReady}
         baseMapUrl={selectedBaseMap.url}
         baseMapAttribution={selectedBaseMap.attribution}
@@ -399,14 +395,6 @@ export default function MapPanel({
 
       <ZoomControls map={localMapInstance} />
 
-      {activeToolFile && (
-        <ActiveLayerPicker
-          layers={Array.isArray(overlayData) ? overlayData : []}
-          value={activeToolFile}
-          onChange={setActiveToolFile}
-        />
-      )}
-
       <ColorLegend overlayData={overlayData} />
 
       {Array.isArray(mergedOutputs) && mergedOutputs.length > 0 && (
@@ -415,6 +403,7 @@ export default function MapPanel({
           currentIndex={currentIndex}
           setCurrentIndex={setCurrentIndex}
           showPlayButton={animation}
+          isSplitScreen={isSplitScreen}
         />
       )}
 
@@ -424,12 +413,12 @@ export default function MapPanel({
         elevations={
           filesInfo.length > 0
             ? filesInfo.reduce(
-              (longest, f) =>
-                f.metadata.elevations.length > longest.length
-                  ? f.metadata.elevations
-                  : longest,
-              filesInfo[0].metadata.elevations || [],
-            )
+                (longest, f) =>
+                  f.metadata.elevations.length > longest.length
+                    ? f.metadata.elevations
+                    : longest,
+                filesInfo[0].metadata.elevations || [],
+              )
             : []
         }
         volumes={volumes}
@@ -442,7 +431,8 @@ export default function MapPanel({
       <PseudoRHIDialog
         open={rhiOpen}
         onClose={() => setRhiOpen(false)}
-        filepath={activeToolFile || uploadedFiles[currentIndex]}
+        // El archivo del radar con mayor prioridad (primera capa del overlay) se usa como fuente para herramientas
+        filepath={overlayData?.[0]?.source_file || uploadedFiles[currentIndex]}
         radarSite={radarSite}
         fields_present={(() => {
           const fields = Array.from(
@@ -464,7 +454,9 @@ export default function MapPanel({
         onClose={handleCloseAreaStats}
         requestFn={onAreaStatsRequest}
         payload={{
-          filepath: activeToolFile || uploadedFiles[currentIndex],
+          // Archivo del radar con mayor prioridad (primera capa del overlay)
+          filepath:
+            overlayData?.[0]?.source_file || uploadedFiles[currentIndex],
           field: fieldsUsed?.[0] || "DBZH",
           product: product || "PPI",
           elevation: activeElevation,

@@ -164,8 +164,6 @@ export default function App() {
   const [areaPolygon, setAreaPolygon] = useState(null);
   const [areaStatsOpen, setAreaStatsOpen] = useState(false);
   const drawnLayerRef = useRef(null); // referencia a la capa dibujada
-  // archivo seleccionado manualmente para herramientas (pixel/área/RHI)
-  const [activeToolFile, setActiveToolFile] = useState(null);
   // Estado para el selector de mapas base
   const [mapSelectorOpen, setMapSelectorOpen] = useState(false);
   // Estado para el perfil de elevación
@@ -195,11 +193,15 @@ export default function App() {
   // Estado para split screen
   const [splitScreenActive, setSplitScreenActive] = useState(false);
 
-  // Derivar sitio del radar a partir del archivo activo o el archivo actual en visualización
+  // Derivar sitio del radar a partir de la capa de mayor prioridad (primera en el overlay, ordenada por LayerManager)
   const radarSite = useMemo(() => {
-    const fileToUse = activeToolFile || uploadedFiles[currentIndex];
+    // Con múltiples radares: usar la capa con mayor prioridad (order más bajo = más arriba en LayerManager)
+    const topLayerFile =
+      Array.isArray(currentOverlay) && currentOverlay.length > 0
+        ? currentOverlay[0]?.source_file
+        : null;
+    const fileToUse = topLayerFile || uploadedFiles[currentIndex];
     if (!fileToUse) return null;
-    // Buscar metadata del archivo
     const fi = filesInfo.find((f) => f.filepath === fileToUse);
     const md = fi?.metadata;
     if (!md) return null;
@@ -210,7 +212,7 @@ export default function App() {
       lon: Number(site.lon),
       alt_m: site.alt_m ?? site.alt ?? null,
     };
-  }, [activeToolFile, uploadedFiles, currentIndex, filesInfo]);
+  }, [currentOverlay, uploadedFiles, currentIndex, filesInfo]);
 
   // Hook para acciones del mapa (screenshot, print, fullscreen)
   const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } =
@@ -256,32 +258,6 @@ export default function App() {
     return filtered.length > 0 ? filtered : [];
   }, [currentOverlay, hiddenLayers]);
 
-  // Sincronizar archivo activo con las capas visibles del frame actual
-  // Solo se setea activeToolFile cuando hay múltiples RADARES diferentes (no múltiples fields del mismo radar)
-  useEffect(() => {
-    if (!Array.isArray(currentOverlay) || currentOverlay.length === 0) {
-      setActiveToolFile(null);
-      return;
-    }
-
-    // Usar la información del radar que ya viene anotada desde mergeRadarFrames
-    const radarNames = [
-      ...new Set(currentOverlay.map((L) => L?.radar).filter(Boolean)),
-    ];
-    const sources = currentOverlay.map((L) => L?.source_file).filter(Boolean);
-
-    // Solo setear activeToolFile si hay múltiples radares diferentes
-    if (radarNames.length > 1) {
-      // Múltiples radares: setear activeToolFile al primero (o mantener el actual si está en la lista)
-      setActiveToolFile((prev) =>
-        prev && sources.includes(prev) ? prev : sources[0],
-      );
-    } else {
-      // Un solo radar (aunque tenga múltiples fields): NO setear activeToolFile
-      setActiveToolFile(null);
-    }
-  }, [currentOverlay]);
-
   // Función para descargar COGs de las capas actuales
   const handleDownloadCOGs = useCallback(async () => {
     if (!currentOverlay || currentOverlay.length === 0) {
@@ -292,17 +268,17 @@ export default function App() {
     }
 
     try {
-      // Filtrar capas: solo las del radar activo (activeToolFile)
-      // Esto permite descargar todos los fields del radar activo, pero no de otros radares
+      // Con múltiples radares, descargar solo las capas del radar con mayor prioridad (el de arriba en LayerManager)
+      const topRadarFile = currentOverlay?.[0]?.source_file;
+      const hasMultipleRadars =
+        new Set(currentOverlay.map((l) => l.source_file).filter(Boolean)).size >
+        1;
+
       const layersToDownload = currentOverlay.filter((layer) => {
         if (!layer.image_url) return false;
-
-        // Si hay activeToolFile, solo descargar capas de ese radar
-        if (activeToolFile && layer.source_file) {
-          return layer.source_file === activeToolFile;
+        if (hasMultipleRadars && topRadarFile && layer.source_file) {
+          return layer.source_file === topRadarFile;
         }
-
-        // Si no hay activeToolFile, descargar todas las capas con image_url
         return true;
       });
 
@@ -367,7 +343,7 @@ export default function App() {
       console.error("Error descargando COGs:", error);
       enqueueSnackbar("Error al descargar archivos COG", { variant: "error" });
     }
-  }, [currentOverlay, activeToolFile, generateFilename, enqueueSnackbar]);
+  }, [currentOverlay, generateFilename, enqueueSnackbar]);
 
   // Configurar descargas disponibles para el toolbar
   const availableDownloads = useMemo(() => {
@@ -384,11 +360,15 @@ export default function App() {
 
     // Descargar COGs de capas actuales
     if (currentOverlay && currentOverlay.length > 0) {
+      // Con múltiples radares solo se descarga el de mayor prioridad, de lo contrario todas las capas
+      const hasMultiRadar =
+        new Set(
+          (currentOverlay || []).map((l) => l.source_file).filter(Boolean),
+        ).size > 1;
       downloads.cogLayers = {
-        //mostrar el nombre del archivo activo si hay uno  no todo el path d:/...
         handler: handleDownloadCOGs,
-        label: activeToolFile
-          ? `Descargar capa de radar seleccionado`
+        label: hasMultiRadar
+          ? `Descargar capas del radar principal`
           : `Descargar ${currentOverlay.length} capa(s) Geotiff`,
         disabled: false,
       };
@@ -1003,14 +983,9 @@ export default function App() {
       setSavedLayers(reorderedSavedLayers);
     }
 
-    // Actualizar activeToolFile y fieldsUsed según la primera capa del nuevo orden
+    // Sincronizar fieldsUsed con el nuevo orden para que pixel/area stats
+    // usen el campo de la primera capa visible
     if (updatedLayers.length > 0) {
-      const firstRadarFile = updatedLayers[0].source_file;
-      if (firstRadarFile !== activeToolFile) {
-        setActiveToolFile(firstRadarFile);
-      }
-      // Sincronizar fieldsUsed con el nuevo orden para que pixel/area stats
-      // usen el campo de la primera capa visible
       setFieldsUsed(uniqueFields);
     }
 
@@ -1097,7 +1072,9 @@ export default function App() {
   const handleMapClickPixelStat = async (latlng) => {
     try {
       const payload = {
-        filepath: activeToolFile || uploadedFiles[currentIndex],
+        // Usar la capa con mayor prioridad (primera tras el orden del LayerManager)
+        filepath:
+          currentOverlay?.[0]?.source_file || uploadedFiles[currentIndex],
         field: fieldsUsed?.[0] || "DBZH",
         product: overlayData?.product || "PPI",
         elevation: activeElevation,
@@ -1224,8 +1201,6 @@ export default function App() {
           filtersUsed,
           activeElevation,
           activeHeight,
-          activeToolFile,
-          setActiveToolFile,
           radarSite,
           warnings,
           availableDownloads,
