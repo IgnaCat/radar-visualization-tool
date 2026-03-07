@@ -9,9 +9,9 @@ function getTextColor(hex) {
   const bigint = parseInt(
     clean.length === 3
       ? clean
-        .split("")
-        .map((c) => c + c)
-        .join("")
+          .split("")
+          .map((c) => c + c)
+          .join("")
       : clean,
     16,
   );
@@ -77,6 +77,7 @@ const LEGENDS = {
       { value: 2.5, color: "#66b3df", label: "Lluvia moderada" },
       { value: 1.5, color: "#0055FF", label: "Lluvia leve" },
       { value: 0, color: "#b7b7b7", label: "Granizo / Llovisna / Nieve" },
+      { value: -2, color: "#b7b7b7", label: "Granizo / Llovisna / Nieve" },
     ],
   },
   RHOHV: {
@@ -305,8 +306,8 @@ export default function ColorLegend({
     const gradient = `linear-gradient(to bottom, ${colors.join(", ")})`;
 
     // Altura de la barra
-    const barHeight = 200;
-    const barWidth = 20;
+    const barHeight = 150;
+    const barWidth = 12;
 
     return (
       <div
@@ -315,8 +316,8 @@ export default function ColorLegend({
           display: "flex",
           flexDirection: "row",
           alignItems: "center",
-          gap: 2,
-          marginLeft: 10,
+          gap: 0,
+          marginLeft: 4,
         }}
       >
         {/* Barra de colores continua */}
@@ -326,7 +327,6 @@ export default function ColorLegend({
             flexDirection: "column",
             alignItems: "center",
             position: "relative",
-
           }}
         >
           <Typography
@@ -335,7 +335,7 @@ export default function ColorLegend({
             sx={{
               marginBottom: 1,
               fontWeight: "bold",
-              fontSize: "0.85rem",
+              fontSize: "0.8rem",
             }}
           >
             {fieldKey}
@@ -360,17 +360,17 @@ export default function ColorLegend({
             flexDirection: "column",
             justifyContent: "space-between",
             height: barHeight,
-            marginTop: 24, // Compensar el título
+            marginTop: 22, // Compensar el título
           }}
         >
           {fieldValues.map((value, idx) => (
             <div
               key={`${fieldKey}-value-${idx}`}
               style={{
-                fontSize: "0.7rem",
+                fontSize: "0.65rem",
                 color: "white",
                 fontWeight: "350",
-                textShadow: "1px 1px 10px rgba(0,0,0,0.8)",
+                textShadow: "1px 1px 8px rgba(0,0,0,0.8)",
                 lineHeight: 1,
               }}
               title={legendData?.steps?.[idx]?.label || `${fieldKey}: ${value}`}
@@ -391,14 +391,14 @@ export default function ColorLegend({
     <div
       style={{
         position: "absolute",
-        left: 0,
+        left: 10,
         bottom: 10,
         zIndex: 1000,
         display: "flex",
         flexDirection: "row",
         alignItems: "flex-start",
-        gap: 15,
-        padding: 4,
+        gap: 4,
+        padding: 2,
         ...style,
       }}
     >
