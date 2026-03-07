@@ -1,7 +1,21 @@
 import os
 import sys
 import logging
+import importlib.util
 from pathlib import Path
+
+# Fix PROJ database version conflict: osgeo ships an older proj.db (minor=3)
+# but rasterio/pyproj expect minor>=4. Must be set before osgeo/rasterio import
+# so that PROJ finds the correct data dir when it first initialises.
+for _pkg, _rel in [("pyproj", "proj_dir/share/proj"), ("rasterio", "proj_data")]:
+    _spec = importlib.util.find_spec(_pkg)
+    if _spec and _spec.submodule_search_locations:
+        _proj_data = Path(next(iter(_spec.submodule_search_locations))) / _rel
+        if (_proj_data / "proj.db").exists():
+            os.environ["PROJ_DATA"] = str(_proj_data)
+            os.environ["PROJ_LIB"] = str(_proj_data)
+            break
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
