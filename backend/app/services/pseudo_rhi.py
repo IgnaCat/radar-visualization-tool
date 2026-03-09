@@ -438,11 +438,10 @@ def _generate_segment_transect_png(
     # ── Parámetros de grilla (idéntico a radar_processor.py) ──
     range_max_m = safe_range_max_m(radar)
     
-    _, z_top_m, elev_deg = calculate_z_limits(
+    _, toa, elev_deg = calculate_z_limits(
         range_max_m, elevation=0, cappi_height=4000,
         radar_fixed_angles=radar.fixed_angle['data']
     )
-    toa = 12000
     
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
     

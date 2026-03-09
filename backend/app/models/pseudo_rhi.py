@@ -26,7 +26,7 @@ class PseudoRHIRequest(BaseModel):
         description="Longitud máxima del gráfico en km (0.5 - 300). Default 240 km"
     )
     min_height_km: Optional[float] = Field(
-        default=0.0, ge=0.0, le=29.9,
+        default=0.0, ge=-10.0, le=29.9,
         description="Altura mínima del gráfico en km. Default 0 km"
     )
     max_height_km: Optional[float] = Field(

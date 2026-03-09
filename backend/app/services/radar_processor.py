@@ -181,8 +181,8 @@ def process_radar_to_cog(
         range_max_m, elevation, cappi_height, radar.fixed_angle['data']
     )
 
-    # TOA (Top of Atmosphere)
-    toa = 12000.0
+    # TOA (Top of Athmosphere) dinámico: z_max ya viene redondeado a múltiplos de 20 km por calculate_z_limits.
+    toa = z_max
 
     # Generamos la imagen PNG para previsualización y referencia
     # png.create_png(

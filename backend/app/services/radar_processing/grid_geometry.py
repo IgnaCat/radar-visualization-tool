@@ -93,38 +93,42 @@ def calculate_z_limits(
     range_max_m: float,
     elevation: int = 0,
     cappi_height: float = 4000,
-    radar_fixed_angles=None
+    radar_fixed_angles=None,
+    round_to_km: int = 20,
 ) -> tuple[float, float, float | None]:
     """
     Calcula límites verticales (z_min, z_max).
-    
+
     Args:
         range_max_m: Rango máximo del radar en metros
         elevation: Índice de elevación (para PPI)
         cappi_height: Altura CAPPI en metros (para CAPPI)
         radar_fixed_angles: Array con ángulos de elevación fijos del radar
-    
+        round_to_km: Redondear z_max hacia arriba a múltiplos de este valor en km
+                     (default 20). Estabiliza el caché: mediciones del mismo radar
+                     con alturas máximas ligeramente distintas convergen al mismo
+                     z_max y reutilizan la grilla 3D y el operador W cacheados.
+                     Pasar 0 para desactivar el redondeo.
+
     Returns:
         Tupla (z_min, z_max, elev_deg) donde:
             - z_min: Altura mínima en metros (siempre 0.0)
-            - z_max: Altura máxima en metros
-            - elev_deg: Ángulo de elevación usado (None para CAPPI)
+            - z_max: Altura máxima en metros (redondeada hacia arriba)
+            - elev_deg: Ángulo de elevación usado
     """
-    # if product_upper == "CAPPI":
-    #     z_top_m = cappi_height + 2000  # +2 km de margen
-    #     elev_deg = None
-    # No hago diferenciacion por vista (PPI, etc) para manejar siempre la misma grilla 3d
-        
 
     if radar_fixed_angles is None:
         raise ValueError("radar_fixed_angles requerido para PPI/COLMAX")
-    
+
     elev_deg = float(radar_fixed_angles[elevation])
     hmax_km = beam_height_max_km(range_max_m, elev_deg)
-    z_top_m = int((hmax_km + 3) * 1000)  # +3 km de margen
+    z_top_m = (hmax_km + 3) * 1000  # +3 km de margen
 
-    
-    return (0.0, z_top_m, elev_deg)
+    if round_to_km > 0:
+        step_m = round_to_km * 1000.0
+        z_top_m = math.ceil(z_top_m / step_m) * step_m
+
+    return (0.0, float(z_top_m), elev_deg)
 
 
 def calculate_grid_resolution(volume: str | None) -> tuple[float, float]:
