@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -12,63 +12,8 @@ import {
   IconButton,
 } from "@mui/material";
 import { Close as CloseIcon, Add as AddIcon } from "@mui/icons-material";
-import { useDraggableResizable } from "../../hooks/useDraggableResizable";
+import { useDraggableDialogPaper } from "./DraggableDialogPaper";
 import ElevationChart from "../ui/ElevationChart";
-
-function PaperComponent({ dialogStateRef, ...props }) {
-  const savedPos = dialogStateRef.current.position;
-  const savedSize = dialogStateRef.current.size;
-  const initWidth = savedSize?.width || 700;
-  const initHeight = savedSize?.height || 350;
-  const initX = savedPos?.x ?? 0;
-  const initY = savedPos?.y ?? 0;
-
-  const { nodeRef, position, size, cursor, handleMouseDown, handleMouseMove } =
-    useDraggableResizable({
-      initialX: initX,
-      initialY: initY,
-      initialWidth: initWidth,
-      initialHeight: initHeight,
-      minWidth: 400,
-      minHeight: 320,
-      edgeSize: 15,
-      centerOnMount: !savedPos,
-      onPositionChange: (pos) => {
-        dialogStateRef.current.position = pos;
-      },
-      onSizeChange: (sz) => {
-        dialogStateRef.current.size = sz;
-      },
-    });
-
-  return (
-    <Paper
-      {...props}
-      ref={nodeRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      sx={{
-        "&&": {
-          position: "fixed",
-          left: position.x,
-          top: position.y,
-          width: size.width,
-          height: size.height,
-          m: 0,
-          maxWidth: "none",
-          maxHeight: "none",
-        },
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        pointerEvents: "auto",
-        cursor: cursor,
-        zIndex: 1300,
-        userSelect: "none",
-      }}
-    />
-  );
-}
 
 /**
  * Props:
@@ -98,11 +43,12 @@ export default function ElevationProfileDialog({
   const [isMinimized, setIsMinimized] = useState(false);
   const [expandedChart, setExpandedChart] = useState(false);
 
-  const dialogStateRef = useRef({ position: null, size: null });
-  const PaperWithState = useCallback(
-    (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
-    [],
-  );
+  const { PaperComponent: PaperWithState } = useDraggableDialogPaper({
+    defaultWidth: 700,
+    defaultHeight: 350,
+    minWidth: 400,
+    minHeight: 320,
+  });
 
   // Limpiar al cerrar
   const handleClose = () => {

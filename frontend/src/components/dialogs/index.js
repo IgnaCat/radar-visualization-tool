@@ -1,4 +1,8 @@
 // Componentes de diálogos y modales
+export {
+  default as DraggableDialogPaper,
+  useDraggableDialogPaper,
+} from "./DraggableDialogPaper";
 export { default as ProductSelectorDialog } from "./ProductSelectorDialog";
 export { default as PseudoRHIDialog } from "./PseudoRHIDialog";
 export { default as AreaStatsDialog } from "./AreaStatsDialog";

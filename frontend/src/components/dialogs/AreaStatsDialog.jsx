@@ -1,5 +1,5 @@
 // components/AreaStatsDialog.jsx
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -33,7 +33,7 @@ import {
   Add as AddIcon,
   Close as CloseIcon,
 } from "@mui/icons-material";
-import { useDraggableResizable } from "../../hooks/useDraggableResizable";
+import { useDraggableDialogPaper } from "./DraggableDialogPaper";
 
 // Mapeo de unidades para cada campo
 const FIELD_UNITS = {
@@ -60,61 +60,6 @@ const FIELD_LABELS = {
   WRAD: "Ancho Espectral",
   PHIDP: "Fase Diferencial",
 };
-
-function PaperComponent({ dialogStateRef, ...props }) {
-  const savedPos = dialogStateRef.current.position;
-  const savedSize = dialogStateRef.current.size;
-  const initWidth = savedSize?.width || 760;
-  const initHeight = savedSize?.height || 600;
-  const initX = savedPos?.x ?? 0;
-  const initY = savedPos?.y ?? 0;
-
-  const { nodeRef, position, size, cursor, handleMouseDown, handleMouseMove } =
-    useDraggableResizable({
-      initialX: initX,
-      initialY: initY,
-      initialWidth: initWidth,
-      initialHeight: initHeight,
-      minWidth: 480,
-      minHeight: 400,
-      edgeSize: 15,
-      centerOnMount: !savedPos,
-      onPositionChange: (pos) => {
-        dialogStateRef.current.position = pos;
-      },
-      onSizeChange: (sz) => {
-        dialogStateRef.current.size = sz;
-      },
-    });
-
-  return (
-    <Paper
-      {...props}
-      ref={nodeRef}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      sx={{
-        "&&": {
-          position: "fixed",
-          left: position.x,
-          top: position.y,
-          width: size.width,
-          height: size.height,
-          m: 0,
-          maxWidth: "none",
-          maxHeight: "none",
-        },
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        pointerEvents: "auto",
-        cursor: cursor,
-        zIndex: 1300,
-        userSelect: "none",
-      }}
-    />
-  );
-}
 
 /**
  * Props:
@@ -253,12 +198,12 @@ export default function AreaStatsDialog({
     );
   };
 
-  const dialogStateRef = useRef({ position: null, size: null });
-
-  const PaperWithState = useCallback(
-    (props) => <PaperComponent {...props} dialogStateRef={dialogStateRef} />,
-    [],
-  );
+  const { PaperComponent: PaperWithState } = useDraggableDialogPaper({
+    defaultWidth: 760,
+    defaultHeight: 600,
+    minWidth: 480,
+    minHeight: 400,
+  });
 
   return (
     <Dialog
