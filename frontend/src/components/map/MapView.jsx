@@ -298,7 +298,16 @@ export default function MapView({
             center={[rhiEndpoints.start.lat, rhiEndpoints.start.lon]}
             radius={6}
             pathOptions={{ color: "#00aaff", weight: 2, fillOpacity: 0.7 }}
-          />
+          >
+            <Tooltip
+              direction="top"
+              offset={[0, -6]}
+              permanent
+              className="rhi-label-tooltip"
+            >
+              A
+            </Tooltip>
+          </CircleMarker>
         )}
       {rhiEndpoints?.end &&
         Number.isFinite(rhiEndpoints.end.lat) &&
@@ -307,7 +316,16 @@ export default function MapView({
             center={[rhiEndpoints.end.lat, rhiEndpoints.end.lon]}
             radius={6}
             pathOptions={{ color: "#00aaff", weight: 2, fillOpacity: 0.7 }}
-          />
+          >
+            <Tooltip
+              direction="top"
+              offset={[0, -6]}
+              permanent
+              className="rhi-label-tooltip"
+            >
+              B
+            </Tooltip>
+          </CircleMarker>
         )}
       {Array.isArray(lineOverlay) && lineOverlay.length === 2 && (
         <Polyline

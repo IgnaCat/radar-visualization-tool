@@ -1,6 +1,6 @@
 :root {
-  font-family: "Inter", "Segoe UI", system-ui, Avenir, Helvetica, Arial,
-    sans-serif;
+  font-family:
+    "Inter", "Segoe UI", system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -85,6 +85,23 @@ button:focus-visible {
 
 .leaflet-container {
   font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+}
+
+/* Tooltip transparente para marcadores RHI A/B */
+.rhi-label-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #00aaff;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 0 !important;
+  text-shadow:
+    0 0 3px #000,
+    0 0 3px #000;
+}
+.rhi-label-tooltip::before {
+  display: none !important;
 }
 
 /* Ocultar controles de zoom nativos de Leaflet */
