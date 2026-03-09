@@ -137,7 +137,6 @@ export default function App() {
   // animación controlada por variable 'animation' derivada de outputs
   const [computeKey, setComputeKey] = useState("");
   const [warnings, setWarnings] = useState([]);
-  // var currentOverlay = overlayData.outputs?.[currentIndex] || null;
   const [mapInstance, setMapInstance] = useState(null); // Referencia al mapa Leaflet
 
   const [alert, setAlert] = useState({
@@ -219,7 +218,7 @@ export default function App() {
     useMapActions();
 
   // Hook para gestión de descargas
-  const { downloadFile, generateFilename } = useDownloads();
+  const { generateFilename } = useDownloads();
 
   // Registrar cleanup en cierre de pestaña/ventana
   useEffect(() => {
@@ -238,7 +237,6 @@ export default function App() {
   let mergedOutputs = [];
   let animation = false;
   let product = overlayData.product || "PPI";
-  // const product = overlayData.product;
   if (overlayData.results) {
     mergedOutputs = mergeRadarFrames(overlayData.results);
     animation = mergedOutputs.length > 1;
@@ -532,12 +530,6 @@ export default function App() {
       setHiddenLayers(new Set()); // Limpiar capas ocultas al reprocesar
       // Guardar las paletas usadas como "iniciales" para futuras comparaciones
       setInitialColormaps({ ...selectedColormaps });
-      // Animación se calcula dinámicamente más abajo
-      // Animación se calcula dinámicamente más abajo
-
-      // Guardar todos los cogs para el cleanup
-      // const fromOutputs = cogFsPaths(processResp.data?.outputs || []);
-      // fromOutputs.forEach((p) => allCogsRef.current.add(p));
 
       setAlert({
         open: true,
@@ -554,29 +546,6 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleOpenRHI = () => setRhiOpen(true);
-
-  const handleRequestPickPoint = () => {
-    // Activar modo pick point en el mapa para el RHI
-    setPickedPoint(null);
-    setPickPointMode(true);
-  };
-  const handlePickPoint = (pt) => {
-    setPickedPoint(pt);
-    // No desactivar pickPointMode aquí - se maneja desde PseudoRHIDialog
-    // No modificar rhiLinePreview aquí - lo maneja PseudoRHIDialog vía onLinePreviewChange
-  };
-  const handleClearPickedPoint = () => {
-    setPickedPoint(null);
-    setPickPointMode(false); // Desactivar cuando se limpia
-    setRhiLinePreview({ start: null, end: null });
-  };
-
-  // Callback para limpiar la línea cuando se limpian los puntos
-  const handleClearLineOverlay = () => {
-    setRhiLinePreview({ start: null, end: null });
   };
 
   const handleGenerateRHI = async ({
@@ -611,41 +580,10 @@ export default function App() {
     return resp.data;
   };
 
-  const handleOpenAreaStatsMode = () => {
-    setAreaPolygon(null);
-    setAreaDrawMode(true);
-  };
-
-  const handleAreaComplete = (gj, layer) => {
-    drawnLayerRef.current = layer;
-    setAreaDrawMode(false);
-    setAreaPolygon(gj);
-    setAreaStatsOpen(true);
-  };
-
-  const handleCloseAreaStats = () => {
-    // al cerrar el diálogo, removemos la capa del mapa
-    try {
-      drawnLayerRef.current?.remove();
-    } catch {
-      console.log("Error");
-    }
-    drawnLayerRef.current = null;
-    setAreaStatsOpen(false);
-  };
-
   const handleAreaStatsRequest = async (payload) => {
     // backend espera: filepath, field, product, elevation?, height?, filters?, polygon
     const r = await generateAreaStats({ ...payload, session_id: sessionId });
     return r.data;
-  };
-
-  const handleTogglePixelStat = () => {
-    setPixelStatMode((v) => {
-      const next = !v;
-      if (!next) setPixelStatMarker(null);
-      return next;
-    });
   };
 
   // Handlers para modo de marcadores
@@ -659,39 +597,6 @@ export default function App() {
 
   const handleRemoveMarker = (markerId) => {
     setMarkers((prev) => prev.filter((m) => m.id !== markerId));
-  };
-
-  const handleToggleMapSelector = () => {
-    setMapSelectorOpen((prev) => !prev);
-  };
-
-  const handleSelectBaseMap = (map) => {
-    setSelectedBaseMap(map);
-  };
-
-  // Handlers para selector de paletas de color
-  const handleTogglePaletteSelector = () => {
-    setPaletteSelectorOpen((prev) => !prev);
-  };
-
-  const handleSelectColormap = (field, colormap) => {
-    setSelectedColormaps((prev) => ({
-      ...prev,
-      [field]: colormap,
-    }));
-  };
-
-  // Handler para aplicar cambios de paleta (reprocesar)
-  const handleApplyColormaps = () => {
-    // Cerrar el selector de paletas
-    setPaletteSelectorOpen(false);
-    // Abrir el ProductSelectorDialog para reprocesar con las nuevas paletas
-    setSelectorOpen(true);
-  };
-
-  // Handlers para gestor de capas
-  const handleToggleLayerManager = () => {
-    setLayerManagerOpen((prev) => !prev);
   };
 
   /**
@@ -1027,48 +932,8 @@ export default function App() {
     });
   };
 
-  // Handlers para perfil de elevación
-  const handleOpenElevationProfile = () => {
-    setElevationProfileOpen(true);
-    setLineDrawingFinished(false);
-  };
-
-  const handleRequestLineDrawing = () => {
-    setLineDrawMode(true);
-    setDrawnLineCoords([]);
-    setLineDrawingFinished(false);
-  };
-
-  const handleLineComplete = (coordinates) => {
-    // El usuario hizo click en el cuadrado blanco - dibujo completo
-    setDrawnLineCoords(coordinates);
-    setLineDrawingFinished(true); // Señal para generar el perfil
-  };
-
-  const handleClearLineDrawing = () => {
-    setDrawnLineCoords([]);
-    setHighlightedPoint(null);
-    setLineDrawMode(false);
-    setLineDrawingFinished(false);
-  };
-
-  const handleHighlightPoint = (lat, lon) => {
-    if (lat !== null && lon !== null) {
-      setHighlightedPoint({ lat, lon });
-    } else {
-      setHighlightedPoint(null);
-    }
-  };
-
   const handleGenerateElevationProfile = async (coordinates) => {
     return await generateElevationProfile({ coordinates });
-  };
-
-  // Callback para indicar que el perfil fue generado
-  const handleProfileGenerated = () => {
-    // NO desactivamos lineDrawMode para que el dibujo permanezca visible
-    setLineDrawingFinished(false); // Reset de la señal
-    // NO limpiamos drawnLineCoords para que persistan en el mapa
   };
 
   const handleMapClickPixelStat = async (latlng) => {
