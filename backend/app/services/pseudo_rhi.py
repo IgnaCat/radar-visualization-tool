@@ -80,7 +80,9 @@ def variable_radar_cross_section(
     variable='DBZH',
     cmap='viridis',
     filters: List[RangeFilter] = [],
+    plot_min_length_km: Optional[float] = None,
     plot_max_length_km: Optional[float] = None,
+    plot_min_height_km: Optional[float] = None,
     plot_max_height_km: Optional[float] = None,
 ):
     """
@@ -186,10 +188,12 @@ def variable_radar_cross_section(
     # Graficar la variable especificada
     display.plot(variable, 0, vmin=vmin, vmax=vmax, cmap=cmap, ax=ax2, mask_outside=True, gatefilter=gf_xsect)
     # Limites solicitados por el usuario (con fallback)
+    x_min = max(0.0, plot_min_length_km) if plot_min_length_km else 0.0
     x_max = min(range_max, plot_max_length_km) if plot_max_length_km else range_max
+    y_min = max(0.0, plot_min_height_km) if plot_min_height_km else 0.0
     y_max = plot_max_height_km if plot_max_height_km else 30
     y_max = max(0.1, min(y_max, 30))  # clamp razonable
-    display.set_limits(xlim=[0, x_max], ylim=[0, y_max])
+    display.set_limits(xlim=[x_min, x_max], ylim=[y_min, y_max])
     
     # Ajustar tamaño de fuente del colorbar generado por PyART
     for ax_cbar in fig.axes:
@@ -242,6 +246,8 @@ def generate_pseudo_rhi_png(
     end_lat: float,
     max_length_km: float,
     max_height_km: float = 20.0,
+    min_length_km: float = 0.0,
+    min_height_km: float = 0.0,
     elevation: int = 0,
     filters: List[RangeFilter] = [],
     output_dir: str = "app/storage/tmp",
@@ -263,7 +269,7 @@ def generate_pseudo_rhi_png(
         if (start_lon is not None and start_lat is not None)
         else f"{end_lon}_{end_lat}"
     )
-    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{file_hash}.png"
+    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{int(min_length_km)}kmin_{int(min_height_km)}hmin_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
     # Construir URL relativa incluyendo session_id si existe
@@ -328,6 +334,8 @@ def generate_pseudo_rhi_png(
                 output_path=out_path,
                 filters=filters,
                 max_height_km=max_height_km,
+                min_height_km=min_height_km,
+                min_length_km=min_length_km,
                 session_id=session_id,
             )
         else:
@@ -343,7 +351,9 @@ def generate_pseudo_rhi_png(
                 variable=field_name,
                 cmap=cmap,
                 filters=filters,
+                plot_min_length_km=min_length_km,
                 plot_max_length_km=max_length_km,
+                plot_min_height_km=min_height_km,
                 plot_max_height_km=max_height_km,
             )
     else:
@@ -359,7 +369,9 @@ def generate_pseudo_rhi_png(
             variable=field_name,
             cmap=cmap,
             filters=filters,
+            plot_min_length_km=min_length_km,
             plot_max_length_km=max_length_km,
+            plot_min_height_km=min_height_km,
             plot_max_height_km=max_height_km,
         )
 
@@ -398,6 +410,8 @@ def _generate_segment_transect_png(
     output_path: Path,
     filters: List[RangeFilter] = [],
     max_height_km: Optional[float] = None,
+    min_height_km: Optional[float] = None,
+    min_length_km: Optional[float] = None,
     session_id: Optional[str] = None,
 ):
     """
@@ -555,6 +569,7 @@ def _generate_segment_transect_png(
     # Límite vertical para el gráfico
     y_max_val = max_height_km if max_height_km else float(z_km[-1])
     y_max_val = max(0.1, min(y_max_val, 30.0))
+    y_min_val = max(0.0, min_height_km) if min_height_km else 0.0
     
     # ── Obtener unidades de la variable ──
     units = VARIABLE_UNITS.get(field_name, '')
@@ -641,9 +656,10 @@ def _generate_segment_transect_png(
         ax.plot(dist_end_km, end_elev_km, 'r*', markersize=15, label='Punto final')
     
     # Límites
+    x_min = max(0.0, min_length_km) if min_length_km else 0.0
     x_max = length_km
-    ax.set_xlim(0, x_max)
-    ax.set_ylim(0, y_max_val)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min_val, y_max_val)
     
     ax.set_xlabel('Distancia (km)', fontsize=18)
     ax.set_ylabel('Altura (km)', fontsize=18)

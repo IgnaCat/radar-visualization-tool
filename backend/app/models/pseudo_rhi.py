@@ -17,13 +17,21 @@ class PseudoRHIRequest(BaseModel):
     end_lat: float
     start_lon: Optional[float] = None
     start_lat: Optional[float] = None
+    min_length_km: Optional[float] = Field(
+        default=0.0, ge=0.0,
+        description="Longitud mínima del gráfico en km. Default 0 km"
+    )
     max_length_km: Optional[float] = Field(
         default=240.0, 
         description="Longitud máxima del gráfico en km (0.5 - 300). Default 240 km"
     )
+    min_height_km: Optional[float] = Field(
+        default=0.0, ge=0.0, le=29.9,
+        description="Altura mínima del gráfico en km. Default 0 km"
+    )
     max_height_km: Optional[float] = Field(
-        default=20.0, ge=0.5, le=30.0, 
-        description="Altura máxima del gráfico en km (0.5 - 30). Default 20 km"
+        default=20.0, ge=0.1, le=30.0, 
+        description="Altura máxima del gráfico en km (0.1 - 30). Default 20 km"
     )
     elevation: Optional[int] = Field(
         default=0, ge=0, le=12,

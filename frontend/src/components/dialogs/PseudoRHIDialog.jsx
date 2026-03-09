@@ -65,8 +65,10 @@ export default function PseudoRHIDialog({
   const [pickTarget, setPickTarget] = useState(null); // 'start' | 'end' | null
   const [autoFlowActive, setAutoFlowActive] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
-  const [maxLengthKm, setMaxLengthKm] = useState(240);
-  const [maxHeightKm, setMaxHeightKm] = useState(20);
+  const [minLengthKm, setMinLengthKm] = useState("0");
+  const [maxLengthKm, setMaxLengthKm] = useState("240");
+  const [minHeightKm, setMinHeightKm] = useState("0");
+  const [maxHeightKm, setMaxHeightKm] = useState("20");
   const [expandedImage, setExpandedImage] = useState(null);
   const [elevationProfile, setElevationProfile] = useState(null);
   const [expandedElevation, setExpandedElevation] = useState(false);
@@ -276,8 +278,10 @@ export default function PseudoRHIDialog({
             end_lat: eLat,
             end_lon: eLon,
             filters,
-            max_length_km: Number(maxLengthKm),
-            max_height_km: Number(maxHeightKm),
+            min_length_km: Math.max(0, parseFloat(minLengthKm) || 0),
+            max_length_km: Math.min(500, parseFloat(maxLengthKm) || 240),
+            min_height_km: Math.max(0, parseFloat(minHeightKm) || 0),
+            max_height_km: Math.min(30, parseFloat(maxHeightKm) || 20),
           });
           if (resp?.[0]?.image_url) {
             results.push({ field, image_url: resp[0].image_url });
@@ -484,27 +488,35 @@ export default function PseudoRHIDialog({
                 >
                   <TextField
                     size="small"
+                    label="Distancia mín (km)"
+                    type="number"
+                    value={minLengthKm}
+                    onChange={(e) => setMinLengthKm(e.target.value)}
+                    helperText="Inicio horizontal del corte"
+                  />
+                  <TextField
+                    size="small"
                     label="Distancia máx (km)"
                     type="number"
                     value={maxLengthKm}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      if (!Number.isFinite(v)) return;
-                      setMaxLengthKm(Math.min(500, Math.max(1, v)));
-                    }}
-                    helperText="Rango horizontal del corte"
+                    onChange={(e) => setMaxLengthKm(e.target.value)}
+                    helperText="Fin horizontal del corte"
+                  />
+                  <TextField
+                    size="small"
+                    label="Altura mín (km)"
+                    type="number"
+                    value={minHeightKm}
+                    onChange={(e) => setMinHeightKm(e.target.value)}
+                    helperText="Inicio vertical del corte"
                   />
                   <TextField
                     size="small"
                     label="Altura máx (km)"
                     type="number"
                     value={maxHeightKm}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      if (!Number.isFinite(v)) return;
-                      setMaxHeightKm(Math.min(30, Math.max(0.1, v)));
-                    }}
-                    helperText="Altura vertical del corte"
+                    onChange={(e) => setMaxHeightKm(e.target.value)}
+                    helperText="Fin vertical del corte"
                   />
                 </Box>
               </Box>

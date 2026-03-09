@@ -589,8 +589,8 @@ export default function App() {
     filters,
     max_length_km,
     max_height_km,
-    // max_length_km,
-    // elevation,
+    min_length_km,
+    min_height_km,
   }) => {
     const resp = await generatePseudoRHI({
       filepath,
@@ -602,6 +602,8 @@ export default function App() {
       filters,
       max_length_km,
       max_height_km,
+      min_length_km,
+      min_height_km,
       colormap_overrides: selectedColormaps,
       session_id: sessionId,
     });
