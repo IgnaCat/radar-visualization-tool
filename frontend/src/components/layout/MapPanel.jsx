@@ -118,6 +118,8 @@ export default function MapPanel({
   savedLayers,
   fieldsUsed,
   filtersUsed,
+  filtersPerField = {}, // { FIELD: [{field, min, max}] } filtros por campo
+  onApplyFilters, // (filtersPerField) => void
   activeElevation,
   activeHeight,
   radarSite,
@@ -298,9 +300,9 @@ export default function MapPanel({
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-              ]
+              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+            ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
@@ -386,6 +388,8 @@ export default function MapPanel({
         hiddenLayers={hiddenLayers}
         opacityByLayer={opacityByLayer}
         onLayerOpacityChange={onLayerOpacityChange}
+        filtersPerField={filtersPerField}
+        onApplyFilters={onApplyFilters}
       />
 
       <FileManagerDialog
@@ -415,12 +419,12 @@ export default function MapPanel({
         elevations={
           filesInfo.length > 0
             ? filesInfo.reduce(
-                (longest, f) =>
-                  f.metadata.elevations.length > longest.length
-                    ? f.metadata.elevations
-                    : longest,
-                filesInfo[0].metadata.elevations || [],
-              )
+              (longest, f) =>
+                f.metadata.elevations.length > longest.length
+                  ? f.metadata.elevations
+                  : longest,
+              filesInfo[0].metadata.elevations || [],
+            )
             : []
         }
         volumes={volumes}

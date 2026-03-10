@@ -27,26 +27,7 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import LayerControlList from "../controls/LayerControlList";
 import { formatSourceDisplay } from "../../utils/fieldAnalysis";
-
-const MARKS_01 = [
-  { value: 0, label: "0" },
-  { value: 0.25, label: "0.25" },
-  { value: 0.5, label: "0.5" },
-  { value: 0.75, label: "0.75" },
-  { value: 1, label: "1" },
-];
-
-const FIELD_LIMITS = {
-  DBZH: { min: -30, max: 70 },
-  DBZV: { min: -30, max: 70 },
-  DBZHF: { min: -30, max: 70 },
-  ZDR: { min: -5, max: 10.5 },
-  RHOHV: { min: 0.3, max: 1.0 },
-  KDP: { min: 0, max: 8 },
-  VRAD: { min: -35, max: 35 },
-  WRAD: { min: 0, max: 10 },
-  PHIDP: { min: -180, max: 180 },
-};
+import { FIELD_LIMITS, MARKS_01 } from "../../utils/radarFields";
 
 // Si llega un alias raro del archivo, lo “canonizamos”
 const CANON = {
@@ -490,14 +471,14 @@ export default function ProductSelectorDialog({
     const finalLayers =
       product === "colmax"
         ? [
-            {
-              id: "dbzh",
-              label: "DBZH",
-              field: "DBZH",
-              enabled: true,
-              opacity: 1,
-            },
-          ]
+          {
+            id: "dbzh",
+            label: "DBZH",
+            field: "DBZH",
+            enabled: true,
+            opacity: 1,
+          },
+        ]
         : layers;
 
     onConfirm({
@@ -747,7 +728,7 @@ export default function ProductSelectorDialog({
                   sources: [],
                 },
               ]}
-              onChange={() => {}} // No-op para COLMAX
+              onChange={() => { }} // No-op para COLMAX
               showOpacity={false}
               disableToggle={true}
               hideChips={true}

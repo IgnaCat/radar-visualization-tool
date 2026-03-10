@@ -198,6 +198,7 @@ class ProcessingOrchestrator:
         filters: List[RangeFilter],
         colormap_overrides: Optional[Dict] = None,
         session_id: Optional[str] = None,
+        filters_per_field: Optional[Dict[str, List[RangeFilter]]] = None,
         max_workers: int = 4
     ) -> Tuple[Dict, Dict, Dict, Dict]:
         """
@@ -229,13 +230,14 @@ class ProcessingOrchestrator:
             
             for field_idx, field in enumerate(fields):
                 try:
+                    field_filters = (filters_per_field or {}).get(field, filters)
                     result_dict = radar_processor.process_radar_to_cog(
                         filepath=f_abs,
                         product=product,
                         field_requested=field,
                         cappi_height=height,
                         elevation=elevation,
-                        filters=filters,
+                        filters=field_filters,
                         radar_name=radar,
                         estrategia=estrategia,
                         volume=vol,
@@ -407,7 +409,8 @@ class ProcessingOrchestrator:
                 payload.elevation,
                 payload.filters,
                 payload.colormap_overrides,
-                payload.session_id
+                payload.session_id,
+                getattr(payload, 'filters_per_field', None),
             )
 
         # 9. Calcular warnings por campos/volúmenes faltantes

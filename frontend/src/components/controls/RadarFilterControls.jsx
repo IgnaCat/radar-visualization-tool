@@ -8,26 +8,7 @@ import {
   FormControlLabel,
   Divider,
 } from "@mui/material";
-
-const MARKS_01 = [
-  { value: 0, label: "0" },
-  { value: 0.25, label: "0.25" },
-  { value: 0.5, label: "0.5" },
-  { value: 0.75, label: "0.75" },
-  { value: 1, label: "1" },
-];
-
-const FIELD_LIMITS = {
-  DBZH: { min: -30, max: 70 },
-  DBZV: { min: -30, max: 70 },
-  DBZHF: { min: -30, max: 70 },
-  ZDR: { min: -5, max: 10.5 },
-  RHOHV: { min: 0.3, max: 1.0 },
-  KDP: { min: 0, max: 8 },
-  VRAD: { min: -35, max: 35 },
-  WRAD: { min: 0, max: 10 },
-  PHIDP: { min: -180, max: 180 },
-};
+import { FIELD_LIMITS, MARKS_01 } from "../../utils/radarFields";
 
 function clamp01(v) {
   const n = Number(v);

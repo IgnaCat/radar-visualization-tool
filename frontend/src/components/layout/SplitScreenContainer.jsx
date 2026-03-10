@@ -333,6 +333,8 @@ export default function SplitScreenContainer({
           onToggleLayerVisibility={map1Props.onToggleLayerVisibility}
           opacityByLayer={map1Props.opacityByLayer}
           onLayerOpacityChange={map1Props.onLayerOpacityChange}
+          filtersPerField={map1Props.filtersPerField}
+          onApplyFilters={map1Props.onApplyFilters}
           fileManagerOpen={map1Props.fileManagerOpen}
           setFileManagerOpen={map1Props.setFileManagerOpen}
           onRemoveFile={map1Props.onRemoveFile}

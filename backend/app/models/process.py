@@ -23,6 +23,10 @@ class ProcessRequest(BaseModel):
         description="Ángulo de elevación en grados (0-12). Default 0"
     )
     filters: Optional[List[RangeFilter]] = Field(default=[], min_items=0)
+    filters_per_field: Optional[Dict[str, List[RangeFilter]]] = Field(
+        default=None,
+        description="Filtros por campo. Si se especifica, sobreescribe 'filters' para ese campo. Ej: {'DBZH': [{'field': 'RHOHV', 'min': 0.8}]}"
+    )
     selectedVolumes: Optional[List[str]]
     selectedRadars: Optional[List[str]]
     colormap_overrides: Optional[Dict[str, str]] = Field(

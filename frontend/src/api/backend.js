@@ -20,6 +20,7 @@ export const processFile = async ({
   height,
   elevation,
   filters,
+  filters_per_field,
   selectedVolumes,
   selectedRadars,
   colormap_overrides,
@@ -34,6 +35,8 @@ export const processFile = async ({
     ...(elevation !== undefined &&
       elevation !== null && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
+    ...(filters_per_field &&
+      Object.keys(filters_per_field).length > 0 && { filters_per_field }),
     ...(selectedVolumes && { selectedVolumes }),
     ...(selectedRadars && { selectedRadars }),
     ...(colormap_overrides && { colormap_overrides }),
@@ -75,9 +78,9 @@ export async function generatePseudoRHI({
     end_lat,
     ...(start_lon != null &&
       start_lat != null && {
-        start_lon,
-        start_lat,
-      }),
+      start_lon,
+      start_lat,
+    }),
     max_length_km: max_length_km,
     max_height_km: max_height_km,
     min_length_km: min_length_km,

@@ -130,7 +130,10 @@ export default function App() {
   const [volumes, setVolumes] = useState([]); // lista de volúmenes cargados sin repetidos
   const [availableRadars, setAvailableRadars] = useState([]); // todos los radares presentes en archivos subidos
   const [savedLayers, setSavedLayers] = useState([]); // layers / variables usadas
-  const [filtersUsed, setFiltersUsed] = useState([]); // filtros aplicados
+  const [filtersUsed, setFiltersUsed] = useState([]); // filtros globales aplicados
+  const [filtersPerField, setFiltersPerField] = useState({}); // filtros por campo del LayerManager
+  const [selectedVolumesUsed, setSelectedVolumesUsed] = useState([]); // últimos volúmenes procesados
+  const [selectedRadarsUsed, setSelectedRadarsUsed] = useState([]); // últimos radares procesados
   const [activeElevation, setActiveElevation] = useState(null);
   const [activeHeight, setActiveHeight] = useState(null);
   const allCogsRef = useRef(new Set());
@@ -474,6 +477,10 @@ export default function App() {
       setFieldsUsed(enabledLayers);
       setSavedLayers(data.layers);
       setFiltersUsed(filters);
+      setSelectedVolumesUsed(selectedVolumes);
+      setSelectedRadarsUsed(selectedRadars);
+      // Reset per-field filters when re-processing from ProductSelector (new configuration)
+      setFiltersPerField({});
       if (elevation !== undefined) setActiveElevation(elevation);
 
       // Reset height to null when product is not CAPPI
@@ -670,6 +677,60 @@ export default function App() {
     const key = `${String(field || "").toUpperCase()}::${sourceFile || ""}`;
     setOpacityByLayer((prev) => ({ ...prev, [key]: value }));
   }, []);
+
+  /**
+   * Aplica filtros por campo desde el LayerManagerDialog y reprocesa.
+   * newFiltersPerField: { FIELD: [{field, min, max}, ...] }
+   */
+  const handleApplyLayerFilters = useCallback(
+    async (newFiltersPerField) => {
+      if (uploadedFiles.length === 0) return;
+      setFiltersPerField(newFiltersPerField);
+      try {
+        setLoading(true);
+        const processResp = await processFile({
+          files: uploadedFiles,
+          layers: fieldsUsed,
+          product: overlayData?.product || "ppi",
+          height: activeHeight,
+          elevation: activeElevation,
+          filters: filtersUsed,
+          selectedVolumes: selectedVolumesUsed,
+          selectedRadars: selectedRadarsUsed,
+          filters_per_field: newFiltersPerField,
+          colormap_overrides: selectedColormaps,
+          session_id: sessionId,
+        });
+        if (processResp.data?.outputs?.length > 0) {
+          setOverlayData(processResp.data);
+          setWarnings(processResp.data.warnings || []);
+          setCurrentIndex(0);
+        }
+      } catch (err) {
+        console.error(err);
+        setAlert({
+          open: true,
+          message: "Error al aplicar filtros",
+          severity: "error",
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      uploadedFiles,
+      fieldsUsed,
+      overlayData,
+      activeHeight,
+      activeElevation,
+      filtersUsed,
+      selectedVolumesUsed,
+      selectedRadarsUsed,
+      selectedColormaps,
+      sessionId,
+      processFile,
+    ],
+  );
 
   /**
    * Elimina un archivo subido del servidor y actualiza todo el estado.
@@ -1061,6 +1122,8 @@ export default function App() {
           onLayerReorder: handleLayerReorder,
           onToggleLayerVisibility: handleToggleLayerVisibility,
           onLayerOpacityChange: handleLayerOpacityChange,
+          filtersPerField,
+          onApplyFilters: handleApplyLayerFilters,
           fileManagerOpen,
           setFileManagerOpen,
           onRemoveFile: handleRemoveFile,

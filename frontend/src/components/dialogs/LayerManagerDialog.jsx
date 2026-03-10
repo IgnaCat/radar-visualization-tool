@@ -1,20 +1,31 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Button,
+  Checkbox,
+  Collapse,
+  Divider,
+  FormControlLabel,
+  IconButton,
   List,
   ListItem,
-  Typography,
-  IconButton,
-  Tooltip,
   Paper,
-  Collapse,
   Slider,
+  TextField,
+  Tooltip,
+  Typography,
 } from "@mui/material";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import FilterListIcon from "@mui/icons-material/FilterList";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import OpacityIcon from "@mui/icons-material/Opacity";
 import CloseIcon from "@mui/icons-material/Close";
+import {
+  FIELD_LIMITS,
+  initFilterForField,
+  convertToBackend,
+} from "../../utils/radarFields";
 
 /**
  * Diálogo para gestionar el orden de las capas visibles en el mapa.
@@ -31,9 +42,71 @@ export default function LayerManagerDialog({
   hiddenLayers = new Set(), // Set de "field::source_file" keys ocultas
   opacityByLayer = {}, // { "FIELD::source_file": number } opacidades por capa
   onLayerOpacityChange, // (field, source_file, opacity) => void
+  filtersPerField = {}, // { FIELD: [{field, min, max}] } filtros iniciales por campo
+  onApplyFilters, // (filtersPerField) => void - callback al aplicar filtros
 }) {
   const [orderedLayers, setOrderedLayers] = useState([]);
   const lastUpdateRef = React.useRef(0);
+
+  // Estado para filtros por campo (internos al diálogo)
+  const [localFilters, setLocalFilters] = useState({});   // { FIELD: { rhohv: {enabled, min}, range: {enabled, min, max} } }
+  const [openFilterFor, setOpenFilterFor] = useState(new Set()); // campos con panel de filtros abierto
+
+  // Inicializar localFilters desde prop filtersPerField cuando cambia externamente
+  // (al aplicar filtros o al resetear desde ProductSelector).
+  // No depende de 'open' para que los valores escritos por el usuario persistan
+  // al cerrar y reabrir el diálogo sin haber aplicado.
+  useEffect(() => {
+    const init = {};
+    for (const [field, ruleArr] of Object.entries(filtersPerField || {})) {
+      const key = String(field).toUpperCase();
+      const lim = FIELD_LIMITS[key] || { min: 0, max: 1 };
+      init[key] = initFilterForField(key);
+      for (const r of ruleArr || []) {
+        const rField = String(r.field || "").toUpperCase();
+        if (rField === "RHOHV" && key !== "RHOHV") {
+          init[key].rhohv = { enabled: true, min: r.min ?? 0.8 };
+        } else if (rField === key) {
+          init[key].range = { enabled: true, min: r.min ?? lim.min, max: r.max ?? lim.max };
+        }
+      }
+    }
+    setLocalFilters(init);
+  }, [filtersPerField]);
+
+  const toggleFilterPanel = useCallback((field) => {
+    const key = String(field).toUpperCase();
+    setOpenFilterFor((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+    // Ensure a default entry exists for this field
+    setLocalFilters((prev) => {
+      if (prev[key]) return prev;
+      return { ...prev, [key]: initFilterForField(key) };
+    });
+  }, []);
+
+  const updateFilter = useCallback((field, section, patch) => {
+    const key = String(field).toUpperCase();
+    setLocalFilters((prev) => ({
+      ...prev,
+      [key]: {
+        ...(prev[key] || initFilterForField(key)),
+        [section]: { ...(prev[key]?.[section] || {}), ...patch },
+      },
+    }));
+  }, []);
+
+  const handleApplyFiltersClick = useCallback(() => {
+    onApplyFilters?.(convertToBackend(localFilters));
+  }, [localFilters, onApplyFilters]);
+
+  const hasAnyFilter = useMemo(() =>
+    Object.values(localFilters).some(
+      (f) => f?.rhohv?.enabled || f?.range?.enabled
+    ), [localFilters]);
 
   // Estado para drag del panel completo
   const [position, setPosition] = useState({ x: 68, y: 70 });
@@ -310,6 +383,23 @@ export default function LayerManagerDialog({
                       <Typography variant="caption" color="text.secondary">
                         #{idx + 1}
                       </Typography>
+
+                      <Tooltip title="Filtros de capa">
+                        <IconButton
+                          size="small"
+                          onClick={() => toggleFilterPanel(layer.field)}
+                          sx={{
+                            padding: "4px",
+                            color:
+                              localFilters[String(layer.field).toUpperCase()]?.rhohv?.enabled ||
+                                localFilters[String(layer.field).toUpperCase()]?.range?.enabled
+                                ? "primary.main"
+                                : "text.secondary",
+                          }}
+                        >
+                          <FilterListIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      </Tooltip>
                     </Box>
 
                     {/* Slider de opacidad por capa */}
@@ -393,9 +483,122 @@ export default function LayerManagerDialog({
                         </IconButton>
                       </Tooltip>
                     </Box>
+
+                    {/* Panel de filtros por capa */}
+                    <Collapse
+                      in={openFilterFor.has(String(layer.field).toUpperCase())}
+                      timeout="auto"
+                      unmountOnExit
+                    >
+                      <Box
+                        sx={{
+                          pl: 1.5,
+                          pr: 1,
+                          pt: 0.5,
+                          pb: 0.5,
+                          borderTop: "1px solid rgba(0,0,0,0.06)",
+                          mt: 0.5,
+                        }}
+                      >
+                        {/* RHOHV filter — only for non-RHOHV fields */}
+                        {String(layer.field).toUpperCase() !== "RHOHV" && (
+                          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                            <Checkbox
+                              size="small"
+                              checked={
+                                !!(localFilters[String(layer.field).toUpperCase()]?.rhohv?.enabled)
+                              }
+                              onChange={(e) =>
+                                updateFilter(layer.field, "rhohv", { enabled: e.target.checked })
+                              }
+                              sx={{ p: 0 }}
+                            />
+                            <Typography variant="caption" sx={{ minWidth: 60 }}>
+                              RHOHV ≥
+                            </Typography>
+                            <TextField
+                              size="small"
+                              type="number"
+                              value={localFilters[String(layer.field).toUpperCase()]?.rhohv?.min ?? 0.8}
+                              onChange={(e) =>
+                                updateFilter(layer.field, "rhohv", { min: e.target.value })
+                              }
+                              onKeyDown={(e) => e.key === "Enter" && handleApplyFiltersClick()}
+                              disabled={
+                                !localFilters[String(layer.field).toUpperCase()]?.rhohv?.enabled
+                              }
+                              inputProps={{ step: 0.01, min: 0, max: 1 }}
+                              sx={{ width: 72 }}
+                            />
+                          </Box>
+                        )}
+
+                        {/* Self-range filter */}
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <Checkbox
+                            size="small"
+                            checked={
+                              !!(localFilters[String(layer.field).toUpperCase()]?.range?.enabled)
+                            }
+                            onChange={(e) =>
+                              updateFilter(layer.field, "range", { enabled: e.target.checked })
+                            }
+                            sx={{ p: 0 }}
+                          />
+                          <Typography variant="caption" sx={{ minWidth: 60 }}>
+                            {String(layer.field).toUpperCase()}
+                          </Typography>
+                          <TextField
+                            size="small"
+                            type="number"
+                            label="min"
+                            value={localFilters[String(layer.field).toUpperCase()]?.range?.min ?? (FIELD_LIMITS[String(layer.field).toUpperCase()]?.min ?? 0)}
+                            onChange={(e) =>
+                              updateFilter(layer.field, "range", { min: e.target.value })
+                            }
+                            onKeyDown={(e) => e.key === "Enter" && handleApplyFiltersClick()}
+                            disabled={
+                              !localFilters[String(layer.field).toUpperCase()]?.range?.enabled
+                            }
+                            inputProps={{ step: 0.1 }}
+                            sx={{ width: 76 }}
+                          />
+                          <TextField
+                            size="small"
+                            type="number"
+                            label="max"
+                            value={localFilters[String(layer.field).toUpperCase()]?.range?.max ?? (FIELD_LIMITS[String(layer.field).toUpperCase()]?.max ?? 1)}
+                            onChange={(e) =>
+                              updateFilter(layer.field, "range", { max: e.target.value })
+                            }
+                            onKeyDown={(e) => e.key === "Enter" && handleApplyFiltersClick()}
+                            disabled={
+                              !localFilters[String(layer.field).toUpperCase()]?.range?.enabled
+                            }
+                            inputProps={{ step: 0.1 }}
+                            sx={{ width: 76 }}
+                          />
+                        </Box>
+                      </Box>
+                    </Collapse>
                   </ListItem>
                 ))}
               </List>
+
+              {onApplyFilters && (
+                <Box mt={2}>
+                  <Divider sx={{ mb: 1.5 }} />
+                  <Button
+                    fullWidth
+                    variant={hasAnyFilter ? "contained" : "outlined"}
+                    size="small"
+                    onClick={handleApplyFiltersClick}
+                    color="primary"
+                  >
+                    Aplicar filtros
+                  </Button>
+                </Box>
+              )}
             </>
           )}
         </Box>
