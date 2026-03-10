@@ -177,6 +177,7 @@ export default function MapView({
   markers = [],
   onAddMarker,
   onRemoveMarker,
+  onRenameMarker,
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -270,6 +271,7 @@ export default function MapView({
         markers={markers}
         onAddMarker={onAddMarker}
         onRemoveMarker={onRemoveMarker}
+        onRenameMarker={onRenameMarker}
       />
       <UsePixelStatClick
         enabled={pixelStatMode}

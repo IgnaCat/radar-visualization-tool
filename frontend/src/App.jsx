@@ -599,6 +599,12 @@ export default function App() {
     setMarkers((prev) => prev.filter((m) => m.id !== markerId));
   };
 
+  const handleRenameMarker = (markerId, name) => {
+    setMarkers((prev) =>
+      prev.map((m) => (m.id === markerId ? { ...m, name } : m)),
+    );
+  };
+
   /**
    * Alterna la visibilidad de una capa en el mapa.
    * La capa permanece en la lista de capas pero se oculta/muestra en el mapa.
@@ -1051,6 +1057,7 @@ export default function App() {
           onToggleMarkerMode: handleToggleMarkerMode,
           onAddMarker: handleAddMarker,
           onRemoveMarker: handleRemoveMarker,
+          onRenameMarker: handleRenameMarker,
           onLayerReorder: handleLayerReorder,
           onToggleLayerVisibility: handleToggleLayerVisibility,
           onLayerOpacityChange: handleLayerOpacityChange,

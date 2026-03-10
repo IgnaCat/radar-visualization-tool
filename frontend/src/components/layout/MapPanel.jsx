@@ -99,6 +99,7 @@ export default function MapPanel({
   onToggleMarkerMode,
   onAddMarker,
   onRemoveMarker,
+  onRenameMarker,
   onLayerReorder,
   onToggleLayerVisibility, // (field, source_file) => void - toggle visibilidad de capa
   opacityByLayer, // { "FIELD::source_file": number } opacidades por capa individual
@@ -316,6 +317,7 @@ export default function MapPanel({
         markers={markers}
         onAddMarker={onAddMarker}
         onRemoveMarker={onRemoveMarker}
+        onRenameMarker={onRenameMarker}
       />
 
       <VerticalToolbar

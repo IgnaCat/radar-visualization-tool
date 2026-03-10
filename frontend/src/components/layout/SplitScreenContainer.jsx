@@ -328,6 +328,7 @@ export default function SplitScreenContainer({
           onToggleMarkerMode={map1Props.onToggleMarkerMode}
           onAddMarker={map1Props.onAddMarker}
           onRemoveMarker={map1Props.onRemoveMarker}
+          onRenameMarker={map1Props.onRenameMarker}
           onLayerReorder={map1Props.onLayerReorder}
           onToggleLayerVisibility={map1Props.onToggleLayerVisibility}
           opacityByLayer={map1Props.opacityByLayer}
@@ -384,7 +385,8 @@ export default function SplitScreenContainer({
                 Array.isArray(overlayData2) && overlayData2.length > 0
                   ? overlayData2[currentIndex2]
                   : null;
-              if (!Array.isArray(frame) || hiddenLayers2.size === 0) return frame;
+              if (!Array.isArray(frame) || hiddenLayers2.size === 0)
+                return frame;
               const filtered = frame.filter(
                 (l) => !hiddenLayers2.has(`${l.field}::${l.source_file}`),
               );
@@ -459,6 +461,11 @@ export default function SplitScreenContainer({
             onRemoveMarker={(markerId) =>
               setMarkers2((prev) => prev.filter((m) => m.id !== markerId))
             }
+            onRenameMarker={(markerId, name) =>
+              setMarkers2((prev) =>
+                prev.map((m) => (m.id === markerId ? { ...m, name } : m)),
+              )
+            }
             onToggleLayerVisibility={(field, sourceFile) => {
               const key = `${field}::${sourceFile}`;
               setHiddenLayers2((prev) => {
@@ -476,17 +483,22 @@ export default function SplitScreenContainer({
                 // Reubicar las capas según el nuevo orden, usando field + source_file como clave
                 const reordered = [...frame].sort((a, b) => {
                   const aIdx = layers.findIndex(
-                    (l) => l.field === a.field && l.source_file === a.source_file,
+                    (l) =>
+                      l.field === a.field && l.source_file === a.source_file,
                   );
                   const bIdx = layers.findIndex(
-                    (l) => l.field === b.field && l.source_file === b.source_file,
+                    (l) =>
+                      l.field === b.field && l.source_file === b.source_file,
                   );
                   if (aIdx === -1 && bIdx === -1) return 0;
                   if (aIdx === -1) return 1;
                   if (bIdx === -1) return -1;
                   return aIdx - bIdx;
                 });
-                return reordered.map((layer, idx) => ({ ...layer, order: idx }));
+                return reordered.map((layer, idx) => ({
+                  ...layer,
+                  order: idx,
+                }));
               });
               setOverlayData2(updated);
             }}
