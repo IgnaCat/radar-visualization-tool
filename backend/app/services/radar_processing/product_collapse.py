@@ -174,7 +174,25 @@ def collapse_cappi(data3d, z_coords, target_height_m):
     val_low = data3d[z_low, :, :]
     val_high = data3d[z_high, :, :]
     
-    # Interpolación lineal: valor = peso_bajo * val_bajo + peso_alto * val_alto
+    # Interpolación lineal con fallback si un nivel está enmascarado
+    if np.ma.is_masked(val_low) or np.ma.is_masked(val_high):
+        mask_low = np.ma.getmaskarray(val_low)
+        mask_high = np.ma.getmaskarray(val_high)
+        both_valid = ~mask_low & ~mask_high
+        only_low = ~mask_low & mask_high
+        only_high = mask_low & ~mask_high
+        neither = mask_low & mask_high
+        
+        ny, nx = val_low.shape
+        result_data = np.zeros((ny, nx), dtype='float32')
+        result_data[both_valid] = (
+            weight_low * np.ma.filled(val_low, 0)[both_valid] +
+            weight_high * np.ma.filled(val_high, 0)[both_valid]
+        )
+        result_data[only_low] = np.ma.filled(val_low, 0)[only_low]
+        result_data[only_high] = np.ma.filled(val_high, 0)[only_high]
+        return np.ma.array(result_data, mask=neither, dtype='float32')
+    
     return weight_low * val_low + weight_high * val_high
 
 
@@ -262,16 +280,29 @@ def collapse_ppi(data3d, z_coords, x_coords, y_coords, elevation_deg):
     val_low = data3d[z_low_safe, y_indices, x_indices]
     val_high = data3d[z_high_safe, y_indices, x_indices]
     
-    # Propagar máscaras correctamente durante interpolación
+    # Propagar máscaras correctamente durante interpolación.
+    # Si un solo nivel tiene datos (ej: below-beam enmascara el inferior),
+    # usar ese nivel directamente en vez de descartar ambos.
     if np.ma.is_masked(val_low) or np.ma.is_masked(val_high):
-        # Crear máscara combinada: enmascarar si CUALQUIERA está enmascarado
-        combined_mask = np.ma.getmaskarray(val_low) | np.ma.getmaskarray(val_high)
+        mask_low = np.ma.getmaskarray(val_low)
+        mask_high = np.ma.getmaskarray(val_high)
+        both_valid = ~mask_low & ~mask_high
+        only_low = ~mask_low & mask_high
+        only_high = mask_low & ~mask_high
+        neither = mask_low & mask_high
         
-        # Interpolar datos (ignorando máscaras temporalmente)
-        result_data = weight_low * np.ma.filled(val_low, 0) + weight_high * np.ma.filled(val_high, 0)
+        result_data = np.zeros((ny, nx), dtype='float32')
+        # Ambos válidos: interpolar normalmente
+        result_data[both_valid] = (
+            weight_low[both_valid] * np.ma.filled(val_low, 0)[both_valid] +
+            weight_high[both_valid] * np.ma.filled(val_high, 0)[both_valid]
+        )
+        # Solo inferior válido: usar ese
+        result_data[only_low] = np.ma.filled(val_low, 0)[only_low]
+        # Solo superior válido: usar ese
+        result_data[only_high] = np.ma.filled(val_high, 0)[only_high]
         
-        # Crear resultado como masked array con máscara combinada
-        result = np.ma.array(result_data, mask=combined_mask, dtype='float32')
+        result = np.ma.array(result_data, mask=neither, dtype='float32')
     else:
         # Interpolar normalmente si no hay máscaras
         result = weight_low * val_low + weight_high * val_high

@@ -220,6 +220,9 @@ def get_or_build_W_operator(
         gates_xyz = get_gate_xyz_coords(radar_to_use, edges=False)
         voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
         
+        # Extraer elevación mínima para below-beam mask
+        lowest_elev_deg = float(np.min(radar_to_use.fixed_angle['data']))
+        
         W = build_W_operator(
             gates_xyz=gates_xyz,
             voxels_xyz=voxels_xyz,
@@ -231,6 +234,7 @@ def get_or_build_W_operator(
             volume=volumen,  # Pasar volumen para ajustes de ROI específicos
             weight_func=weight_func,
             max_neighbors=max_neighbors,
+            lowest_elev_deg=lowest_elev_deg,
             n_workers=None,  # Auto: cpu_count() - 1 (usa todos los cores disponibles)
             temp_dir=None,   # Crea directorio temporal automáticamente
             # dtype_idx usa default (int32), suficiente para matrices típicas

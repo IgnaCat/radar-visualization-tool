@@ -309,7 +309,7 @@ def w_operator_cache_key(
     roi_params = ROI_PARAMS_BY_VOLUME.get(volumen, ROI_PARAMS_VOL01)
     
     payload = {
-        "v": 4,  # versión 4: ROI constantes por volumen + max_neighbors
+        "v": 5,  # versión 5: below-beam mask integrada en W
         "radar": str(radar),
         "strat": str(estrategia),
         "vol": str(volumen),

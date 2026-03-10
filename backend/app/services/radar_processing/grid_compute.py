@@ -16,7 +16,7 @@ from scipy.spatial import cKDTree
 from multiprocessing import Pool, cpu_count
 from typing import Tuple
 
-from .grid_geometry import calculate_roi_dist_beam
+from .grid_geometry import calculate_roi_dist_beam, compute_beam_height
 
 logger = logging.getLogger(__name__)
 
@@ -91,14 +91,16 @@ def _process_single_level(args) -> Tuple[int, int, str]:
     Args:
         args: tuple con (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
                          gate_valid_mask, h_factor, nb, bsp, min_radius,
-                         weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx)
+                         weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx,
+                         min_beam_h)
     
     Returns:
         (iz, n_pairs, temp_file): índice nivel, número de pares, archivo temporal
     """
     (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
      gate_valid_mask, h_factor, nb, bsp, min_radius,
-     weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx) = args
+     weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx,
+     min_beam_h) = args
     
     n_points = grid_y_2d.shape[0]
     
@@ -129,12 +131,24 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         radar_offset=(0, 0, 0)
     )
     
+    # Máscara below-beam: si este nivel Z está debajo del haz más bajo,
+    # se salta el voxel directamente (fila vacía en W → NaN al interpolar)
+    if min_beam_h is not None and z_coord < np.max(min_beam_h):
+        below_beam = z_coord < min_beam_h  # bool array (n_points,)
+    else:
+        below_beam = None  # Ningún voxel de este nivel está debajo del haz
+    
     # Storage para este nivel (listas temporales)
     level_indices = []
     level_weights = []
     level_indptr = [0]
     
     for i in range(n_points):
+        # Saltar voxels debajo del haz más bajo del radar
+        if below_beam is not None and below_beam[i]:
+            level_indptr.append(level_indptr[-1])
+            continue
+        
         gx, gy, gz_pt = grid_x_2d[i], grid_y_2d[i], grid_z_level[i]
         r = roi[i]
         r2 = r * r
@@ -212,6 +226,7 @@ def build_W_operator(
     volume=None,  # Volumen del radar para ajustes de ROI por volumen
     weight_func="Barnes2",
     max_neighbors=None,
+    lowest_elev_deg=None,  # Elevación mínima para máscara below-beam
     n_workers=None,
     temp_dir=None,
     dtype_val=np.float32,
@@ -327,6 +342,16 @@ def build_W_operator(
     gate_y = gates_xyz[:, 1]
     gate_z = gates_xyz[:, 2]
     
+    # Precomputar altura mínima del haz para el plano XY (una sola vez)
+    # Se pasa a cada worker para saltar voxels debajo del haz más bajo
+    if lowest_elev_deg is not None:
+        horiz_dist = np.sqrt(grid_x_2d**2 + grid_y_2d**2)
+        min_beam_h = compute_beam_height(horiz_dist, lowest_elev_deg, radar_altitude=0.0).astype('float32')
+        logger.info(f"  Below-beam mask: elev_min={lowest_elev_deg:.2f}°, "
+                    f"beam_h range=[{min_beam_h.min():.0f}, {min_beam_h.max():.0f}]m")
+    else:
+        min_beam_h = None
+    
     # Detectar modo con parámetros por volumen: cualquier parámetro None activa lookup de volumen
     use_volume_params = h_factor is None
     
@@ -346,7 +371,8 @@ def build_W_operator(
         args_list.append((
             iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
             toa_mask, hf, nb_z, bsp_z, minr,
-            weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx
+            weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx,
+            min_beam_h
         ))
     
     # Procesar niveles en paralelo
