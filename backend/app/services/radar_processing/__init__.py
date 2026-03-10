@@ -10,7 +10,7 @@ Estructura:
 - cog_generator: Generación de COG (Cloud Optimized GeoTIFF)
 - grid_geometry: Cálculo de geometría de grillas (límites, resolución, ROI dist_beam)
 - product_preparation: Preparación de radar según producto (PPI/CAPPI/COLMAX)
-- filter_application: Aplicación de filtros QC y visuales post-grid
+- filter_application: Aplicación de filtros QC y visuales (pre y post-grid)
 """
 
 from .grid_builder import get_or_build_grid3d_with_operator, get_or_build_W_operator
@@ -33,7 +33,8 @@ from .product_preparation import (
 from .filter_application import (
     separate_filters,
     apply_qc_filters,
-    apply_visual_filters
+    apply_visual_filters,
+    build_gatefilter_for_visual
 )
 
 __all__ = [
@@ -56,4 +57,5 @@ __all__ = [
     'separate_filters',
     'apply_qc_filters',
     'apply_visual_filters',
+    'build_gatefilter_for_visual',
 ]

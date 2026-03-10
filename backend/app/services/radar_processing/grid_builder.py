@@ -21,7 +21,7 @@ from ...core.constants import AFFECTS_INTERP_FIELDS, ROI_PARAMS_BY_VOLUME, ROI_P
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields
-from .filter_application import build_gatefilter_for_gridding
+from .filter_application import build_gatefilter_for_gridding, build_gatefilter_for_visual
 from .product_preparation import prepare_radar_for_product
 
 logger = logging.getLogger(__name__)
@@ -282,6 +282,8 @@ def get_or_build_grid3d_with_operator(
     grid_resolution_z: float,
     weight_func: str = 'Barnes2',
     qc_filters: list | None = None,
+    visual_filters: list | None = None,
+    field_to_use: str | None = None,
     session_id: str | None = None,
 ) -> pyart.core.Grid:
     """
@@ -299,6 +301,8 @@ def get_or_build_grid3d_with_operator(
         grid_resolution_z: Resolución vertical en metros
         weight_func: Función de ponderación para el operador W
         qc_filters: Lista de RangeFilter con filtros QC (ej. RHOHV) para aplicar durante interpolación
+        visual_filters: Lista de RangeFilter con filtros visuales (mismo campo) para aplicar durante interpolación
+        field_to_use: Nombre resuelto del campo principal (necesario para aplicar visual_filters al campo correcto)
         session_id: Identificador de sesión
     
     Returns:
@@ -332,23 +336,31 @@ def get_or_build_grid3d_with_operator(
         session_id=session_id,
     )
     
-    # Construir GateFilter desde qc_filters
+    # Construir GateFilter desde qc_filters (se aplica al campo principal)
     gatefilter = build_gatefilter_for_gridding(radar_to_use, qc_filters)
     
-    # Preparar dict de filtros por campo (mismo filtro para todos los campos)
-    additional_filters = {}
-    if gatefilter is not None:
-        # Aplicar el mismo gatefilter a todos los campos
-        for field_name in radar_to_use.fields.keys():
-            additional_filters[field_name] = [gatefilter]
+    # Construir GateFilter desde visual_filters (se aplica solo al campo principal)
+    visual_gatefilter = build_gatefilter_for_visual(radar_to_use, visual_filters, field_to_use)
     
-    # Aplicar operador W a todos los campos disponibles
+    # Preparar dict de filtros solo para el campo principal
+    additional_filters = {}
+    if field_to_use:
+        filters_for_field = []
+        if gatefilter is not None:
+            filters_for_field.append(gatefilter)
+        if visual_gatefilter is not None:
+            filters_for_field.append(visual_gatefilter)
+        if filters_for_field:
+            additional_filters[field_to_use] = filters_for_field
+    
+    # Interpolar solo el campo solicitado (field_to_use), o todos si no se especifica
     fields_dict = apply_operator_to_all_fields(
         radar=radar_to_use,
         W=W,
         grid_shape=grid_shape,
         handle_mask=True,
-        additional_filters=additional_filters
+        additional_filters=additional_filters,
+        fields_to_interpolate=[field_to_use] if field_to_use else None,
     )
     
     # Generar coordenadas de la grilla

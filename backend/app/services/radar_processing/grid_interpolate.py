@@ -77,9 +77,9 @@ def apply_operator(W, field_data, grid_shape, handle_mask=True, additional_filte
     return grid3d
 
 
-def apply_operator_to_all_fields(radar, W, grid_shape, handle_mask=True, additional_filters=None):
+def apply_operator_to_all_fields(radar, W, grid_shape, handle_mask=True, additional_filters=None, fields_to_interpolate=None):
     """
-    Aplica operador W a todos los campos del radar y devuelve dict formateado para PyART Grid.
+    Aplica operador W a campos del radar y devuelve dict formateado para PyART Grid.
     
     Args:
         radar: pyart.core.Radar con múltiples campos
@@ -89,6 +89,8 @@ def apply_operator_to_all_fields(radar, W, grid_shape, handle_mask=True, additio
         additional_filters: Optional[Dict[str, List[pyart.filters.GateFilter]]] - 
                             Dict con filtros por campo. Si es None o un campo no está,
                             se usa lista vacía para ese campo.
+        fields_to_interpolate: Optional[List[str]] - Lista de campos a interpolar.
+                               Si es None, se interpolan todos los campos del radar.
     
     Returns:
         dict: Diccionario de campos formateados para pyart.core.Grid
@@ -97,7 +99,10 @@ def apply_operator_to_all_fields(radar, W, grid_shape, handle_mask=True, additio
     if additional_filters is None:
         additional_filters = {}
     
-    all_fields = list(radar.fields.keys())
+    if fields_to_interpolate is not None:
+        all_fields = [f for f in fields_to_interpolate if f in radar.fields]
+    else:
+        all_fields = list(radar.fields.keys())
     fields_dict = {}
     
     for field_name in all_fields:

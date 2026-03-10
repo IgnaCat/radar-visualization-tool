@@ -30,7 +30,6 @@ from .radar_processing import (
     calculate_grid_points,
     fill_dbzh_if_needed,
     separate_filters,
-    apply_visual_filters,
 )
 
 
@@ -235,10 +234,15 @@ def process_radar_to_cog(
     # Visual filters se aplican post-grid como máscaras 2D
     qc_filters, visual_filters = separate_filters(filters, field_to_use)
 
-    # Generar signature de qc_filters para cache key
+    # Generar signature de filtros para cache key
     qc_sig = tuple(sorted([
         (f.field, f.min, f.max) for f in qc_filters
     ])) if qc_filters else tuple()
+    visual_sig = tuple(sorted([
+        (f.field, f.min, f.max) for f in visual_filters
+    ])) if visual_filters else tuple()
+    # Combinar ambas signatures (ambos tipos de filtro afectan interpolación)
+    filter_sig = qc_sig + visual_sig
 
     # Intentamos cachear la 2D colapsada
     product_upper = product.upper()
@@ -250,7 +254,7 @@ def process_radar_to_cog(
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
         volume=volume,
         interp=interp,
-        qc_sig=qc_sig,  # Cache depende de filtros QC aplicados durante interpolación
+        qc_sig=filter_sig,  # Cache depende de filtros QC + visuales aplicados durante interpolación
         session_id=session_id,
     )
 
@@ -271,6 +275,8 @@ def process_radar_to_cog(
             grid_resolution_z=grid_resolution_z,
             weight_func=interp,
             qc_filters=qc_filters,
+            visual_filters=visual_filters,
+            field_to_use=field_to_use,
             session_id=session_id
         )
 
@@ -398,13 +404,9 @@ def process_radar_to_cog(
         transform_warped = pkg_cached["transform_warped"]
         crs_warped = pkg_cached["crs_warped"]
     
-    # Aplicar filtros visuales post-cache sobre el array warped
-    # Los filtros QC ya fueron aplicados durante interpolación y están en el cache
-    arr_warped_filtered = apply_visual_filters(arr_warped, visual_filters, field_to_use)
-
     # Crear COG RGB desde el array warped cacheado usando la función optimizada
     create_cog_from_warped_array(
-        data_warped=arr_warped_filtered,
+        data_warped=arr_warped,
         output_path=cog_path,
         transform=transform_warped,
         crs=crs_warped,

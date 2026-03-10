@@ -167,3 +167,56 @@ def build_gatefilter_for_gridding(
             logger.warning(f"Error aplicando filtro {fld} durante gridding: {e}")
     
     return gatefilter
+
+
+def build_gatefilter_for_visual(
+    radar: pyart.core.Radar,
+    visual_filters: Optional[List[RangeFilter]] = None,
+    field_to_use: Optional[str] = None,
+) -> Optional[pyart.filters.GateFilter]:
+    """
+    Construye un GateFilter desde filtros visuales (rango sobre el campo principal).
+    
+    Solo aplica filtros cuyo campo coincide con field_to_use, para excluir
+    gates fuera de rango antes de la interpolación (más preciso que filtrar post-grid).
+    
+    Args:
+        radar: Objeto radar PyART
+        visual_filters: Lista de RangeFilter con filtros de rango visual
+        field_to_use: Nombre resuelto del campo principal (ej. "DBZH")
+    
+    Returns:
+        GateFilter configurado o None si no hay filtros aplicables
+    """
+    if not visual_filters or not field_to_use:
+        return None
+    
+    if field_to_use not in radar.fields:
+        return None
+    
+    applicable = [
+        f for f in visual_filters
+        if str(getattr(f, "field", "") or "").upper() == str(field_to_use).upper()
+    ]
+    if not applicable:
+        return None
+    
+    gatefilter = pyart.filters.GateFilter(radar)
+    
+    for f in applicable:
+        fmin = getattr(f, "min", None)
+        fmax = getattr(f, "max", None)
+        
+        try:
+            if fmin is not None:
+                # Excepción especial para RHOHV con umbrales muy bajos
+                if (fmin <= 0.3 and field_to_use == "RHOHV"):
+                    continue
+                else:
+                    gatefilter.exclude_below(field_to_use, float(fmin))
+            if fmax is not None:
+                gatefilter.exclude_above(field_to_use, float(fmax))
+        except Exception as e:
+            logger.warning(f"Error aplicando filtro visual {field_to_use} durante gridding: {e}")
+    
+    return gatefilter
