@@ -343,11 +343,15 @@ def build_W_operator(
     gate_z = gates_xyz[:, 2]
     
     # Precomputar altura mínima del haz para el plano XY (una sola vez)
-    # Se pasa a cada worker para saltar voxels debajo del haz más bajo
+    # Se pasa a cada worker para saltar voxels debajo del haz más bajo.
+    # Se resta medio z_step como margen para no enmascarar niveles que
+    # collapse_ppi necesitará interpolar (evita NaN en el nivel z_low).
     if lowest_elev_deg is not None:
+        z_step = float(z_coords[1] - z_coords[0]) if len(z_coords) > 1 else 500.0
+        below_beam_margin = 0.5 * z_step
         horiz_dist = np.sqrt(grid_x_2d**2 + grid_y_2d**2)
-        min_beam_h = compute_beam_height(horiz_dist, lowest_elev_deg, radar_altitude=0.0).astype('float32')
-        logger.info(f"  Below-beam mask: elev_min={lowest_elev_deg:.2f}°, "
+        min_beam_h = (compute_beam_height(horiz_dist, lowest_elev_deg, radar_altitude=0.0) - below_beam_margin).astype('float32')
+        logger.info(f"  Below-beam mask: elev_min={lowest_elev_deg:.2f}°, margin={below_beam_margin:.0f}m, "
                     f"beam_h range=[{min_beam_h.min():.0f}, {min_beam_h.max():.0f}]m")
     else:
         min_beam_h = None
