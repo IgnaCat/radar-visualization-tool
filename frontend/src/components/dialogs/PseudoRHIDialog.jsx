@@ -278,10 +278,10 @@ export default function PseudoRHIDialog({
             end_lat: eLat,
             end_lon: eLon,
             filters,
-            min_length_km: Math.max(0, parseFloat(minLengthKm) || 0),
-            max_length_km: Math.min(500, parseFloat(maxLengthKm) || 240),
-            min_height_km: Math.max(0, parseFloat(minHeightKm) || 0),
-            max_height_km: Math.min(30, parseFloat(maxHeightKm) || 20),
+            min_length_km: Math.max(0, parseFloat(minLengthKm.replace(',', '.')) || 0),
+            max_length_km: Math.min(500, parseFloat(maxLengthKm.replace(',', '.')) || 240),
+            min_height_km: Math.max(0, parseFloat(minHeightKm.replace(',', '.')) || 0),
+            max_height_km: Math.min(30, parseFloat(maxHeightKm.replace(',', '.')) || 20),
           });
           if (resp?.[0]?.image_url) {
             results.push({ field, image_url: resp[0].image_url });

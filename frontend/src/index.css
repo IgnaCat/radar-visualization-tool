@@ -87,18 +87,19 @@ button:focus-visible {
   font-family: "Inter", "Segoe UI", system-ui, sans-serif;
 }
 
-/* Tooltip transparente para marcadores RHI A/B */
+/* Tooltip badge para marcadores RHI A/B */
 .rhi-label-tooltip {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: #00aaff;
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1.5px solid #00aaff !important;
+  border-radius: 4px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3) !important;
+  color: #0077cc !important;
   font-weight: 700;
-  font-size: 13px;
-  padding: 0 !important;
-  text-shadow:
-    0 0 3px #000,
-    0 0 3px #000;
+  font-size: 12px;
+  line-height: 1;
+  padding: 2px 6px !important;
+  text-shadow: none;
+  white-space: nowrap;
 }
 .rhi-label-tooltip::before {
   display: none !important;
