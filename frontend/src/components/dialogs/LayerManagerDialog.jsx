@@ -49,7 +49,7 @@ export default function LayerManagerDialog({
   const lastUpdateRef = React.useRef(0);
 
   // Estado para filtros por campo (internos al diálogo)
-  const [localFilters, setLocalFilters] = useState({});   // { FIELD: { rhohv: {enabled, min}, range: {enabled, min, max} } }
+  const [localFilters, setLocalFilters] = useState({}); // { FIELD: { rhohv: {enabled, min}, range: {enabled, min, max} } }
   const [openFilterFor, setOpenFilterFor] = useState(new Set()); // campos con panel de filtros abierto
 
   // Inicializar localFilters desde prop filtersPerField cuando cambia externamente
@@ -67,7 +67,11 @@ export default function LayerManagerDialog({
         if (rField === "RHOHV" && key !== "RHOHV") {
           init[key].rhohv = { enabled: true, min: r.min ?? 0.8 };
         } else if (rField === key) {
-          init[key].range = { enabled: true, min: r.min ?? lim.min, max: r.max ?? lim.max };
+          init[key].range = {
+            enabled: true,
+            min: r.min ?? lim.min,
+            max: r.max ?? lim.max,
+          };
         }
       }
     }
@@ -78,7 +82,8 @@ export default function LayerManagerDialog({
     const key = String(field).toUpperCase();
     setOpenFilterFor((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
     // Ensure a default entry exists for this field
@@ -103,10 +108,15 @@ export default function LayerManagerDialog({
     onApplyFilters?.(convertToBackend(localFilters));
   }, [localFilters, onApplyFilters]);
 
-  const hasAnyFilter = useMemo(() =>
-    Object.values(localFilters).some(
-      (f) => f?.rhohv?.enabled || f?.range?.enabled
-    ), [localFilters]);
+  const hasAnyFilter = useMemo(
+    () =>
+      Object.values(localFilters).some(
+        (f) => f?.rhohv?.enabled || f?.range?.enabled,
+      ),
+    [localFilters],
+  );
+
+  const hasOpenFilters = openFilterFor.size > 0;
 
   // Estado para drag del panel completo
   const [position, setPosition] = useState({ x: 68, y: 70 });
@@ -114,25 +124,31 @@ export default function LayerManagerDialog({
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
 
   // Handlers para drag del panel completo
-  const handlePanelMouseDown = useCallback((e) => {
-    // Solo permitir drag desde el header, no desde los elementos interactivos
-    if (e.target.closest('button') || e.target.closest('.MuiSlider-root')) {
-      return;
-    }
-    setIsDragging(true);
-    setDragOffset({
-      x: e.clientX - position.x,
-      y: e.clientY - position.y,
-    });
-  }, [position]);
+  const handlePanelMouseDown = useCallback(
+    (e) => {
+      // Solo permitir drag desde el header, no desde los elementos interactivos
+      if (e.target.closest("button") || e.target.closest(".MuiSlider-root")) {
+        return;
+      }
+      setIsDragging(true);
+      setDragOffset({
+        x: e.clientX - position.x,
+        y: e.clientY - position.y,
+      });
+    },
+    [position],
+  );
 
-  const handlePanelMouseMove = useCallback((e) => {
-    if (!isDragging) return;
-    setPosition({
-      x: e.clientX - dragOffset.x,
-      y: e.clientY - dragOffset.y,
-    });
-  }, [isDragging, dragOffset]);
+  const handlePanelMouseMove = useCallback(
+    (e) => {
+      if (!isDragging) return;
+      setPosition({
+        x: e.clientX - dragOffset.x,
+        y: e.clientY - dragOffset.y,
+      });
+    },
+    [isDragging, dragOffset],
+  );
 
   const handlePanelMouseUp = useCallback(() => {
     setIsDragging(false);
@@ -141,11 +157,11 @@ export default function LayerManagerDialog({
   // Agregar/remover listeners globales para drag
   useEffect(() => {
     if (isDragging) {
-      document.addEventListener('mousemove', handlePanelMouseMove);
-      document.addEventListener('mouseup', handlePanelMouseUp);
+      document.addEventListener("mousemove", handlePanelMouseMove);
+      document.addEventListener("mouseup", handlePanelMouseUp);
       return () => {
-        document.removeEventListener('mousemove', handlePanelMouseMove);
-        document.removeEventListener('mouseup', handlePanelMouseUp);
+        document.removeEventListener("mousemove", handlePanelMouseMove);
+        document.removeEventListener("mouseup", handlePanelMouseUp);
       };
     }
   }, [isDragging, handlePanelMouseMove, handlePanelMouseUp]);
@@ -267,7 +283,7 @@ export default function LayerManagerDialog({
           top: position.y,
           left: position.x,
           zIndex: 999,
-          width: 370,
+          width: hasOpenFilters ? 600 : 370,
           maxHeight: "calc(100vh - 100px)",
           overflowY: "auto",
           backgroundColor: "rgba(255, 255, 255, 0.98)",
@@ -278,7 +294,7 @@ export default function LayerManagerDialog({
             : "0 4px 12px rgba(0,0,0,0.2)",
           transition: isDragging
             ? "box-shadow 0.2s"
-            : "opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s",
+            : "width 0.25s ease, opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s",
           userSelect: isDragging ? "none" : "auto",
         }}
       >
@@ -391,8 +407,10 @@ export default function LayerManagerDialog({
                           sx={{
                             padding: "4px",
                             color:
-                              localFilters[String(layer.field).toUpperCase()]?.rhohv?.enabled ||
-                                localFilters[String(layer.field).toUpperCase()]?.range?.enabled
+                              localFilters[String(layer.field).toUpperCase()]
+                                ?.rhohv?.enabled ||
+                              localFilters[String(layer.field).toUpperCase()]
+                                ?.range?.enabled
                                 ? "primary.main"
                                 : "text.secondary",
                           }}
@@ -502,14 +520,23 @@ export default function LayerManagerDialog({
                       >
                         {/* RHOHV filter — only for non-RHOHV fields */}
                         {String(layer.field).toUpperCase() !== "RHOHV" && (
-                          <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                          <Box
+                            display="flex"
+                            alignItems="center"
+                            gap={1}
+                            mb={0.5}
+                          >
                             <Checkbox
                               size="small"
                               checked={
-                                !!(localFilters[String(layer.field).toUpperCase()]?.rhohv?.enabled)
+                                !!localFilters[
+                                  String(layer.field).toUpperCase()
+                                ]?.rhohv?.enabled
                               }
                               onChange={(e) =>
-                                updateFilter(layer.field, "rhohv", { enabled: e.target.checked })
+                                updateFilter(layer.field, "rhohv", {
+                                  enabled: e.target.checked,
+                                })
                               }
                               sx={{ p: 0 }}
                             />
@@ -519,16 +546,24 @@ export default function LayerManagerDialog({
                             <TextField
                               size="small"
                               type="number"
-                              value={localFilters[String(layer.field).toUpperCase()]?.rhohv?.min ?? 0.8}
-                              onChange={(e) =>
-                                updateFilter(layer.field, "rhohv", { min: e.target.value })
+                              value={
+                                localFilters[String(layer.field).toUpperCase()]
+                                  ?.rhohv?.min ?? 0.8
                               }
-                              onKeyDown={(e) => e.key === "Enter" && handleApplyFiltersClick()}
+                              onChange={(e) =>
+                                updateFilter(layer.field, "rhohv", {
+                                  min: e.target.value,
+                                })
+                              }
+                              onKeyDown={(e) =>
+                                e.key === "Enter" && handleApplyFiltersClick()
+                              }
                               disabled={
-                                !localFilters[String(layer.field).toUpperCase()]?.rhohv?.enabled
+                                !localFilters[String(layer.field).toUpperCase()]
+                                  ?.rhohv?.enabled
                               }
                               inputProps={{ step: 0.01, min: 0, max: 1 }}
-                              sx={{ width: 72 }}
+                              sx={{ width: 64 }}
                             />
                           </Box>
                         )}
@@ -538,10 +573,13 @@ export default function LayerManagerDialog({
                           <Checkbox
                             size="small"
                             checked={
-                              !!(localFilters[String(layer.field).toUpperCase()]?.range?.enabled)
+                              !!localFilters[String(layer.field).toUpperCase()]
+                                ?.range?.enabled
                             }
                             onChange={(e) =>
-                              updateFilter(layer.field, "range", { enabled: e.target.checked })
+                              updateFilter(layer.field, "range", {
+                                enabled: e.target.checked,
+                              })
                             }
                             sx={{ p: 0 }}
                           />
@@ -552,31 +590,53 @@ export default function LayerManagerDialog({
                             size="small"
                             type="number"
                             label="min"
-                            value={localFilters[String(layer.field).toUpperCase()]?.range?.min ?? (FIELD_LIMITS[String(layer.field).toUpperCase()]?.min ?? 0)}
-                            onChange={(e) =>
-                              updateFilter(layer.field, "range", { min: e.target.value })
+                            value={
+                              localFilters[String(layer.field).toUpperCase()]
+                                ?.range?.min ??
+                              FIELD_LIMITS[String(layer.field).toUpperCase()]
+                                ?.min ??
+                              0
                             }
-                            onKeyDown={(e) => e.key === "Enter" && handleApplyFiltersClick()}
+                            onChange={(e) =>
+                              updateFilter(layer.field, "range", {
+                                min: e.target.value,
+                              })
+                            }
+                            onKeyDown={(e) =>
+                              e.key === "Enter" && handleApplyFiltersClick()
+                            }
                             disabled={
-                              !localFilters[String(layer.field).toUpperCase()]?.range?.enabled
+                              !localFilters[String(layer.field).toUpperCase()]
+                                ?.range?.enabled
                             }
                             inputProps={{ step: 0.1 }}
-                            sx={{ width: 76 }}
+                            sx={{ width: 68 }}
                           />
                           <TextField
                             size="small"
                             type="number"
                             label="max"
-                            value={localFilters[String(layer.field).toUpperCase()]?.range?.max ?? (FIELD_LIMITS[String(layer.field).toUpperCase()]?.max ?? 1)}
-                            onChange={(e) =>
-                              updateFilter(layer.field, "range", { max: e.target.value })
+                            value={
+                              localFilters[String(layer.field).toUpperCase()]
+                                ?.range?.max ??
+                              FIELD_LIMITS[String(layer.field).toUpperCase()]
+                                ?.max ??
+                              1
                             }
-                            onKeyDown={(e) => e.key === "Enter" && handleApplyFiltersClick()}
+                            onChange={(e) =>
+                              updateFilter(layer.field, "range", {
+                                max: e.target.value,
+                              })
+                            }
+                            onKeyDown={(e) =>
+                              e.key === "Enter" && handleApplyFiltersClick()
+                            }
                             disabled={
-                              !localFilters[String(layer.field).toUpperCase()]?.range?.enabled
+                              !localFilters[String(layer.field).toUpperCase()]
+                                ?.range?.enabled
                             }
                             inputProps={{ step: 0.1 }}
-                            sx={{ width: 76 }}
+                            sx={{ width: 68 }}
                           />
                         </Box>
                       </Box>

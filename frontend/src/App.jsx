@@ -701,7 +701,7 @@ export default function App() {
           colormap_overrides: selectedColormaps,
           session_id: sessionId,
         });
-        if (processResp.data?.outputs?.length > 0) {
+        if (processResp.data?.results?.length > 0) {
           setOverlayData(processResp.data);
           setWarnings(processResp.data.warnings || []);
           setCurrentIndex(0);
