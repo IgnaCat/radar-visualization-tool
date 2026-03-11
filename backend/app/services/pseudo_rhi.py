@@ -288,7 +288,7 @@ def generate_pseudo_rhi_png(
     range_max_km = safe_range_max_m(radar) / 1000.0
     # Ajustar límites a capacidades físicas
     max_length_km = max(0.5, min(max_length_km, range_max_km))
-    max_height_km = max(0.5, min(max_height_km, 30.0))
+    max_height_km = max(0.1, min(max_height_km, 30.0))
 
     # Validar puntos dentro del rango máximo
     if _km_between(site_lon, site_lat, end_lon, end_lat) > range_max_km:
