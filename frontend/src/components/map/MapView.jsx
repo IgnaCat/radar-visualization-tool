@@ -13,6 +13,8 @@ import AreaDrawOverlay from "../overlays/AreaDrawOverlay";
 import LineDrawOverlay from "../overlays/LineDrawOverlay";
 import MarkersOverlay from "../overlays/MarkersOverlay";
 import UsePixelStatClick from "../overlays/UsePixelStatClick";
+import TextOverlay from "../overlays/TextOverlay";
+import ShapeAnnotationsOverlay from "../overlays/ShapeAnnotationsOverlay";
 
 function COGTile({
   tilejsonUrl,
@@ -178,6 +180,20 @@ export default function MapView({
   onAddMarker,
   onRemoveMarker,
   onRenameMarker,
+  onUpdateMarker,
+  onMarkerModeDeactivate,
+  // Props para anotaciones visuales (texto y formas)
+  annotationMode = null,
+  textAnnotations = [],
+  onTextAdd,
+  onTextUpdate,
+  onTextRemove,
+  onTextModeDeactivate,
+  shapeAnnotations = [],
+  onShapeAdd,
+  onShapeUpdate,
+  onShapeRemove,
+  onShapeModeDeactivate,
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -272,6 +288,30 @@ export default function MapView({
         onAddMarker={onAddMarker}
         onRemoveMarker={onRemoveMarker}
         onRenameMarker={onRenameMarker}
+        onUpdateMarker={onUpdateMarker}
+        onModeDeactivate={onMarkerModeDeactivate}
+      />
+      <TextOverlay
+        enabled={annotationMode === "text"}
+        annotations={textAnnotations}
+        onAdd={onTextAdd}
+        onUpdate={onTextUpdate}
+        onRemove={onTextRemove}
+        onModeDeactivate={onTextModeDeactivate}
+      />
+      <ShapeAnnotationsOverlay
+        drawingMode={
+          ["line", "arrow", "rect", "circle", "polygon"].includes(
+            annotationMode,
+          )
+            ? annotationMode
+            : null
+        }
+        shapes={shapeAnnotations}
+        onAdd={onShapeAdd}
+        onUpdate={onShapeUpdate}
+        onRemove={onShapeRemove}
+        onModeDeactivate={onShapeModeDeactivate}
       />
       <UsePixelStatClick
         enabled={pixelStatMode}

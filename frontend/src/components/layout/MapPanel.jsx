@@ -2,6 +2,7 @@ import { useState, useMemo } from "react";
 import MapView from "../map/MapView";
 import VerticalToolbar from "../controls/VerticalToolbar";
 import MapToolbar from "../controls/MapToolbar";
+import DrawingToolbar from "../controls/DrawingToolbar";
 import ZoomControls from "../controls/ZoomControls";
 import ColorLegend from "../map/ColorLegend";
 import BaseMapSelector from "../map/BaseMapSelector";
@@ -146,6 +147,53 @@ export default function MapPanel({
 }) {
   // Estado local para la instancia del mapa
   const [localMapInstance, setLocalMapInstance] = useState(null);
+
+  // ── Estado local para anotaciones visuales ──────────────────────────────────
+  const [annotationMode, setAnnotationModeState] = useState(null);
+  const [textAnnotations, setTextAnnotations] = useState([]);
+  const [shapeAnnotations, setShapeAnnotations] = useState([]);
+
+  const handleSetAnnotationMode = (mode) => {
+    setAnnotationModeState((prev) => {
+      const next = prev === mode ? null : mode;
+      return next;
+    });
+    // Desactivar marcadores al activar una anotación
+    if (mode && markerMode) setMarkerMode(false);
+  };
+
+  const handleToggleMarkerModeLocal = () => {
+    // Limpiar modo anotación al activar marcadores
+    setAnnotationModeState(null);
+    onToggleMarkerMode?.();
+  };
+
+  const handleTextAdd = (ann) => setTextAnnotations((prev) => [...prev, ann]);
+  const handleTextUpdate = (id, patch) =>
+    setTextAnnotations((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, ...patch } : a)),
+    );
+  const handleTextRemove = (id) =>
+    setTextAnnotations((prev) => prev.filter((a) => a.id !== id));
+
+  const handleDeactivateAnnotationMode = () => setAnnotationModeState(null);
+
+  const handleDeactivateMarkerMode = () => setMarkerMode(false);
+
+  const handleUpdateMarker = (id, patch) =>
+    setMarkers((prev) =>
+      prev.map((m) => (m.id === id ? { ...m, ...patch } : m)),
+    );
+
+  const handleShapeAdd = (shape) =>
+    setShapeAnnotations((prev) => [...prev, shape]);
+  const handleShapeUpdate = (id, patch) =>
+    setShapeAnnotations((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    );
+  const handleShapeRemove = (id) =>
+    setShapeAnnotations((prev) => prev.filter((s) => s.id !== id));
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Wrapper para onMapReady que actualiza tanto el estado local como el externo
   const handleMapReady = (map) => {
@@ -300,9 +348,9 @@ export default function MapPanel({
         lineOverlay={
           rhiLinePreview?.start && rhiLinePreview?.end
             ? [
-              [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
-              [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
-            ]
+                [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
+                [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
+              ]
             : null
         }
         onClearLineOverlay={handleClearLineOverlay}
@@ -320,6 +368,19 @@ export default function MapPanel({
         onAddMarker={onAddMarker}
         onRemoveMarker={onRemoveMarker}
         onRenameMarker={onRenameMarker}
+        onUpdateMarker={handleUpdateMarker}
+        onMarkerModeDeactivate={handleDeactivateMarkerMode}
+        annotationMode={annotationMode}
+        textAnnotations={textAnnotations}
+        onTextAdd={handleTextAdd}
+        onTextUpdate={handleTextUpdate}
+        onTextRemove={handleTextRemove}
+        onTextModeDeactivate={handleDeactivateAnnotationMode}
+        shapeAnnotations={shapeAnnotations}
+        onShapeAdd={handleShapeAdd}
+        onShapeUpdate={handleShapeUpdate}
+        onShapeRemove={handleShapeRemove}
+        onShapeModeDeactivate={handleDeactivateAnnotationMode}
       />
 
       <VerticalToolbar
@@ -351,8 +412,13 @@ export default function MapPanel({
         locked={locked}
         onToggleSplit={onToggleSplit}
         onToggleLock={onToggleLock}
+      />
+
+      <DrawingToolbar
         markerMode={markerMode}
-        onToggleMarkerMode={onToggleMarkerMode}
+        onToggleMarkerMode={handleToggleMarkerModeLocal}
+        annotationMode={annotationMode}
+        onSetAnnotationMode={handleSetAnnotationMode}
       />
 
       <BaseMapSelector
@@ -419,12 +485,12 @@ export default function MapPanel({
         elevations={
           filesInfo.length > 0
             ? filesInfo.reduce(
-              (longest, f) =>
-                f.metadata.elevations.length > longest.length
-                  ? f.metadata.elevations
-                  : longest,
-              filesInfo[0].metadata.elevations || [],
-            )
+                (longest, f) =>
+                  f.metadata.elevations.length > longest.length
+                    ? f.metadata.elevations
+                    : longest,
+                filesInfo[0].metadata.elevations || [],
+              )
             : []
         }
         volumes={volumes}

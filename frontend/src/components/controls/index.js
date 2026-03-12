@@ -1,6 +1,7 @@
 // Componentes de controles y toolbars
 export { default as AnimationControls } from "./AnimationControls";
 export { default as MapToolbar } from "./MapToolbar";
+export { default as DrawingToolbar } from "./DrawingToolbar";
 export { default as VerticalToolbar } from "./VerticalToolbar";
 export { default as ZoomControls } from "./ZoomControls";
 export { default as RadarFilterControls } from "./RadarFilterControls";
