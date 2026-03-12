@@ -4,9 +4,6 @@ import {
   Box,
   Checkbox,
   IconButton,
-  List,
-  ListItem,
-  ListItemText,
   Slider,
   Typography,
   Divider,
@@ -57,10 +54,11 @@ function LayerControlList({
   }, [items]);
 
   // Determinar qué elementos mostrar
+  const itemsPerPage = initialVisible * 2; // 4 por columna = 8 en total
   const visibleItems = isExpanded
     ? sortedItems
-    : sortedItems.slice(0, initialVisible);
-  const hasMoreItems = sortedItems.length > initialVisible;
+    : sortedItems.slice(0, itemsPerPage);
+  const hasMoreItems = sortedItems.length > itemsPerPage;
 
   // --- Drag & Drop (HTML5 nativo) ---
   const onDragStart = useCallback((e, fromIdx) => {
@@ -133,7 +131,7 @@ function LayerControlList({
         </Typography>
       )}
 
-      <List disablePadding>
+      <Box display="grid" gridTemplateColumns="1fr 1fr" gap={0.5}>
         {sortedItems.length > 0 &&
           visibleItems.map((it, displayIdx) => {
             // El índice real en el array completo
@@ -151,7 +149,7 @@ function LayerControlList({
                 sx={{
                   px: 1,
                   py: 0.5,
-                  width: "90%",
+                  width: "100%",
                   bgcolor: "background.paper",
                 }}
               >
@@ -202,7 +200,10 @@ function LayerControlList({
                             {it.sources.map((source, idx) => (
                               <Chip
                                 key={idx}
-                                label={formatSourceDisplay(source, it.simplified)}
+                                label={formatSourceDisplay(
+                                  source,
+                                  it.simplified,
+                                )}
                                 size="small"
                                 color="info"
                                 variant="outlined"
@@ -236,7 +237,10 @@ function LayerControlList({
                   )}
 
                   <Tooltip title="Arrastrar para cambiar el orden">
-                    <IconButton size="small" sx={{ cursor: "grab", px: 1, mx: 3 }}>
+                    <IconButton
+                      size="small"
+                      sx={{ cursor: "grab", px: 1, mx: 3 }}
+                    >
                       <DragIndicatorIcon />
                     </IconButton>
                   </Tooltip>
@@ -244,7 +248,7 @@ function LayerControlList({
               </Box>
             );
           })}
-      </List>
+      </Box>
 
       {/* Botón para expandir/colapsar */}
       {hasMoreItems && (
@@ -257,7 +261,7 @@ function LayerControlList({
           >
             {isExpanded
               ? "Mostrar menos"
-              : `Mostrar ${sortedItems.length - initialVisible} más`}
+              : `Mostrar ${sortedItems.length - itemsPerPage} más`}
           </Button>
         </Box>
       )}
