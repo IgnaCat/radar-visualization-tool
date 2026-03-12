@@ -21,7 +21,7 @@ router = APIRouter(prefix="/cleanup", tags=["cleanup"])
 # Directorios “oficiales” de tu app
 UPLOAD_DIR = Path(settings.UPLOAD_DIR).resolve()       # app/storage/uploads
 TMP_DIR = Path(settings.IMAGES_DIR).resolve()          # app/storage/tmp
-BASE_DIR = Path("app/storage").resolve()
+BASE_DIR = UPLOAD_DIR.parent                           # app/storage (derivado de settings)
 
 
 def _first_safe_under(path_str: str, roots: Iterable[Path], session_id: str | None = None) -> Path | None:
@@ -189,18 +189,7 @@ def cleanup_close(req: CleanupRequest):
         # Limpiar W_OPERATOR_CACHE por sesión
         deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
     
-    # Si hay session_id, verificar si la carpeta de uploads quedó vacía después de borrar archivos
-    if req.session_id and deleted["uploads"] > 0:
-        try:
-            upload_session_dir = UPLOAD_DIR / req.session_id
-            if upload_session_dir.exists() and upload_session_dir.is_dir():
-                if not any(upload_session_dir.iterdir()):
-                    upload_session_dir.rmdir()
-                    print(f"Eliminada carpeta vacía de sesión en UPLOADS: {req.session_id}")
-        except Exception as e:
-            print(f"Error al verificar carpeta de sesión en UPLOADS: {e}")
-    
-    # Limpiar carpetas vacías de sesión en TMP (ya se hace en _delete_related_cogs)
+    # Limpiar carpetas vacías de sesión en UPLOAD y TMP
     if req.session_id:
         _cleanup_empty_session_dirs(req.session_id)
 

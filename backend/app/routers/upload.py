@@ -183,8 +183,10 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
         for p in saved_files:
             try:
                 fp = p.get("filepath")
-                if fp and Path(fp).exists():
-                    os.remove(fp)
+                if fp:
+                    full_path = UPLOAD_DIR / fp
+                    if full_path.exists():
+                        os.remove(full_path)
             except Exception:
                 pass
         raise exc
