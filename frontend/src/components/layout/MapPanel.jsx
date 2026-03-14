@@ -402,6 +402,7 @@ export default function MapPanel({
         onElevationProfileClick={handleOpenElevationProfile}
         onLayerManagerToggle={handleToggleLayerManager}
         onFileManagerToggle={handleToggleFileManager}
+        areaStatsActive={areaDrawMode || areaStatsOpen}
         pixelStatActive={pixelStatMode}
         mapSelectorActive={mapSelectorOpen}
         paletteSelectorActive={paletteSelectorOpen}

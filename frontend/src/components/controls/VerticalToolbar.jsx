@@ -1,3 +1,4 @@
+import { keyframes } from "@mui/system";
 import { Box, IconButton, Paper, Tooltip } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import ContentCutIcon from "@mui/icons-material/ContentCut";
@@ -9,6 +10,21 @@ import MapIcon from "@mui/icons-material/Map";
 import PaletteIcon from "@mui/icons-material/Palette";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 
+const activeModePulse = keyframes`
+  0% {
+    box-shadow: 0 0 0 0 rgba(126, 211, 255, 0.28), 0 2px 6px rgba(0, 0, 0, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(126, 211, 255, 0.08), 0 4px 10px rgba(31, 71, 117, 0.28);
+    transform: scale(1.04);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(126, 211, 255, 0), 0 2px 6px rgba(0, 0, 0, 0.2);
+    transform: scale(1);
+  }
+`;
+
 export default function VerticalToolbar({
   onChangeProductClick,
   onPseudoRhiClick,
@@ -19,6 +35,7 @@ export default function VerticalToolbar({
   onElevationProfileClick,
   onLayerManagerToggle,
   onFileManagerToggle,
+  areaStatsActive = false,
   pixelStatActive = false,
   mapSelectorActive = false,
   paletteSelectorActive = false,
@@ -66,13 +83,15 @@ export default function VerticalToolbar({
       icon: <PercentIcon />,
       tooltip: "Estadísticas de área",
       action: onAreaStatsClick,
-      active: false,
+      active: areaStatsActive,
+      mode: true,
     },
     {
       icon: <ImageSearchIcon />,
       tooltip: "Ver valor pixel",
       action: onPixelStatToggle,
       active: pixelStatActive,
+      mode: true,
     },
     {
       icon: <TimelineIcon />,
@@ -101,27 +120,60 @@ export default function VerticalToolbar({
     >
       {tools.map((tool, index) => (
         <Box key={index}>
-          <Tooltip title={tool.tooltip} placement="right">
+          <Tooltip
+            title={
+              tool.mode && tool.active ? `${tool.tooltip} activo` : tool.tooltip
+            }
+            placement="right"
+          >
             <IconButton
               onClick={tool.action}
+              aria-pressed={tool.active}
               sx={{
                 width: 30,
                 height: 30,
                 borderRadius: "8px",
                 margin: "2px 7px",
                 color: "#fff",
-                backgroundColor: tool.active
-                  ? "rgba(74, 144, 226, 1)"
-                  : "rgba(74, 144, 226, 0.85)",
+                position: "relative",
+                overflow: "visible",
+                backgroundColor:
+                  tool.mode && tool.active
+                    ? "rgba(111, 191, 235, 1)"
+                    : tool.active
+                      ? "rgba(74, 144, 226, 1)"
+                      : "rgba(74, 144, 226, 0.85)",
                 boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-                transition: "all 0.2s ease",
+                transition: "all 0.25s ease",
+                animation:
+                  tool.mode && tool.active
+                    ? `${activeModePulse} 2.2s ease-in-out infinite`
+                    : "none",
+                "&::after":
+                  tool.mode && tool.active
+                    ? {
+                        content: '""',
+                        position: "absolute",
+                        top: -3,
+                        right: -3,
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        backgroundColor: "#dff7ff",
+                        boxShadow: "0 0 0 2px rgba(50, 106, 164, 0.7)",
+                      }
+                    : undefined,
                 "& .MuiSvgIcon-root": {
                   fontSize: "1.25rem", // Mantiene el tamaño del icono
                 },
                 "&:hover": {
-                  backgroundColor: "rgba(74, 144, 226, 1)",
+                  backgroundColor:
+                    tool.mode && tool.active
+                      ? "rgba(126, 211, 255, 1)"
+                      : "rgba(74, 144, 226, 1)",
                   boxShadow: "0 3px 8px rgba(0,0,0,0.3)",
-                  transform: "scale(1.02)",
+                  transform:
+                    tool.mode && tool.active ? "scale(1.05)" : "scale(1.02)",
                 },
               }}
             >
