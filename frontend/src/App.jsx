@@ -22,6 +22,7 @@ import Alerts from "./components/ui/Alerts";
 import Loader from "./components/ui/Loader";
 import SplitScreenContainer from "./components/layout/SplitScreenContainer";
 import SettingsDialog from "./components/dialogs/SettingsDialog";
+import DownloadLayersDialog from "./components/dialogs/DownloadLayersDialog";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
 function mergeRadarFrames(results, toleranceSec = 0) {
@@ -130,6 +131,8 @@ export default function App() {
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [downloadLayersDialogOpen, setDownloadLayersDialogOpen] =
+    useState(false);
   const [deltaT, setDeltaT] = useState(0);
   const [interpSettings, setInterpSettings] = useState({
     weightFunc: "Barnes2",
@@ -273,28 +276,22 @@ export default function App() {
   }, [currentOverlay, hiddenLayers]);
 
   // Función para descargar COGs de las capas actuales
-  const handleDownloadCOGs = useCallback(async () => {
-    if (!currentOverlay || currentOverlay.length === 0) {
-      enqueueSnackbar("No hay capas disponibles para descargar", {
-        variant: "warning",
-      });
-      return;
-    }
+  // layersOverride: si se pasa, se descargan esas capas directamente (desde el dialog de selección)
+  const handleDownloadCOGs = useCallback(
+    async (layersOverride) => {
+      let layersToDownload;
 
-    try {
-      // Con múltiples radares, descargar solo las capas del radar con mayor prioridad (el de arriba en LayerManager)
-      const topRadarFile = currentOverlay?.[0]?.source_file;
-      const hasMultipleRadars =
-        new Set(currentOverlay.map((l) => l.source_file).filter(Boolean)).size >
-        1;
-
-      const layersToDownload = currentOverlay.filter((layer) => {
-        if (!layer.image_url) return false;
-        if (hasMultipleRadars && topRadarFile && layer.source_file) {
-          return layer.source_file === topRadarFile;
+      if (layersOverride) {
+        layersToDownload = layersOverride;
+      } else {
+        if (!currentOverlay || currentOverlay.length === 0) {
+          enqueueSnackbar("No hay capas disponibles para descargar", {
+            variant: "warning",
+          });
+          return;
         }
-        return true;
-      });
+        layersToDownload = currentOverlay.filter((layer) => layer.image_url);
+      }
 
       if (layersToDownload.length === 0) {
         enqueueSnackbar("No hay archivos COG para descargar", {
@@ -303,61 +300,69 @@ export default function App() {
         return;
       }
 
-      // Crear todos los links de descarga
-      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      const downloadLinks = [];
+      try {
+        // Crear todos los links de descarga
+        const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+        const downloadLinks = [];
 
-      for (const layer of layersToDownload) {
-        const filename =
-          layer.image_url.split("/").pop() || generateFilename("cog", ".tif");
-        const cogUrl = `${baseUrl}/${layer.image_url}`;
+        for (const layer of layersToDownload) {
+          const filename =
+            layer.image_url.split("/").pop() || generateFilename("cog", ".tif");
+          const cogUrl = `${baseUrl}/${layer.image_url}`;
 
-        try {
-          const response = await fetch(cogUrl);
-          if (!response.ok) {
-            console.error(
-              `Error descargando ${filename}: HTTP ${response.status}`,
-            );
-            continue;
+          try {
+            const response = await fetch(cogUrl);
+            if (!response.ok) {
+              console.error(
+                `Error descargando ${filename}: HTTP ${response.status}`,
+              );
+              continue;
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            link.style.display = "none";
+            document.body.appendChild(link);
+            downloadLinks.push({ link, url });
+          } catch (err) {
+            console.error(`Error preparando descarga de ${filename}:`, err);
           }
-
-          const blob = await response.blob();
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement("a");
-          link.href = url;
-          link.download = filename;
-          link.style.display = "none";
-          document.body.appendChild(link);
-          downloadLinks.push({ link, url });
-        } catch (err) {
-          console.error(`Error preparando descarga de ${filename}:`, err);
         }
-      }
 
-      // Hacer click en todos los links con pequeños delays
-      for (let i = 0; i < downloadLinks.length; i++) {
-        downloadLinks[i].link.click();
-        if (i < downloadLinks.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 300));
+        // Hacer click en todos los links con pequeños delays
+        for (let i = 0; i < downloadLinks.length; i++) {
+          downloadLinks[i].link.click();
+          if (i < downloadLinks.length - 1) {
+            await new Promise((resolve) => setTimeout(resolve, 300));
+          }
         }
-      }
 
-      // Limpiar después de un delay final
-      setTimeout(() => {
-        downloadLinks.forEach(({ link, url }) => {
-          document.body.removeChild(link);
-          window.URL.revokeObjectURL(url);
+        // Limpiar después de un delay final
+        setTimeout(() => {
+          downloadLinks.forEach(({ link, url }) => {
+            document.body.removeChild(link);
+            window.URL.revokeObjectURL(url);
+          });
+        }, 1000);
+
+        enqueueSnackbar(
+          `${downloadLinks.length} archivo(s) COG descargado(s)`,
+          {
+            variant: "success",
+          },
+        );
+      } catch (error) {
+        console.error("Error descargando COGs:", error);
+        enqueueSnackbar("Error al descargar archivos COG", {
+          variant: "error",
         });
-      }, 1000);
-
-      enqueueSnackbar(`${downloadLinks.length} archivo(s) COG descargado(s)`, {
-        variant: "success",
-      });
-    } catch (error) {
-      console.error("Error descargando COGs:", error);
-      enqueueSnackbar("Error al descargar archivos COG", { variant: "error" });
-    }
-  }, [currentOverlay, generateFilename, enqueueSnackbar]);
+      }
+    },
+    [currentOverlay, generateFilename, enqueueSnackbar],
+  );
 
   // Configurar descargas disponibles para el toolbar
   const availableDownloads = useMemo(() => {
@@ -366,7 +371,7 @@ export default function App() {
     // Captura del mapa (siempre disponible si hay mapa)
     if (mapInstance) {
       downloads.mapScreenshot = {
-        handler: () => handleScreenshot(mapInstance, "map-container"),
+        handler: () => handleScreenshot(mapInstance, "map-container-main"),
         label: "Captura del mapa",
         disabled: false,
       };
@@ -380,9 +385,9 @@ export default function App() {
           (currentOverlay || []).map((l) => l.source_file).filter(Boolean),
         ).size > 1;
       downloads.cogLayers = {
-        handler: handleDownloadCOGs,
+        handler: () => setDownloadLayersDialogOpen(true),
         label: hasMultiRadar
-          ? `Descargar capas del radar principal`
+          ? `Descargar capas GeoTIFF`
           : `Descargar ${currentOverlay.length} capa(s) Geotiff`,
         disabled: false,
       };
@@ -1309,6 +1314,13 @@ export default function App() {
         message={alert.message}
         severity={alert.severity}
         onClose={() => setAlert({ ...alert, open: false })}
+      />
+
+      <DownloadLayersDialog
+        open={downloadLayersDialogOpen}
+        onClose={() => setDownloadLayersDialogOpen(false)}
+        layers={currentOverlay || []}
+        onDownload={handleDownloadCOGs}
       />
 
       <SettingsDialog

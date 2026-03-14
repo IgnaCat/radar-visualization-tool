@@ -3,6 +3,7 @@ export {
   default as DraggableDialogPaper,
   useDraggableDialogPaper,
 } from "./DraggableDialogPaper";
+export { default as DownloadLayersDialog } from "./DownloadLayersDialog";
 export { default as ProductSelectorDialog } from "./ProductSelectorDialog";
 export { default as PseudoRHIDialog } from "./PseudoRHIDialog";
 export { default as AreaStatsDialog } from "./AreaStatsDialog";
