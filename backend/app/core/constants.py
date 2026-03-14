@@ -9,6 +9,7 @@ FIELD_ALIASES = {
     "VRAD": ["VRAD","velocity","corrected_velocity"],       # Velocidad radial
     "WRAD": ["WRAD","spectrum_width"],                      # Velocidad radial del viento
     "PHIDP":["PHIDP","differential_phase"],                 # Fase diferencial específica
+    "COLMAX": ["COLMAX", "colmax"],                         # Campo de colmax para interpolación
 }
 
 FIELD_RENDER = { 
@@ -21,6 +22,22 @@ FIELD_RENDER = {
     "VRAD": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
     "WRAD": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
     "PHIDP": {"vmin": 0.0, "vmax": 360.0, "cmap": "Theodore16"},
+    "COLMAX": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
+}
+
+# Valores de referencia de la leyenda de colores por campo.
+# Se usan para muestrear colores dentro del rango [vmin, vmax] del backend.
+FIELD_LEGEND_VALUES = {
+    "DBZH": [70, 60, 50, 40, 30, 20, 10, 0, -10, -20, -30],
+    "DBZHF": [70, 60, 50, 40, 30, 20, 10, 0, -10, -20, -30],
+    "DBZV": [70, 60, 50, 40, 30, 20, 10, 0, -10, -20, -30],
+    "ZDR": [10.5, 7, 5.5, 4, 3, 2.5, 1.5, 0, -2, -5],
+    "RHOHV": [1.0, 0.98, 0.95, 0.9, 0.85, 0.8, 0.7, 0.5, 0.3, 0.0],
+    "KDP": [8, 7, 6, 5, 4, 3, 2, 1, 0],
+    "VRAD": [35, 30, 20, 10, 0, -10, -20, -30, -35],
+    "WRAD": [10, 8, 6, 4, 2, 1, 0],
+    "PHIDP": [360, 300, 240, 180, 120, 60, 0],
+    "COLMAX": [70, 60, 50, 40, 30, 20, 10, 0, -10, -20, -30]
 }
 
 VARIABLE_UNITS = {
@@ -31,7 +48,9 @@ VARIABLE_UNITS = {
     'ZDR': 'dBZ',
     'VRAD': 'm/s',
     'RHOHV': '',
-    'PHIDP': 'deg'
+    'PHIDP': 'deg',
+    'DBZHF': 'dBZ',
+    'COLMAX': 'dBZ',
 }
 
 # Opciones de colormaps disponibles por campo
@@ -45,6 +64,7 @@ FIELD_COLORMAP_OPTIONS = {
     "VRAD": ["NWSVel", "pyart_BuDRd18", "seismic", "RdBu_r"],
     "WRAD": ["Oranges", "YlOrRd", "hot", "plasma"],
     "PHIDP": ["Theodore16", "hsv", "twilight", "twilight_shifted"],
+    "COLMAX": ["grc_th", "grc_th2", "grc_rain", "pyart_NWSRef", "pyart_HomeyerRainbow"],
 }
 
 AFFECTS_INTERP_FIELDS = {"RHOHV"}

@@ -191,6 +191,14 @@ export async function getColormapColors(cmapName, steps = 256) {
   return response.data;
 }
 
+export async function getColormapLegend(field, cmapName = null) {
+  const query = cmapName ? `?cmap_name=${encodeURIComponent(cmapName)}` : "";
+  const response = await api.get(
+    `/colormap/legend/${encodeURIComponent(field)}${query}`,
+  );
+  return response.data;
+}
+
 export async function getCacheStats() {
   const response = await api.get("/admin/cache-stats");
   return response.data;
