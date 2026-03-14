@@ -5,6 +5,7 @@ import logoSrc from "../../assets/lrsr_logo.png";
 export default function HeaderCard({ onUploadClick }) {
   return (
     <Paper
+      className="header-card"
       elevation={3}
       sx={{
         position: "absolute",
@@ -24,6 +25,7 @@ export default function HeaderCard({ onUploadClick }) {
       {/* Logo */}
       <Box
         component="img"
+        className="header-logo"
         src={logoSrc}
         alt="LRSR Logo"
         sx={{
