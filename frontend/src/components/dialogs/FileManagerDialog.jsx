@@ -30,6 +30,7 @@ export default function FileManagerDialog({
   onRemoveFile,
 }) {
   const [confirmDelete, setConfirmDelete] = useState(null); // filepath pendiente de confirmación
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
 
   // Agrupar archivos por radar para mejor visualización
   const groupedFiles = useMemo(() => {
@@ -51,6 +52,7 @@ export default function FileManagerDialog({
   }, [filesInfo]);
 
   const handleDeleteClick = (filepath) => {
+    setConfirmDeleteAll(false);
     setConfirmDelete(filepath);
   };
 
@@ -65,8 +67,31 @@ export default function FileManagerDialog({
     setConfirmDelete(null);
   };
 
+  const handleDeleteAllClick = () => {
+    if (filesInfo.length === 0) return;
+    setConfirmDelete(null);
+    setConfirmDeleteAll(true);
+  };
+
+  const handleConfirmDeleteAll = () => {
+    const allFilepaths = filesInfo
+      .map((file) => file.filepath)
+      .filter((filepath) => Boolean(filepath));
+
+    if (allFilepaths.length > 0) {
+      onRemoveFile?.(allFilepaths);
+    }
+
+    setConfirmDeleteAll(false);
+  };
+
+  const handleCancelDeleteAll = () => {
+    setConfirmDeleteAll(false);
+  };
+
   const handleClose = () => {
     setConfirmDelete(null);
+    setConfirmDeleteAll(false);
     onClose();
   };
 
@@ -168,13 +193,62 @@ export default function FileManagerDialog({
               sx={{ height: 20, fontSize: "0.7rem" }}
             />
           </Box>
-          <IconButton
-            size="small"
-            onClick={handleClose}
-            sx={{ padding: "4px" }}
-          >
-            <CloseIcon fontSize="small" />
-          </IconButton>
+          <Box display="flex" alignItems="center" gap={1}>
+            {confirmDeleteAll ? (
+              <Box display="flex" alignItems="center" gap={0.5}>
+                <Button
+                  size="small"
+                  color="error"
+                  onClick={handleConfirmDeleteAll}
+                  sx={{
+                    minWidth: "auto",
+                    fontSize: "0.65rem",
+                    textTransform: "none",
+                    padding: "2px 6px",
+                  }}
+                >
+                  Confirmar
+                </Button>
+                <Button
+                  size="small"
+                  onClick={handleCancelDeleteAll}
+                  sx={{
+                    minWidth: "auto",
+                    fontSize: "0.65rem",
+                    textTransform: "none",
+                    padding: "2px 6px",
+                  }}
+                >
+                  Cancelar
+                </Button>
+              </Box>
+            ) : (
+              <Button
+                size="small"
+                variant="text"
+                color="error"
+                onClick={handleDeleteAllClick}
+                disabled={filesInfo.length === 0 || Boolean(confirmDelete)}
+                sx={{
+                  minWidth: "auto",
+                  fontSize: "0.68rem",
+                  textTransform: "none",
+                  padding: "2px 4px",
+                  lineHeight: 1.2,
+                }}
+              >
+                Eliminar todos
+              </Button>
+            )}
+
+            <IconButton
+              size="small"
+              onClick={handleClose}
+              sx={{ padding: "4px" }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Box>
         </Box>
 
         {/* Content */}
@@ -306,6 +380,7 @@ export default function FileManagerDialog({
                               <IconButton
                                 size="small"
                                 onClick={() => handleDeleteClick(file.filepath)}
+                                disabled={confirmDeleteAll}
                                 sx={{
                                   padding: "4px",
                                   color: "text.secondary",

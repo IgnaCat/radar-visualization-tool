@@ -850,24 +850,42 @@ export default function App() {
   }, [settingsApplyVersion, interpSettings, reprocessCurrentView]);
 
   /**
-   * Elimina un archivo subido del servidor y actualiza todo el estado.
+   * Elimina uno o varios archivos subidos del servidor y actualiza todo el estado.
    * Borra el NetCDF, COGs y cache en backend. En frontend filtra el archivo
    * de todos los estados derivados.
    */
   const handleRemoveFile = useCallback(
-    async (filepath) => {
+    async (targetFilepaths) => {
+      const filepaths = (
+        Array.isArray(targetFilepaths) ? targetFilepaths : [targetFilepaths]
+      ).filter(Boolean);
+
+      if (filepaths.length === 0) return;
+
+      const normalizedFilepaths = filepaths.map((p) =>
+        String(p).replace(/\\/g, "/"),
+      );
+      const removedPathSet = new Set(normalizedFilepaths);
+      const removedFileNames = new Set(
+        normalizedFilepaths.map((p) => p.split("/").pop()),
+      );
+
       try {
         setLoading(true);
 
-        // 1. Llamar al backend para borrar archivo, COGs y cache
-        await removeFiles([filepath], sessionId);
+        // 1. Llamar al backend para borrar archivo(s), COGs y cache
+        await removeFiles(filepaths, sessionId);
 
         // 2. Actualizar uploadedFiles
-        const newUploadedFiles = uploadedFiles.filter((f) => f !== filepath);
+        const newUploadedFiles = uploadedFiles.filter(
+          (f) => !removedPathSet.has(String(f).replace(/\\/g, "/")),
+        );
         setUploadedFiles(newUploadedFiles);
 
         // 3. Actualizar filesInfo
-        const newFilesInfo = filesInfo.filter((f) => f.filepath !== filepath);
+        const newFilesInfo = filesInfo.filter(
+          (f) => !removedPathSet.has(String(f.filepath).replace(/\\/g, "/")),
+        );
         setFilesInfo(newFilesInfo);
 
         // 4. Recalcular volumes y availableRadars
@@ -906,11 +924,7 @@ export default function App() {
                   .replace(/\\/g, "/")
                   .split("/")
                   .pop();
-                const removedFile = String(filepath)
-                  .replace(/\\/g, "/")
-                  .split("/")
-                  .pop();
-                return layerFile !== removedFile;
+                return !removedFileNames.has(layerFile);
               });
             })
             .filter((frame) => Array.isArray(frame) && frame.length > 0);
@@ -968,12 +982,11 @@ export default function App() {
           // Limpiar opacityByLayer de capas del archivo eliminado
           setOpacityByLayer((prev) => {
             const next = { ...prev };
-            const removedFile = String(filepath)
-              .replace(/\\/g, "/")
-              .split("/")
-              .pop();
             for (const key of Object.keys(next)) {
-              if (key.includes(filepath) || key.includes(removedFile)) {
+              if (
+                normalizedFilepaths.some((path) => key.includes(path)) ||
+                Array.from(removedFileNames).some((name) => key.includes(name))
+              ) {
                 delete next[key];
               }
             }
@@ -999,10 +1012,8 @@ export default function App() {
             const next = new Set(prev);
             for (const key of prev) {
               if (
-                key.includes(filepath) ||
-                key.includes(
-                  String(filepath).split("/").pop().split("\\").pop(),
-                )
+                normalizedFilepaths.some((path) => key.includes(path)) ||
+                Array.from(removedFileNames).some((name) => key.includes(name))
               ) {
                 next.delete(key);
               }
@@ -1011,13 +1022,21 @@ export default function App() {
           });
         }
 
-        enqueueSnackbar(`Archivo eliminado correctamente`, {
-          variant: "success",
-        });
+        enqueueSnackbar(
+          filepaths.length === 1
+            ? "Archivo eliminado correctamente"
+            : `Se eliminaron ${filepaths.length} archivos correctamente`,
+          {
+            variant: "success",
+          },
+        );
       } catch (err) {
         console.error("Error eliminando archivo:", err);
         enqueueSnackbar(
-          err?.response?.data?.detail || "Error al eliminar archivo",
+          err?.response?.data?.detail ||
+            (filepaths.length === 1
+              ? "Error al eliminar archivo"
+              : "Error al eliminar archivos"),
           { variant: "error" },
         );
       } finally {
