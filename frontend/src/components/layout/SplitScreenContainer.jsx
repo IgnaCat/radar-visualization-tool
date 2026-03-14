@@ -77,7 +77,10 @@ export default function SplitScreenContainer({
   // Settings del segundo mapa (independientes del primero)
   const [settingsOpen2, setSettingsOpen2] = useState(false);
   const [deltaT2, setDeltaT2] = useState(0);
-  const [interpSettings2, setInterpSettings2] = useState({ weightFunc: "Barnes2", maxNeighbors: 30 });
+  const [interpSettings2, setInterpSettings2] = useState({
+    weightFunc: "Barnes2",
+    maxNeighbors: 30,
+  });
 
   const drawnLayerRef2 = useRef(null);
 
@@ -216,11 +219,19 @@ export default function SplitScreenContainer({
   };
 
   const reprocessMap2 = async (newInterpSettings) => {
-    if (!splitScreenActive || !Array.isArray(overlayData2) || overlayData2.length === 0) return;
+    if (
+      !splitScreenActive ||
+      !Array.isArray(overlayData2) ||
+      overlayData2.length === 0
+    )
+      return;
 
     const enabledLayers =
-      savedLayers2.filter((layer) => layer.enabled).map((layer) => layer.label) || [];
-    const layersToProcess = enabledLayers.length > 0 ? enabledLayers : fieldsUsed2;
+      savedLayers2
+        .filter((layer) => layer.enabled)
+        .map((layer) => layer.label) || [];
+    const layersToProcess =
+      enabledLayers.length > 0 ? enabledLayers : fieldsUsed2;
 
     if (layersToProcess.length === 0) return;
 
@@ -265,13 +276,25 @@ export default function SplitScreenContainer({
   const handlePixelStatClick2 = async (latlng) => {
     // Similar al mapa 1
     try {
+      const currentFrame2 =
+        Array.isArray(overlayData2) && overlayData2.length > 0
+          ? overlayData2[currentIndex2]
+          : null;
+      const visibleFrame2 = Array.isArray(currentFrame2)
+        ? currentFrame2.filter(
+            (l) => !hiddenLayers2.has(`${l.field}::${l.source_file}`),
+          )
+        : null;
+      const topVisibleLayer2 =
+        Array.isArray(visibleFrame2) && visibleFrame2.length > 0
+          ? visibleFrame2[0]
+          : null;
       const payload = {
-        // Usar la capa con mayor prioridad del mapa 2 (primera en el overlay ordenado)
+        // Usar la capa visible de mayor prioridad del mapa 2.
         filepath:
-          (Array.isArray(overlayData2) &&
-            overlayData2[currentIndex2]?.[0]?.source_file) ||
+          topVisibleLayer2?.source_file ||
           sharedProps.uploadedFiles[currentIndex2],
-        field: fieldsUsed2?.[0] || "DBZH",
+        field: topVisibleLayer2?.field || fieldsUsed2?.[0] || "DBZH",
         product: product2 || "PPI",
         elevation: activeElevation2,
         height: activeHeight2,
@@ -289,7 +312,7 @@ export default function SplitScreenContainer({
           variant: "warning",
         });
       } else {
-        sharedProps.enqueueSnackbar(`${fieldsUsed2?.[0] || "DBZH"}: ${v}`, {
+        sharedProps.enqueueSnackbar(`${payload.field || "DBZH"}: ${v}`, {
           variant: "success",
         });
         setPixelStatMarker2({

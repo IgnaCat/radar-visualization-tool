@@ -211,27 +211,6 @@ export default function App() {
   // Estado para split screen
   const [splitScreenActive, setSplitScreenActive] = useState(false);
 
-  // Derivar sitio del radar a partir de la capa de mayor prioridad (primera en el overlay, ordenada por LayerManager)
-  const radarSite = useMemo(() => {
-    // Con múltiples radares: usar la capa con mayor prioridad (order más bajo = más arriba en LayerManager)
-    const topLayerFile =
-      Array.isArray(currentOverlay) && currentOverlay.length > 0
-        ? currentOverlay[0]?.source_file
-        : null;
-    const fileToUse = topLayerFile || uploadedFiles[currentIndex];
-    if (!fileToUse) return null;
-    const fi = filesInfo.find((f) => f.filepath === fileToUse);
-    const md = fi?.metadata;
-    if (!md) return null;
-    const site = md.radar_site || md.site; // soportar ambos nombres
-    if (!site || site.lat == null || site.lon == null) return null;
-    return {
-      lat: Number(site.lat),
-      lon: Number(site.lon),
-      alt_m: site.alt_m ?? site.alt ?? null,
-    };
-  }, [currentOverlay, uploadedFiles, currentIndex, filesInfo]);
-
   // Hook para acciones del mapa (screenshot, print, fullscreen)
   const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } =
     useMapActions();
@@ -274,6 +253,26 @@ export default function App() {
     );
     return filtered.length > 0 ? filtered : [];
   }, [currentOverlay, hiddenLayers]);
+
+  // Derivar sitio del radar a partir de la capa visible de mayor prioridad.
+  const radarSite = useMemo(() => {
+    const topVisibleLayerFile =
+      Array.isArray(visibleOverlay) && visibleOverlay.length > 0
+        ? visibleOverlay[0]?.source_file
+        : null;
+    const fileToUse = topVisibleLayerFile || uploadedFiles[currentIndex];
+    if (!fileToUse) return null;
+    const fi = filesInfo.find((f) => f.filepath === fileToUse);
+    const md = fi?.metadata;
+    if (!md) return null;
+    const site = md.radar_site || md.site; // soportar ambos nombres
+    if (!site || site.lat == null || site.lon == null) return null;
+    return {
+      lat: Number(site.lat),
+      lon: Number(site.lon),
+      alt_m: site.alt_m ?? site.alt ?? null,
+    };
+  }, [visibleOverlay, uploadedFiles, currentIndex, filesInfo]);
 
   // Función para descargar COGs de las capas actuales
   // layersOverride: si se pasa, se descargan esas capas directamente (desde el dialog de selección)
@@ -656,46 +655,37 @@ export default function App() {
         } else {
           next.add(key);
         }
+
+        // Actualizar savedLayers (enabled flag) con el estado real resultante.
+        setSavedLayers((prevLayers) =>
+          prevLayers.map((layer) =>
+            layer.field === field || layer.label === field
+              ? { ...layer, enabled: !next.has(key) }
+              : layer,
+          ),
+        );
+
+        // Actualizar fieldsUsed (solo campos visibles) con el hidden set actualizado.
+        const allFields = mergedOutputs.flatMap((frame) =>
+          Array.isArray(frame) ? frame.map((l) => l.field) : [],
+        );
+        const uniqueFields = [...new Set(allFields)];
+        const visibleFields = uniqueFields.filter((f) => {
+          return mergedOutputs.some(
+            (frame) =>
+              Array.isArray(frame) &&
+              frame.some(
+                (l) =>
+                  l.field === f && !next.has(`${l.field}::${l.source_file}`),
+              ),
+          );
+        });
+        setFieldsUsed(visibleFields.length > 0 ? visibleFields : uniqueFields);
+
         return next;
       });
-
-      // Actualizar savedLayers (enabled flag)
-      setSavedLayers((prev) =>
-        prev.map((layer) =>
-          layer.field === field || layer.label === field
-            ? { ...layer, enabled: !hiddenLayers.has(key) ? false : true }
-            : layer,
-        ),
-      );
-
-      // Actualizar fieldsUsed (solo campos visibles)
-      const allFields = mergedOutputs.flatMap((frame) =>
-        Array.isArray(frame) ? frame.map((l) => l.field) : [],
-      );
-      const uniqueFields = [...new Set(allFields)];
-
-      // Recalcular qué campos quedan visibles después del toggle
-      const updatedHidden = new Set(hiddenLayers);
-      if (updatedHidden.has(key)) {
-        updatedHidden.delete(key);
-      } else {
-        updatedHidden.add(key);
-      }
-      const visibleFields = uniqueFields.filter((f) => {
-        // Un campo es visible si al menos una capa con ese field no está oculta
-        return mergedOutputs.some(
-          (frame) =>
-            Array.isArray(frame) &&
-            frame.some(
-              (l) =>
-                l.field === f &&
-                !updatedHidden.has(`${l.field}::${l.source_file}`),
-            ),
-        );
-      });
-      setFieldsUsed(visibleFields.length > 0 ? visibleFields : uniqueFields);
     },
-    [mergedOutputs, hiddenLayers],
+    [mergedOutputs],
   );
 
   /**
@@ -1146,11 +1136,14 @@ export default function App() {
 
   const handleMapClickPixelStat = async (latlng) => {
     try {
+      const topVisibleLayer =
+        Array.isArray(visibleOverlay) && visibleOverlay.length > 0
+          ? visibleOverlay[0]
+          : null;
       const payload = {
-        // Usar la capa con mayor prioridad (primera tras el orden del LayerManager)
-        filepath:
-          currentOverlay?.[0]?.source_file || uploadedFiles[currentIndex],
-        field: fieldsUsed?.[0] || "DBZH",
+        // Usar la capa visible de mayor prioridad.
+        filepath: topVisibleLayer?.source_file || uploadedFiles[currentIndex],
+        field: topVisibleLayer?.field || fieldsUsed?.[0] || "DBZH",
         product: overlayData?.product || "PPI",
         elevation: activeElevation,
         height: activeHeight,
@@ -1168,7 +1161,7 @@ export default function App() {
           variant: "warning",
         });
       } else {
-        enqueueSnackbar(`${fieldsUsed?.[0] || "DBZH"}: ${v}`, {
+        enqueueSnackbar(`${payload.field || "DBZH"}: ${v}`, {
           variant: "success",
         });
         setPixelStatMarker({
