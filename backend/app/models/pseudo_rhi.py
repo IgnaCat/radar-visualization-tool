@@ -44,6 +44,16 @@ class PseudoRHIRequest(BaseModel):
         default=None, 
         description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
     )
+    weight_func: Optional[str] = Field(
+        default="Barnes2",
+        description="Funcion de ponderacion: 'Barnes2', 'Barnes', 'Cressman', 'nearest'"
+    )
+    max_neighbors: Optional[int] = Field(
+        default=30,
+        ge=1,
+        le=500,
+        description="Maximo numero de vecinos para interpolacion"
+    )
     session_id: Optional[str] = Field(
         default=None,
         description="Identificador único de sesión"

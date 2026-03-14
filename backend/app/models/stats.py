@@ -30,6 +30,14 @@ class RadarStatsRequest(BaseModel):
         default=None, 
         description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}"
     )
+    weight_func: Optional[str] = Field(
+        default="Barnes2",
+        description="Función de ponderación: 'Barnes2', 'Barnes', 'Cressman', 'nearest'"
+    )
+    max_neighbors: Optional[int] = Field(
+        default=30, ge=1, le=500,
+        description="Máximo número de vecinos para interpolación"
+    )
 
     @validator("filepath")
     def validate_filepath(cls, v):

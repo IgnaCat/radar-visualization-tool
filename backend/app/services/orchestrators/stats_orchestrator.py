@@ -86,6 +86,8 @@ class StatsOrchestrator:
         volume: Optional[str] = None,
         filters: Optional[List] = None,
         session_id: Optional[str] = None,
+        weight_func: str = "Barnes2",
+        max_neighbors: Optional[int] = None,
     ) -> str:
         """
         Genera cache key incluyendo filtros QC (afectan interpolación).
@@ -95,7 +97,7 @@ class StatsOrchestrator:
         """
         product_upper = product.upper()
         field_to_use = field.upper()
-        interp = "Barnes2"
+        interp = weight_func
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
@@ -115,6 +117,7 @@ class StatsOrchestrator:
             volume=volume,
             interp=interp,
             qc_sig=qc_sig,  # Incluir filtros QC en cache key
+            max_neighbors=max_neighbors,
             session_id=session_id,
         )
 
@@ -302,6 +305,8 @@ class StatsOrchestrator:
         polygon_gj_4326: dict,
         filters: List,
         session_id: Optional[str] = None,
+        weight_func: str = "Barnes2",
+        max_neighbors: int = 30,
     ) -> Dict:
         """
         Genera grilla 2D bajo demanda cuando no está en cache y calcula estadísticas.
@@ -341,6 +346,8 @@ class StatsOrchestrator:
             elevation=elevation,
             cappi_height=cappi_height,
             filters=filters,
+            interp=weight_func,
+            max_neighbors=max_neighbors,
         )
         
         # Extraer datos de la grilla generada
@@ -412,6 +419,8 @@ class StatsOrchestrator:
 
         # 4. Generar cache key (incluyendo filtros QC)
         radar_name, estrategia, volume, _ = extract_metadata_from_filename(payload.filepath)
+        weight_func = payload.weight_func or "Barnes2"
+        max_neighbors = payload.max_neighbors or 30
         cache_key = StatsOrchestrator.generate_cache_key(
             filepath=filepath,
             product=payload.product,
@@ -421,6 +430,8 @@ class StatsOrchestrator:
             volume=volume,
             filters=payload.filters,
             session_id=payload.session_id,
+            weight_func=weight_func,
+            max_neighbors=max_neighbors,
         )
 
         # 5. Intentar calcular estadísticas desde cache
@@ -445,6 +456,8 @@ class StatsOrchestrator:
                 polygon_gj_4326=payload.polygon_geojson,
                 filters=payload.filters or [],
                 session_id=payload.session_id,
+                weight_func=weight_func,
+                max_neighbors=max_neighbors,
             )
 
         # 7. Verificar cobertura final

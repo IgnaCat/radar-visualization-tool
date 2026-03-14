@@ -255,11 +255,12 @@ def qc_signature(filters):
 
 def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
                      elevation, cappi_height, volume,
-                     interp, qc_sig, session_id=None) -> str:
+                     interp, qc_sig, max_neighbors=None, session_id=None) -> str:
     """
     Genera cache key para grilla 2D con soporte para aislamiento por sesión.
     
     Args:
+        max_neighbors: Máximo número de vecinos usados en interpolación (afecta W operator)
         session_id: Identificador único de sesión (None = compartido globalmente)
     """
     payload = {
@@ -271,6 +272,7 @@ def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
         "h": int(cappi_height) if cappi_height is not None else None,
         "vol": str(volume) if volume is not None else None,
         "interp": str(interp),
+        "maxn": int(max_neighbors) if max_neighbors is not None else None,
         "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple)) else qc_sig,
         "sess": str(session_id) if session_id else None,  # Aislar por sesión
     }

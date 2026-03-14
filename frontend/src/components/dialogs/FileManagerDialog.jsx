@@ -231,6 +231,7 @@ export default function FileManagerDialog({
                               {filename}
                             </Typography>
                           }
+                          secondaryTypographyProps={{ component: "div" }}
                           secondary={
                             <Box
                               display="flex"

@@ -38,6 +38,7 @@ def generate_grid2d_on_demand(
     cappi_height: Optional[int] = 4000,
     filters: List = None,
     interp: Optional[str] = "Barnes2",
+    max_neighbors: int = 30,
     session_id: Optional[str] = None,
 ) -> Dict:
     """
@@ -110,12 +111,13 @@ def generate_grid2d_on_demand(
         radar=radar_name,
         estrategia=estrategia,
         volume=volume,
-        range_max_m=range_max_m,
+        toa=range_max_m,
         grid_limits=grid_limits,
         grid_shape=grid_shape,
         grid_resolution_xy=grid_resolution_xy,
         grid_resolution_z=grid_resolution_z,
         weight_func=interp,
+        max_neighbors=max_neighbors,
         session_id=session_id
     )
     

@@ -28,6 +28,14 @@ import { generateElevationProfile } from "../../api/backend";
 
 const FIELD_OPTIONS = ["DBZH", "KDP", "RHOHV", "ZDR"];
 
+function toFiniteNumber(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const num = Number(text);
+  return Number.isFinite(num) ? num : null;
+}
+
 export default function PseudoRHIDialog({
   open,
   onClose,
@@ -139,8 +147,15 @@ export default function PseudoRHIDialog({
       }
 
       // Determinar punto de inicio (explícito o radar site)
+      const parsedStartLat = toFiniteNumber(startLat);
+      const parsedStartLon = toFiniteNumber(startLon);
+      const parsedEndLat = toFiniteNumber(endLat);
+      const parsedEndLon = toFiniteNumber(endLon);
+
       const start = hasStart
-        ? { lat: Number(startLat), lon: Number(startLon) }
+        ? parsedStartLat != null && parsedStartLon != null
+          ? { lat: parsedStartLat, lon: parsedStartLon }
+          : null
         : radarSite
           ? { lat: radarSite.lat, lon: radarSite.lon }
           : null;
@@ -150,7 +165,12 @@ export default function PseudoRHIDialog({
         return;
       }
 
-      const end = { lat: Number(endLat), lon: Number(endLon) };
+      if (parsedEndLat == null || parsedEndLon == null) {
+        setElevationProfile(null);
+        return;
+      }
+
+      const end = { lat: parsedEndLat, lon: parsedEndLon };
 
       try {
         const response = await generateElevationProfile({
@@ -216,8 +236,16 @@ export default function PseudoRHIDialog({
     const hasEnd = endLat !== "" && endLon !== "";
 
     let startPoint = null;
+    const parsedStartLat = toFiniteNumber(startLat);
+    const parsedStartLon = toFiniteNumber(startLon);
+    const parsedEndLat = toFiniteNumber(endLat);
+    const parsedEndLon = toFiniteNumber(endLon);
+
     if (hasExplicitStart) {
-      startPoint = { lat: Number(startLat), lon: Number(startLon) };
+      startPoint =
+        parsedStartLat != null && parsedStartLon != null
+          ? { lat: parsedStartLat, lon: parsedStartLon }
+          : null;
     } else if (hasEnd && radarSite && !pickTarget) {
       // Si ya se eligió el fin pero no hay inicio explícito y no estamos en medio de elegir puntos,
       // usar el origen del radar como inicio implícito
@@ -226,7 +254,10 @@ export default function PseudoRHIDialog({
 
     onLinePreviewChange?.({
       start: startPoint,
-      end: hasEnd ? { lat: Number(endLat), lon: Number(endLon) } : null,
+      end:
+        hasEnd && parsedEndLat != null && parsedEndLon != null
+          ? { lat: parsedEndLat, lon: parsedEndLon }
+          : null,
     });
   }, [
     startLat,

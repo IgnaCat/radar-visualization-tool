@@ -40,7 +40,9 @@ def _generate_cog_filename(
     cappi_height: float,
     filters,
     file_hash: str,
-    colormap_overrides: dict = None
+    colormap_overrides: dict = None,
+    weight_func: str = 'Barnes2',
+    max_neighbors=None,
 ) -> str:
     """
     Genera nombre único pero estable para el archivo COG.
@@ -53,6 +55,8 @@ def _generate_cog_filename(
         filters: Lista de filtros aplicados
         file_hash: Hash del archivo radar
         colormap_overrides: Dict opcional con overrides de colormap
+        weight_func: Función de ponderación usada en interpolación
+        max_neighbors: Máximo número de vecinos
     
     Returns:
         Nombre del archivo COG (sin path)
@@ -64,7 +68,8 @@ def _generate_cog_filename(
     cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
     cmap_suffix = f"_{cmap_override_key}" if cmap_override_key else ""
     
-    return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}.tif"
+    interp_suffix = f"_{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
+    return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}{interp_suffix}.tif"
 
 
 def _build_output_summary(
@@ -114,7 +119,9 @@ def process_radar_to_cog(
         estrategia=None,
         volume=None,
         colormap_overrides=None,
-        session_id=None
+        session_id=None,
+        weight_func='Barnes2',
+        max_neighbors=30,
     ):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
@@ -138,7 +145,8 @@ def process_radar_to_cog(
     file_hash = md5_file(filepath)[:12]
     unique_cog_name = _generate_cog_filename(
         field_requested, product, elevation, cappi_height,
-        filters, file_hash, colormap_overrides
+        filters, file_hash, colormap_overrides,
+        weight_func=weight_func, max_neighbors=max_neighbors,
     )
     cog_path = Path(output_dir) / unique_cog_name
 
@@ -201,7 +209,7 @@ def process_radar_to_cog(
     # Definimos los limites de nuestra grilla en las 3 dimensiones (x,y,z)
 
     # Método de interpolación para grilla
-    interp = 'Barnes2'
+    interp = weight_func
 
     # Calculamos la cantidad de puntos en cada dimensión
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
@@ -255,6 +263,7 @@ def process_radar_to_cog(
         volume=volume,
         interp=interp,
         qc_sig=filter_sig,  # Cache depende de filtros QC + visuales aplicados durante interpolación
+        max_neighbors=max_neighbors,
         session_id=session_id,
     )
 
@@ -274,6 +283,7 @@ def process_radar_to_cog(
             grid_resolution_xy=grid_resolution_xy,
             grid_resolution_z=grid_resolution_z,
             weight_func=interp,
+            max_neighbors=max_neighbors,
             qc_filters=qc_filters,
             visual_filters=visual_filters,
             field_to_use=field_to_use,

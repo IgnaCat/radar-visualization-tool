@@ -6,6 +6,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
 import BuildIcon from "@mui/icons-material/Build";
+import SettingsIcon from "@mui/icons-material/Settings";
 import DownloadIcon from "@mui/icons-material/Download";
 import VerticalSplitIcon from "@mui/icons-material/VerticalSplit";
 import LockIcon from "@mui/icons-material/Lock";
@@ -40,6 +41,7 @@ export default function MapToolbar({
   locked = false,
   onToggleSplit,
   onToggleLock,
+  onSettingsOpen,
 }) {
   const [expanded, setExpanded] = useState(false);
   const [downloadMenuAnchor, setDownloadMenuAnchor] = useState(null);
@@ -154,6 +156,11 @@ export default function MapToolbar({
       icon: isFullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />,
       tooltip: isFullscreen ? "Salir pantalla completa" : "Pantalla completa",
       action: handleFullscreenClick,
+    },
+    {
+      icon: <SettingsIcon />,
+      tooltip: "Configuración",
+      action: () => onSettingsOpen?.(),
     },
   ];
 

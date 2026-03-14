@@ -25,6 +25,8 @@ export const processFile = async ({
   selectedRadars,
   colormap_overrides,
   session_id,
+  weight_func,
+  max_neighbors,
 }) => {
   const payload = {
     filepaths: files,
@@ -41,6 +43,8 @@ export const processFile = async ({
     ...(selectedRadars && { selectedRadars }),
     ...(colormap_overrides && { colormap_overrides }),
     ...(session_id && { session_id }),
+    ...(weight_func && { weight_func }),
+    ...(max_neighbors != null && { max_neighbors: parseInt(max_neighbors) }),
   };
 
   return api.post("/process", payload);
@@ -69,6 +73,8 @@ export async function generatePseudoRHI({
   png_width_px = 900,
   png_height_px = 500,
   colormap_overrides,
+  weight_func,
+  max_neighbors,
   session_id,
 }) {
   return api.post("/process/pseudo_rhi", {
@@ -78,9 +84,9 @@ export async function generatePseudoRHI({
     end_lat,
     ...(start_lon != null &&
       start_lat != null && {
-      start_lon,
-      start_lat,
-    }),
+        start_lon,
+        start_lat,
+      }),
     max_length_km: max_length_km,
     max_height_km: max_height_km,
     min_length_km: min_length_km,
@@ -90,6 +96,8 @@ export async function generatePseudoRHI({
     png_width_px,
     png_height_px,
     ...(colormap_overrides && { colormap_overrides }),
+    ...(weight_func && { weight_func }),
+    ...(max_neighbors != null && { max_neighbors: parseInt(max_neighbors) }),
     ...(session_id && { session_id }),
   });
 }
@@ -104,6 +112,8 @@ export async function generateAreaStats(payload) {
     elevation,
     filters,
     session_id,
+    weight_func,
+    max_neighbors,
   } = payload;
 
   return api.post("/stats/area", {
@@ -117,6 +127,8 @@ export async function generateAreaStats(payload) {
       elevation !== null && { elevation: parseInt(elevation) }),
     ...(filters && { filters }),
     ...(session_id && { session_id }),
+    ...(weight_func && { weight_func }),
+    ...(max_neighbors != null && { max_neighbors }),
   });
 }
 
@@ -131,6 +143,8 @@ export async function generatePixelStat(payload) {
     lat,
     lon,
     session_id,
+    weight_func,
+    max_neighbors,
   } = payload;
 
   return api.post("/stats/pixel", {
@@ -145,6 +159,8 @@ export async function generatePixelStat(payload) {
     lat,
     lon,
     ...(session_id && { session_id }),
+    ...(weight_func && { weight_func }),
+    ...(max_neighbors != null && { max_neighbors }),
   });
 }
 

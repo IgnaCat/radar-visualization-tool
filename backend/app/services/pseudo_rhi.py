@@ -254,6 +254,8 @@ def generate_pseudo_rhi_png(
     start_lon: Optional[float] = None,
     start_lat: Optional[float] = None,
     colormap_overrides: Optional[dict] = None,
+    weight_func: str = "Barnes2",
+    max_neighbors: int = 30,
     session_id: Optional[str] = None,
 ):
     
@@ -269,7 +271,8 @@ def generate_pseudo_rhi_png(
         if (start_lon is not None and start_lat is not None)
         else f"{end_lon}_{end_lat}"
     )
-    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{int(min_length_km)}kmin_{int(min_height_km)}hmin_{file_hash}.png"
+    interp_suffix = f"{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
+    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{int(min_length_km)}kmin_{int(min_height_km)}hmin_{interp_suffix}_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
     # Construir URL relativa incluyendo session_id si existe
@@ -336,6 +339,8 @@ def generate_pseudo_rhi_png(
                 max_height_km=max_height_km,
                 min_height_km=min_height_km,
                 min_length_km=min_length_km,
+                weight_func=weight_func,
+                max_neighbors=max_neighbors,
                 session_id=session_id,
             )
         else:
@@ -412,6 +417,8 @@ def _generate_segment_transect_png(
     max_height_km: Optional[float] = None,
     min_height_km: Optional[float] = None,
     min_length_km: Optional[float] = None,
+    weight_func: str = "Barnes2",
+    max_neighbors: int = 30,
     session_id: Optional[str] = None,
 ):
     """
@@ -471,7 +478,8 @@ def _generate_segment_transect_png(
         grid_shape=grid_shape,
         grid_resolution_xy=grid_resolution_xy,
         grid_resolution_z=grid_resolution_z,
-        weight_func='Barnes2',
+        weight_func=weight_func,
+        max_neighbors=max_neighbors,
         qc_filters=qc_filters,
         session_id=session_id,
     )

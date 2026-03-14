@@ -144,9 +144,18 @@ export default function MapPanel({
   onToggleSplit,
   onToggleLock,
   loading = false,
+  onSettingsOpen,
 }) {
   // Estado local para la instancia del mapa
   const [localMapInstance, setLocalMapInstance] = useState(null);
+
+  const hasValidRhiLine =
+    rhiLinePreview?.start &&
+    rhiLinePreview?.end &&
+    Number.isFinite(rhiLinePreview.start.lat) &&
+    Number.isFinite(rhiLinePreview.start.lon) &&
+    Number.isFinite(rhiLinePreview.end.lat) &&
+    Number.isFinite(rhiLinePreview.end.lon);
 
   // ── Estado local para anotaciones visuales ──────────────────────────────────
   const [annotationMode, setAnnotationModeState] = useState(null);
@@ -346,7 +355,7 @@ export default function MapPanel({
         onPixelStatClick={onPixelStatClick}
         pixelStatMarker={pixelStatMarker}
         lineOverlay={
-          rhiLinePreview?.start && rhiLinePreview?.end
+          hasValidRhiLine
             ? [
                 [rhiLinePreview.start.lat, rhiLinePreview.start.lon],
                 [rhiLinePreview.end.lat, rhiLinePreview.end.lon],
@@ -412,6 +421,7 @@ export default function MapPanel({
         locked={locked}
         onToggleSplit={onToggleSplit}
         onToggleLock={onToggleLock}
+        onSettingsOpen={onSettingsOpen}
       />
 
       <DrawingToolbar

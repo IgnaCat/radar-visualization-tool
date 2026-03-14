@@ -28,6 +28,8 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
     min_height_km: float = payload.min_height_km if payload.min_height_km is not None else 0.0
     elevation: int = payload.elevation
     filters: List[RangeFilter] = payload.filters
+    weight_func: str = payload.weight_func or "Barnes2"
+    max_neighbors: int = payload.max_neighbors if payload.max_neighbors is not None else 30
 
     # Validar inputs
     if not filepaths:
@@ -107,6 +109,8 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 start_lon=start_lon,
                 start_lat=start_lat,
                 colormap_overrides=payload.colormap_overrides,
+                weight_func=weight_func,
+                max_neighbors=max_neighbors,
                 session_id=payload.session_id,
             )
             result_dict["timestamp"] = timestamp

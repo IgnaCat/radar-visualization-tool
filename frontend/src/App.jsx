@@ -21,9 +21,10 @@ import HeaderCard from "./components/ui/HeaderCard";
 import Alerts from "./components/ui/Alerts";
 import Loader from "./components/ui/Loader";
 import SplitScreenContainer from "./components/layout/SplitScreenContainer";
+import SettingsDialog from "./components/dialogs/SettingsDialog";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
-function mergeRadarFrames(results, toleranceSec = 240) {
+function mergeRadarFrames(results, toleranceSec = 0) {
   // results: [{ radar, outputs: [[LayerResult,...], ...] }, ...]
 
   // 1) aplanamos a una lista de {tsISO, radar, layers}
@@ -97,6 +98,8 @@ function buildComputeKey({
   selectedVolumes,
   selectedRadars,
   colormap_overrides,
+  weightFunc,
+  maxNeighbors,
 }) {
   return stableStringify({
     files,
@@ -108,6 +111,8 @@ function buildComputeKey({
     selectedVolumes,
     selectedRadars,
     colormap_overrides,
+    weightFunc,
+    maxNeighbors,
   });
 }
 
@@ -124,6 +129,14 @@ export default function App() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [deltaT, setDeltaT] = useState(0);
+  const [interpSettings, setInterpSettings] = useState({
+    weightFunc: "Barnes2",
+    maxNeighbors: 30,
+  });
+  const [settingsApplyVersion, setSettingsApplyVersion] = useState(0);
+  const lastProcessedSettingsVersionRef = useRef(0);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [fieldsUsed, setFieldsUsed] = useState(["DBZH"]);
   const [filesInfo, setFilesInfo] = useState([]);
@@ -241,7 +254,7 @@ export default function App() {
   let animation = false;
   let product = overlayData.product || "PPI";
   if (overlayData.results) {
-    mergedOutputs = mergeRadarFrames(overlayData.results);
+    mergedOutputs = mergeRadarFrames(overlayData.results, deltaT);
     animation = mergedOutputs.length > 1;
   } else {
     mergedOutputs = overlayData.outputs || [];
@@ -500,6 +513,8 @@ export default function App() {
         selectedVolumes,
         selectedRadars,
         colormap_overrides: selectedColormaps,
+        weightFunc: interpSettings.weightFunc,
+        maxNeighbors: interpSettings.maxNeighbors,
       });
 
       // Si solo cambió UI (opacidad/orden), no reproceses:
@@ -518,6 +533,8 @@ export default function App() {
         selectedRadars,
         colormap_overrides: selectedColormaps,
         session_id: sessionId,
+        weight_func: interpSettings.weightFunc,
+        max_neighbors: interpSettings.maxNeighbors,
       });
       if (
         !processResp.data ||
@@ -581,6 +598,8 @@ export default function App() {
       min_length_km,
       min_height_km,
       colormap_overrides: selectedColormaps,
+      weight_func: interpSettings.weightFunc,
+      max_neighbors: interpSettings.maxNeighbors,
       session_id: sessionId,
     });
     // devolvemos lo que el dialog espera
@@ -589,7 +608,12 @@ export default function App() {
 
   const handleAreaStatsRequest = async (payload) => {
     // backend espera: filepath, field, product, elevation?, height?, filters?, polygon
-    const r = await generateAreaStats({ ...payload, session_id: sessionId });
+    const r = await generateAreaStats({
+      ...payload,
+      session_id: sessionId,
+      weight_func: interpSettings.weightFunc,
+      max_neighbors: interpSettings.maxNeighbors,
+    });
     return r.data;
   };
 
@@ -700,6 +724,8 @@ export default function App() {
           filters_per_field: newFiltersPerField,
           colormap_overrides: selectedColormaps,
           session_id: sessionId,
+          weight_func: interpSettings.weightFunc,
+          max_neighbors: interpSettings.maxNeighbors,
         });
         if (processResp.data?.results?.length > 0) {
           setOverlayData(processResp.data);
@@ -729,8 +755,99 @@ export default function App() {
       selectedColormaps,
       sessionId,
       processFile,
+      interpSettings,
     ],
   );
+
+  const reprocessCurrentView = useCallback(
+    async (settings = interpSettings) => {
+      if (uploadedFiles.length === 0) return;
+
+      const enabledLayers =
+        savedLayers
+          .filter((layer) => layer.enabled)
+          .map((layer) => layer.label) || [];
+      const layersToProcess =
+        enabledLayers.length > 0 ? enabledLayers : fieldsUsed;
+      const currentProduct = overlayData?.product || product || "PPI";
+
+      if (!currentProduct || layersToProcess.length === 0) return;
+
+      try {
+        setLoading(true);
+        const processResp = await processFile({
+          files: uploadedFiles,
+          layers: layersToProcess,
+          product: currentProduct,
+          height: activeHeight,
+          elevation: activeElevation,
+          filters: filtersUsed,
+          selectedVolumes: selectedVolumesUsed,
+          selectedRadars: selectedRadarsUsed,
+          filters_per_field: filtersPerField,
+          colormap_overrides: selectedColormaps,
+          session_id: sessionId,
+          weight_func: settings.weightFunc,
+          max_neighbors: settings.maxNeighbors,
+        });
+
+        if (processResp.data) {
+          setOverlayData(processResp.data);
+          setWarnings(processResp.data.warnings || []);
+          setCurrentIndex(0);
+          setComputeKey(
+            buildComputeKey({
+              files: uploadedFiles,
+              product: currentProduct,
+              fields: layersToProcess,
+              elevation: activeElevation,
+              height: activeHeight,
+              filters: filtersUsed,
+              selectedVolumes: selectedVolumesUsed,
+              selectedRadars: selectedRadarsUsed,
+              colormap_overrides: selectedColormaps,
+              weightFunc: settings.weightFunc,
+              maxNeighbors: settings.maxNeighbors,
+            }),
+          );
+          setHiddenLayers(new Set());
+        }
+      } catch (err) {
+        console.error(err);
+        setAlert({
+          open: true,
+          message: "Error al reprocesar con la nueva configuración",
+          severity: "error",
+        });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [
+      uploadedFiles,
+      savedLayers,
+      fieldsUsed,
+      overlayData,
+      product,
+      activeHeight,
+      activeElevation,
+      filtersUsed,
+      selectedVolumesUsed,
+      selectedRadarsUsed,
+      filtersPerField,
+      selectedColormaps,
+      sessionId,
+      interpSettings,
+    ],
+  );
+
+  useEffect(() => {
+    if (settingsApplyVersion === 0) return;
+    if (lastProcessedSettingsVersionRef.current === settingsApplyVersion)
+      return;
+    lastProcessedSettingsVersionRef.current = settingsApplyVersion;
+    reprocessCurrentView(interpSettings);
+  }, [settingsApplyVersion, interpSettings, reprocessCurrentView]);
 
   /**
    * Elimina un archivo subido del servidor y actualiza todo el estado.
@@ -1016,6 +1133,8 @@ export default function App() {
         filters: filtersUsed,
         lat: latlng.lat,
         lon: latlng.lng,
+        weight_func: interpSettings.weightFunc,
+        max_neighbors: interpSettings.maxNeighbors,
         session_id: sessionId,
       };
       const resp = await generatePixelStat(payload);
@@ -1133,6 +1252,7 @@ export default function App() {
           onPrint: handlePrint,
           onFullscreen: handleFullscreen,
           isFullscreen,
+          onSettingsOpen: () => setSettingsOpen(true),
           savedLayers,
           fieldsUsed,
           filtersUsed,
@@ -1153,7 +1273,9 @@ export default function App() {
           sessionId,
           enqueueSnackbar,
           processFile,
+          generatePseudoRHI,
           generatePixelStat,
+          generateAreaStats,
           mergeRadarFrames,
         }}
       />
@@ -1168,6 +1290,21 @@ export default function App() {
         message={alert.message}
         severity={alert.severity}
         onClose={() => setAlert({ ...alert, open: false })}
+      />
+
+      <SettingsDialog
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        onApply={({ deltaT: newDeltaT, weightFunc, maxNeighbors }) => {
+          setDeltaT(newDeltaT);
+          setInterpSettings({ weightFunc, maxNeighbors });
+          setSettingsApplyVersion((prev) => prev + 1);
+        }}
+        initialSettings={{
+          deltaT,
+          weightFunc: interpSettings.weightFunc,
+          maxNeighbors: interpSettings.maxNeighbors,
+        }}
       />
 
       <Loader open={loading} />

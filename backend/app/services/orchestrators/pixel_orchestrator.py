@@ -82,6 +82,8 @@ class PixelOrchestrator:
         volume: Optional[str] = None,
         filters: Optional[List] = None,
         session_id: Optional[str] = None,
+        weight_func: str = "Barnes2",
+        max_neighbors: Optional[int] = None,
     ) -> str:
         """
         Genera cache key incluyendo filtros QC (afectan interpolación).
@@ -91,7 +93,7 @@ class PixelOrchestrator:
         """
         product_upper = product.upper()
         field_to_use = field.upper()
-        interp = "Barnes2"
+        interp = weight_func
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
@@ -111,6 +113,7 @@ class PixelOrchestrator:
             volume=volume,
             interp=interp,
             qc_sig=qc_sig,  # Incluir filtros QC en cache key
+            max_neighbors=max_neighbors,
             session_id=session_id,
         )
 
@@ -362,6 +365,8 @@ class PixelOrchestrator:
 
         # 4. Generar cache key
         volume = extract_volume_from_filename(payload.filepath)
+        weight_func = payload.weight_func or "Barnes2"
+        max_neighbors = payload.max_neighbors or 30
         cache_key = PixelOrchestrator.generate_cache_key(
             filepath=filepath,
             product=payload.product,
@@ -371,6 +376,8 @@ class PixelOrchestrator:
             volume=volume,
             filters=payload.filters,
             session_id=payload.session_id,
+            weight_func=weight_func,
+            max_neighbors=max_neighbors,
         )
 
         # 5. Obtener datos del cache

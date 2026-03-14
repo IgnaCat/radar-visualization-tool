@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { Box } from "@mui/material";
 import MapPanel from "./MapPanel";
 import { useSplitScreenSync } from "../../hooks/useSplitScreenSync";
+import SettingsDialog from "../dialogs/SettingsDialog";
 
 /**
  * SplitScreenContainer - Gestiona la visualización de uno o dos mapas
@@ -63,6 +64,8 @@ export default function SplitScreenContainer({
   const [fieldsUsed2, setFieldsUsed2] = useState([]);
   const [savedLayers2, setSavedLayers2] = useState([]);
   const [filtersUsed2, setFiltersUsed2] = useState([]);
+  const [selectedVolumesUsed2, setSelectedVolumesUsed2] = useState([]);
+  const [selectedRadarsUsed2, setSelectedRadarsUsed2] = useState([]);
   const [activeElevation2, setActiveElevation2] = useState(null);
   const [activeHeight2, setActiveHeight2] = useState(null);
   const [warnings2, setWarnings2] = useState([]);
@@ -70,6 +73,11 @@ export default function SplitScreenContainer({
   const [loading2, setLoading2] = useState(false);
   // Capas ocultas del segundo mapa (independiente del primero)
   const [hiddenLayers2, setHiddenLayers2] = useState(new Set());
+
+  // Settings del segundo mapa (independientes del primero)
+  const [settingsOpen2, setSettingsOpen2] = useState(false);
+  const [deltaT2, setDeltaT2] = useState(0);
+  const [interpSettings2, setInterpSettings2] = useState({ weightFunc: "Barnes2", maxNeighbors: 30 });
 
   const drawnLayerRef2 = useRef(null);
 
@@ -172,12 +180,15 @@ export default function SplitScreenContainer({
         selectedRadars: data.selectedRadars,
         colormap_overrides: selectedColormaps2,
         session_id: sharedProps.sessionId,
+        weight_func: interpSettings2.weightFunc,
+        max_neighbors: interpSettings2.maxNeighbors,
       });
 
       if (processResp.data) {
         // Merge frames similar al mapa 1
         const mergedOutputs = sharedProps.mergeRadarFrames(
           processResp.data.results || [],
+          deltaT2,
         );
         setOverlayData2(mergedOutputs);
         setWarnings2(processResp.data.warnings || []);
@@ -185,6 +196,8 @@ export default function SplitScreenContainer({
         setFieldsUsed2(enabledLayers); // Array de strings con nombres de campos
         setSavedLayers2(data.layers);
         setFiltersUsed2(data.filters || []);
+        setSelectedVolumesUsed2(data.selectedVolumes || []);
+        setSelectedRadarsUsed2(data.selectedRadars || []);
         setActiveElevation2(data.elevation);
         setActiveHeight2(data.height);
         setInitialColormaps2({ ...selectedColormaps2 });
@@ -197,6 +210,53 @@ export default function SplitScreenContainer({
       sharedProps.enqueueSnackbar("Error al procesar producto", {
         variant: "error",
       });
+    } finally {
+      setLoading2(false);
+    }
+  };
+
+  const reprocessMap2 = async (newInterpSettings) => {
+    if (!splitScreenActive || !Array.isArray(overlayData2) || overlayData2.length === 0) return;
+
+    const enabledLayers =
+      savedLayers2.filter((layer) => layer.enabled).map((layer) => layer.label) || [];
+    const layersToProcess = enabledLayers.length > 0 ? enabledLayers : fieldsUsed2;
+
+    if (layersToProcess.length === 0) return;
+
+    try {
+      setLoading2(true);
+      const processResp = await sharedProps.processFile({
+        files: sharedProps.uploadedFiles,
+        layers: layersToProcess,
+        product: product2 || "PPI",
+        height: activeHeight2,
+        elevation: activeElevation2,
+        filters: filtersUsed2,
+        selectedVolumes: selectedVolumesUsed2,
+        selectedRadars: selectedRadarsUsed2,
+        colormap_overrides: selectedColormaps2,
+        session_id: sharedProps.sessionId,
+        weight_func: newInterpSettings.weightFunc,
+        max_neighbors: newInterpSettings.maxNeighbors,
+      });
+
+      if (processResp.data) {
+        const mergedOutputs = sharedProps.mergeRadarFrames(
+          processResp.data.results || [],
+          deltaT2,
+        );
+        setOverlayData2(mergedOutputs);
+        setWarnings2(processResp.data.warnings || []);
+        setCurrentIndex2(0);
+        setHiddenLayers2(new Set());
+      }
+    } catch (error) {
+      console.error("Error al reprocesar producto en mapa 2:", error);
+      sharedProps.enqueueSnackbar(
+        "Error al reprocesar el mapa secundario con la nueva configuración",
+        { variant: "error" },
+      );
     } finally {
       setLoading2(false);
     }
@@ -219,6 +279,8 @@ export default function SplitScreenContainer({
         lat: latlng.lat,
         lon: latlng.lng,
         session_id: sharedProps.sessionId,
+        weight_func: interpSettings2.weightFunc,
+        max_neighbors: interpSettings2.maxNeighbors,
       };
       const resp = await sharedProps.generatePixelStat(payload);
       const v = resp.data?.value.toFixed(2);
@@ -241,6 +303,49 @@ export default function SplitScreenContainer({
         variant: "error",
       });
     }
+  };
+
+  const handleGenerateRHI2 = async ({
+    filepath,
+    field,
+    end_lat,
+    end_lon,
+    start_lat,
+    start_lon,
+    filters,
+    max_length_km,
+    max_height_km,
+    min_length_km,
+    min_height_km,
+  }) => {
+    const resp = await sharedProps.generatePseudoRHI({
+      filepath,
+      field,
+      end_lat,
+      end_lon,
+      start_lat,
+      start_lon,
+      filters,
+      max_length_km,
+      max_height_km,
+      min_length_km,
+      min_height_km,
+      colormap_overrides: selectedColormaps2,
+      weight_func: interpSettings2.weightFunc,
+      max_neighbors: interpSettings2.maxNeighbors,
+      session_id: sharedProps.sessionId,
+    });
+    return resp.data;
+  };
+
+  const handleAreaStatsRequest2 = async (payload) => {
+    const r = await sharedProps.generateAreaStats({
+      ...payload,
+      session_id: sharedProps.sessionId,
+      weight_func: interpSettings2.weightFunc,
+      max_neighbors: interpSettings2.maxNeighbors,
+    });
+    return r.data;
   };
 
   return (
@@ -366,6 +471,7 @@ export default function SplitScreenContainer({
           onToggleSplit={handleToggleSplit}
           onToggleLock={handleToggleLock}
           loading={map1Props.loading || false}
+          onSettingsOpen={map1Props.onSettingsOpen}
         />
       </Box>
 
@@ -454,8 +560,8 @@ export default function SplitScreenContainer({
             initialColormaps={initialColormaps2}
             setInitialColormaps={setInitialColormaps2}
             onProductChosen={handleProductChosen2}
-            onGenerateRHI={map1Props.onGenerateRHI}
-            onAreaStatsRequest={map1Props.onAreaStatsRequest}
+            onGenerateRHI={handleGenerateRHI2}
+            onAreaStatsRequest={handleAreaStatsRequest2}
             onPixelStatClick={handlePixelStatClick2}
             onGenerateElevationProfile={map1Props.onGenerateElevationProfile}
             onToggleMarkerMode={() => setMarkerMode2((v) => !v)}
@@ -536,9 +642,26 @@ export default function SplitScreenContainer({
             onToggleSplit={handleToggleSplit}
             onToggleLock={handleToggleLock}
             loading={loading2}
+            onSettingsOpen={() => setSettingsOpen2(true)}
           />
         </Box>
       )}
+
+      <SettingsDialog
+        open={settingsOpen2}
+        onClose={() => setSettingsOpen2(false)}
+        onApply={({ deltaT: newDeltaT, weightFunc, maxNeighbors }) => {
+          const newSettings = { weightFunc, maxNeighbors };
+          setDeltaT2(newDeltaT);
+          setInterpSettings2(newSettings);
+          reprocessMap2(newSettings);
+        }}
+        initialSettings={{
+          deltaT: deltaT2,
+          weightFunc: interpSettings2.weightFunc,
+          maxNeighbors: interpSettings2.maxNeighbors,
+        }}
+      />
     </Box>
   );
 }

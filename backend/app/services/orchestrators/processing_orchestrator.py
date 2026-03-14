@@ -199,6 +199,8 @@ class ProcessingOrchestrator:
         colormap_overrides: Optional[Dict] = None,
         session_id: Optional[str] = None,
         filters_per_field: Optional[Dict[str, List[RangeFilter]]] = None,
+        weight_func: str = 'Barnes2',
+        max_neighbors: int = 30,
         max_workers: int = 4
     ) -> Tuple[Dict, Dict, Dict, Dict]:
         """
@@ -210,6 +212,8 @@ class ProcessingOrchestrator:
         
         Args:
             items: Lista de (filepath_rel, filepath_abs, timestamp, volume, radar, estrategia)
+            weight_func: Función de ponderación para interpolación ('Barnes2', 'Cressman', 'nearest')
+            max_neighbors: Máximo número de vecinos por punto de grilla
             max_workers: Número máximo de threads (default 4, conservador porque cada
                         archivo puede usar threads internos para niveles Z)
         
@@ -242,7 +246,9 @@ class ProcessingOrchestrator:
                         estrategia=estrategia,
                         volume=vol,
                         colormap_overrides=colormap_overrides,
-                        session_id=session_id
+                        session_id=session_id,
+                        weight_func=weight_func,
+                        max_neighbors=max_neighbors,
                     )
                     result_dict["timestamp"] = ts
                     result_dict["order"] = field_idx
@@ -411,6 +417,8 @@ class ProcessingOrchestrator:
                 payload.colormap_overrides,
                 payload.session_id,
                 getattr(payload, 'filters_per_field', None),
+                payload.weight_func or 'Barnes2',
+                payload.max_neighbors or 30,
             )
 
         # 9. Calcular warnings por campos/volúmenes faltantes
