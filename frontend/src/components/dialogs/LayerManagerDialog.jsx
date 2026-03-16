@@ -562,8 +562,8 @@ export default function LayerManagerDialog({
                                 !localFilters[String(layer.field).toUpperCase()]
                                   ?.rhohv?.enabled
                               }
-                              inputProps={{ step: 0.01, min: 0, max: 1 }}
-                              sx={{ width: 64 }}
+                              inputProps={{ step: 0.1, min: 0, max: 1 }}
+                              sx={{ width: 78 }}
                             />
                           </Box>
                         )}
