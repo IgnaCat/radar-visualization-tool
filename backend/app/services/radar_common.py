@@ -308,7 +308,7 @@ def grid2d_cache_key(
         "vol": str(volume) if volume is not None else None,
         "interp": str(interp),
         "maxn": int(max_neighbors) if max_neighbors is not None else None,
-        "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple)) else qc_sig,
+        "qc": list(qc_sig) if isinstance(qc_sig, (list, tuple, set)) else qc_sig,
         "sess": str(session_id) if session_id else None,  # Aislar por sesión
     }
     return "g2d_" + _hash_of(payload)

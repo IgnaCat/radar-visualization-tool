@@ -2,12 +2,15 @@ import os
 import pyart
 import pyproj
 import numpy as np
+import logging
 from pathlib import Path
 import rasterio
 import rasterio.transform
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from urllib.parse import quote
 from affine import Affine
+
+logger = logging.getLogger(__name__)
 
 from ..core.config import settings
 from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, NETCDF_READ_LOCK
@@ -31,6 +34,10 @@ from .radar_processing import (
     fill_dbzh_if_needed,
     separate_filters,
 )
+from .radar_processing.filter_application import (
+    apply_visual_filters,
+    apply_qc_filters,
+)
 
 
 def _generate_cog_filename(
@@ -41,12 +48,12 @@ def _generate_cog_filename(
     filters,
     file_hash: str,
     colormap_overrides: dict = None,
-    weight_func: str = 'Barnes2',
+    weight_func: str = "Barnes2",
     max_neighbors=None,
 ) -> str:
     """
     Genera nombre único pero estable para el archivo COG.
-    
+
     Args:
         field_requested: Campo solicitado (ej: 'DBZH')
         product: Tipo de producto ('PPI', 'CAPPI', 'COLMAX')
@@ -57,18 +64,28 @@ def _generate_cog_filename(
         colormap_overrides: Dict opcional con overrides de colormap
         weight_func: Función de ponderación usada en interpolación
         max_neighbors: Máximo número de vecinos
-    
+
     Returns:
         Nombre del archivo COG (sin path)
     """
-    filters_str = "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters]) if filters else "nofilter"
-    aux = elevation if product.upper() == "PPI" else (cappi_height if product.upper() == "CAPPI" else "")
-    
+    filters_str = (
+        "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters])
+        if filters
+        else "nofilter"
+    )
+    aux = (
+        elevation
+        if product.upper() == "PPI"
+        else (cappi_height if product.upper() == "CAPPI" else "")
+    )
+
     # Incluir cmap en el nombre si hay override
     cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
     cmap_suffix = f"_{cmap_override_key}" if cmap_override_key else ""
-    
-    interp_suffix = f"_{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
+
+    interp_suffix = (
+        f"_{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
+    )
     return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}{interp_suffix}.tif"
 
 
@@ -78,11 +95,11 @@ def _build_output_summary(
     filepath: str,
     cog_path: Path,
     cmap_key: str = None,
-    session_id: str | None = None
+    session_id: str | None = None,
 ) -> dict:
     """
     Construye el diccionario de resumen para la respuesta API.
-    
+
     Args:
         unique_cog_name: Nombre del archivo COG
         field_requested: Campo procesado
@@ -90,14 +107,18 @@ def _build_output_summary(
         cog_path: Path completo al archivo COG
         cmap_key: Colormap usado (ej: 'grc_th')
         session_id: Identificador de sesión para aislar archivos
-    
+
     Returns:
         Dict con image_url, field, source_file, tilejson_url, colormap
     """
     file_uri = cog_path.resolve().as_posix()
     style = "&resampling=nearest&warp_resampling=nearest"
-    relative_url = f"static/tmp/{session_id}/{unique_cog_name}" if session_id else f"static/tmp/{unique_cog_name}"
-    
+    relative_url = (
+        f"static/tmp/{session_id}/{unique_cog_name}"
+        if session_id
+        else f"static/tmp/{unique_cog_name}"
+    )
+
     return {
         "image_url": relative_url,
         "field": field_requested,
@@ -108,26 +129,26 @@ def _build_output_summary(
 
 
 def process_radar_to_cog(
-        filepath, 
-        product="PPI", 
-        field_requested="DBZH", 
-        cappi_height=4000, 
-        elevation=0, 
-        filters=[], 
-        output_dir=None,  # Will use settings.IMAGES_DIR if None
-        radar_name=None,
-        estrategia=None,
-        volume=None,
-        colormap_overrides=None,
-        session_id=None,
-        weight_func='Barnes2',
-        max_neighbors=30,
-    ):
+    filepath,
+    product="PPI",
+    field_requested="DBZH",
+    cappi_height=4000,
+    elevation=0,
+    filters=[],
+    output_dir=None,  # Will use settings.IMAGES_DIR if None
+    radar_name=None,
+    estrategia=None,
+    volume=None,
+    colormap_overrides=None,
+    session_id=None,
+    weight_func="Barnes2",
+    max_neighbors=30,
+):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
     Devuelve un resumen de los datos procesados.
     Si ya existe un COG generado para este archivo, devuelve directamente la info.
-    
+
     Args:
         colormap_overrides: dict opcional {field: cmap_key} para personalizar paletas
         session_id: Identificador de sesión para aislar archivos y cache
@@ -135,7 +156,7 @@ def process_radar_to_cog(
     # Use settings.IMAGES_DIR if output_dir not specified
     if output_dir is None:
         output_dir = settings.IMAGES_DIR
-    
+
     # Crear subdirectorio por sesión si se provee session_id
     if session_id:
         output_dir = str(Path(output_dir) / session_id)
@@ -144,20 +165,37 @@ def process_radar_to_cog(
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]
     unique_cog_name = _generate_cog_filename(
-        field_requested, product, elevation, cappi_height,
-        filters, file_hash, colormap_overrides,
-        weight_func=weight_func, max_neighbors=max_neighbors,
+        field_requested,
+        product,
+        elevation,
+        cappi_height,
+        filters,
+        file_hash,
+        colormap_overrides,
+        weight_func=weight_func,
+        max_neighbors=max_neighbors,
     )
     cog_path = Path(output_dir) / unique_cog_name
 
     # Si ya existe el COG, necesitamos calcular cmap_key para el summary
     # Usar field_requested en lugar de field_key ya que no hemos leído el radar
     cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
-    spec = FIELD_RENDER.get(field_requested.upper(), {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
-    cmap_key_for_summary = cmap_override_key if cmap_override_key else spec.get("cmap", "grc_th")
+    spec = FIELD_RENDER.get(
+        field_requested.upper(), {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"}
+    )
+    cmap_key_for_summary = (
+        cmap_override_key if cmap_override_key else spec.get("cmap", "grc_th")
+    )
 
     # Generamos el resumen de salida
-    summary = _build_output_summary(unique_cog_name, field_requested, filepath, cog_path, cmap_key=cmap_key_for_summary, session_id=session_id)
+    summary = _build_output_summary(
+        unique_cog_name,
+        field_requested,
+        filepath,
+        cog_path,
+        cmap_key=cmap_key_for_summary,
+        session_id=session_id,
+    )
 
     # Si ya existe el COG, devolvemos directo
     if cog_path.exists():
@@ -166,7 +204,7 @@ def process_radar_to_cog(
     # Si no existe, lo procesamos...
     if not Path(filepath).exists():
         raise ValueError(f"Archivo no encontrado: {filepath}")
-    
+
     # Leer archivo NetCDF con PyART (protegido con lock - NetCDF/HDF5 no es thread-safe)
     with NETCDF_READ_LOCK:
         radar = pyart.io.read(filepath)
@@ -175,17 +213,19 @@ def process_radar_to_cog(
         field_to_use, field_key = resolve_field(radar, field_requested)
     except KeyError as e:
         raise ValueError(e)
-    
+
     if elevation > radar.nsweeps - 1:
         raise ValueError(f"El ángulo de elevación {elevation} no existe en el archivo.")
-    
+
     # defaults de render por variable con posible override
-    cmap, vmin, vmax, cmap_key = colormap_for(field_key, override_cmap=cmap_override_key)
+    cmap, vmin, vmax, cmap_key = colormap_for(
+        field_key, override_cmap=cmap_override_key
+    )
 
     # Calcular límites Z según producto ANTES de prepare_radar_for_product
     range_max_m = safe_range_max_m(radar, round_to_km=20)
     z_min, z_max, elev_deg = calculate_z_limits(
-        range_max_m, elevation, cappi_height, radar.fixed_angle['data']
+        range_max_m, elevation, cappi_height, radar.fixed_angle["data"]
     )
 
     # TOA (Top of Athmosphere) dinámico: z_max ya viene redondeado a múltiplos de 20 km por calculate_z_limits.
@@ -193,15 +233,15 @@ def process_radar_to_cog(
 
     # Generamos la imagen PNG para previsualización y referencia
     # png.create_png(
-    #     radar, 
-    #     product, 
-    #     output_dir, 
-    #     field_to_use, 
-    #     filters=filters, 
-    #     elevation=elevation, 
-    #     height=cappi_height, 
-    #     vmin=vmin, 
-    #     vmax=vmax, 
+    #     radar,
+    #     product,
+    #     output_dir,
+    #     field_to_use,
+    #     filters=filters,
+    #     elevation=elevation,
+    #     height=cappi_height,
+    #     vmin=vmin,
+    #     vmax=vmax,
     #     cmap_key=cmap_key
     # )
 
@@ -215,10 +255,10 @@ def process_radar_to_cog(
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
     z_grid_limits = (0.0, toa)
-    
+
     # Volumen 03 (bird bath) necesita grid XY más grande para COLMAX/CAPPI
     # El scan vertical con 360 azimuts crea un patrón circular amplio
-    if volume == '03' and product.upper() in ['COLMAX', 'CAPPI']:
+    if volume == "03" and product.upper() in ["COLMAX", "CAPPI"]:
         # Usar grid más grande para capturar el patrón circular completo
         # Ajustado a 50km radio (gates alcanzan ~35km, con ROI ~9km total ~44km)
         grid_extent_m = 50000.0  # 50 km de radio
@@ -227,30 +267,26 @@ def process_radar_to_cog(
     else:
         y_grid_limits = (-range_max_m, range_max_m)
         x_grid_limits = (-range_max_m, range_max_m)
-    
+
     grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
 
     # Calcular puntos de grilla
     z_points, y_points, x_points = calculate_grid_points(
-        grid_limits[0], grid_limits[1], grid_limits[2],
-        grid_resolution_xy, grid_resolution_z
+        grid_limits[0],
+        grid_limits[1],
+        grid_limits[2],
+        grid_resolution_xy,
+        grid_resolution_z,
     )
     grid_shape = (z_points, y_points, x_points)
 
     # Separar filtros QC (RHOHV) vs otros
-    # QC filters se aplican durante interpolación (afectan grilla 3D y cache key)
-    # Visual filters se aplican post-grid como máscaras 2D
+    # QC filters se aplican post-interpolación sobre arrays warped (comparación entre arrays)
+    # Visual filters se aplican post-grid como máscaras 2D sobre el array warped
     qc_filters, visual_filters = separate_filters(filters, field_to_use)
 
-    # Generar signature de filtros para cache key
-    qc_sig = tuple(sorted([
-        (f.field, f.min, f.max) for f in qc_filters
-    ])) if qc_filters else tuple()
-    visual_sig = tuple(sorted([
-        (f.field, f.min, f.max) for f in visual_filters
-    ])) if visual_filters else tuple()
-    # Combinar ambas signatures (ambos tipos de filtro afectan interpolación)
-    filter_sig = qc_sig + visual_sig
+    # Siempre incluir campos QC disponibles en el radar para cachear
+    qc_fields = set(f for f in AFFECTS_INTERP_FIELDS if f in radar.fields)
 
     # Intentamos cachear la 2D colapsada
     product_upper = product.upper()
@@ -262,7 +298,7 @@ def process_radar_to_cog(
         cappi_height=cappi_height if product_upper == "CAPPI" else None,
         volume=volume,
         interp=interp,
-        qc_sig=filter_sig,  # Cache depende de filtros QC + visuales aplicados durante interpolación
+        qc_sig=None,
         max_neighbors=max_neighbors,
         session_id=session_id,
     )
@@ -284,16 +320,24 @@ def process_radar_to_cog(
             grid_resolution_z=grid_resolution_z,
             weight_func=interp,
             max_neighbors=max_neighbors,
-            qc_filters=qc_filters,
-            visual_filters=visual_filters,
+            qc_filters=qc_filters,  # QC aplicados post-interpolación
+            visual_filters=None,  # Visual filters aplicados post-interpolación
             field_to_use=field_to_use,
-            session_id=session_id
+            qc_fields=qc_fields,  # Pasar campos QC para interpolar
+            session_id=session_id,
         )
 
         # Verificar que el campo solicitado existe en la grilla
         if field_to_use not in grid.fields:
             available = list(grid.fields.keys())
-            raise ValueError(f"Campo '{field_to_use}' no encontrado en grilla. Disponibles: {available}")
+            raise ValueError(
+                f"Campo '{field_to_use}' no encontrado en grilla. Disponibles: {available}"
+            )
+
+        # Debug: verificar campos QC
+        print(f"DEBUG: Campos en grilla: {list(grid.fields.keys())}")
+        print(f"DEBUG: qc_fields a interpolar: {qc_fields}")
+        print(f"DEBUG: qc_filters aplicados: {[f.field for f in qc_filters]}")
 
         collapse_grid_to_2d(
             grid,
@@ -303,34 +347,64 @@ def process_radar_to_cog(
             target_height_m=cappi_height,
             vmin=vmin,
         )
-        arr2d = grid.fields[field_to_use]['data'][0, :, :]
+        arr2d = grid.fields[field_to_use]["data"][0, :, :]
         arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
 
         # PyART grid: y[0]=ymin (sur), y[-1]=ymax (norte).
         # GeoTIFF north-up: fila 0 = norte.  Flip para que coincidan.
         arr2d = arr2d[::-1, :]
 
+        # Colapsar y cachear arrays QC siempre (para cache)
+        qc_arrays = {}
+        if field_to_use not in qc_fields:
+            for qc_field in qc_fields:
+                if qc_field in grid.fields:
+                    collapse_grid_to_2d(
+                        grid,
+                        field=qc_field,
+                        product=product.lower(),
+                        elevation_deg=elev_deg,
+                        target_height_m=cappi_height,
+                        vmin=0.0,  # No enmascarar por vmin para campos QC, se enmascarará post-warp según filtros QC
+                    )
+                    qc_arr2d = grid.fields[qc_field]["data"][0, :, :]
+                    qc_arr2d = np.ma.array(
+                        qc_arr2d.astype(np.float32), mask=np.ma.getmaskarray(qc_arr2d)
+                    )
+                    qc_arr2d = qc_arr2d[::-1, :]  # Flip igual que principal
+                    qc_arrays[qc_field] = qc_arr2d
+
         # Obtener grid_origin para normalize_proj_dict
         grid_origin = (
-            float(radar.latitude['data'][0]),
-            float(radar.longitude['data'][0]),
+            float(radar.latitude["data"][0]),
+            float(radar.longitude["data"][0]),
         )
 
-        x = grid.x['data'].astype(float)
-        y = grid.y['data'].astype(float)
+        x = grid.x["data"].astype(float)
+        y = grid.y["data"].astype(float)
         ny, nx = arr2d.shape
-        dx = float(np.mean(np.diff(x))) if x.size > 1 else (x_grid_limits[1]-x_grid_limits[0]) / max(nx-1, 1)
-        dy = float(np.mean(np.diff(y))) if y.size > 1 else (y_grid_limits[1]-y_grid_limits[0]) / max(ny-1, 1)
+        dx = (
+            float(np.mean(np.diff(x)))
+            if x.size > 1
+            else (x_grid_limits[1] - x_grid_limits[0]) / max(nx - 1, 1)
+        )
+        dy = (
+            float(np.mean(np.diff(y)))
+            if y.size > 1
+            else (y_grid_limits[1] - y_grid_limits[0]) / max(ny - 1, 1)
+        )
         xmin = float(x.min()) if x.size else x_grid_limits[0]
         ymax = float(y.max()) if y.size else y_grid_limits[1]
         # Los valores de linspace(-R, R, N) representan CENTROS de píxeles.
         # El dominio va desde (xmin - dx/2) hasta (xmax + dx/2).
         # Después del flip [::-1], fila 0 = pixel con centro en ymax.
         # Transform debe mapear (col=0, row=0) a la ESQUINA superior izquierda del dominio.
-        transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
+        transform = Affine.translation(xmin - dx / 2, ymax + dy / 2) * Affine.scale(
+            dx, -dy
+        )
         proj_dict_norm = normalize_proj_dict(grid, grid_origin)
         crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
-        
+
         # Guardar en CRS local (se agregará versión warped después del primer warp de PyART)
         pkg_cached = {
             "arr": arr2d,
@@ -339,15 +413,16 @@ def process_radar_to_cog(
             "arr_warped": None,  # Se llenará después del primer warp
             "crs_warped": None,
             "transform_warped": None,
+            "qc_arrays": qc_arrays,  # Arrays QC colapsados
+            "qc_warped": {},  # Se llenará después del warp
         }
         GRID2D_CACHE[cache_key] = pkg_cached
-        
+
         # Registrar en índice de sesión si existe session_id
         if session_id:
             if session_id not in SESSION_CACHE_INDEX:
                 SESSION_CACHE_INDEX[session_id] = set()
             SESSION_CACHE_INDEX[session_id].add(cache_key)
-
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -357,21 +432,27 @@ def process_radar_to_cog(
     # errores de GeoTransform (sin half-pixel offset + asume grilla cuadrada).
     if pkg_cached.get("arr_warped") is None:
         arr2d = pkg_cached["arr"]
+        qc_arrays = pkg_cached["qc_arrays"]
         src_transform = pkg_cached["transform"]
         src_crs = pkg_cached["crs"]
         ny, nx = arr2d.shape
 
         # CRS destino: Web Mercator
-        dst_crs = 'EPSG:3857'
+        dst_crs = "EPSG:3857"
 
         # Bounds del raster fuente (edge-to-edge, calculados desde el Affine transform)
         src_bounds = rasterio.transform.array_bounds(ny, nx, src_transform)
 
         # Calcular transform y dimensiones en Web Mercator
         dst_transform, dst_width, dst_height = calculate_default_transform(
-            src_crs, dst_crs, nx, ny,
-            left=src_bounds[0], bottom=src_bounds[1],
-            right=src_bounds[2], top=src_bounds[3]
+            src_crs,
+            dst_crs,
+            nx,
+            ny,
+            left=src_bounds[0],
+            bottom=src_bounds[1],
+            right=src_bounds[2],
+            top=src_bounds[3],
         )
 
         # Preparar arrays: NaN para datos enmascarados
@@ -388,7 +469,7 @@ def process_radar_to_cog(
             dst_crs=dst_crs,
             resampling=Resampling.nearest,
             src_nodata=np.nan,
-            dst_nodata=np.nan
+            dst_nodata=np.nan,
         )
 
         # Crear MaskedArray y enmascarar ruido de bordes
@@ -401,6 +482,42 @@ def process_radar_to_cog(
         pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
         pkg_cached["transform_warped"] = transform_warped
         pkg_cached["crs_warped"] = crs_warped
+
+        # Warping de arrays QC
+        qc_warped = {}
+        if field_to_use not in qc_fields:
+            for qc_field, qc_arr in qc_arrays.items():
+                logger.info(
+                    f"qc_arr {qc_field}: shape={qc_arr.shape}, dtype={qc_arr.dtype}, masked={np.ma.is_masked(qc_arr)}"
+                )
+                qc_arr_copy = np.array(qc_arr, copy=True)
+                logger.info(
+                    f"qc_arr {qc_field}: min={np.nanmin(qc_arr_copy)}, max={np.nanmax(qc_arr_copy)}, mean={np.nanmean(qc_arr_copy)}, valid_pixels={np.sum(~np.ma.getmaskarray(qc_arr_copy))}"
+                )
+                qc_src_data = np.ma.filled(qc_arr, fill_value=np.nan).astype(np.float32)
+                qc_dst_data = np.full((dst_height, dst_width), np.nan, dtype=np.float32)
+                reproject(
+                    source=qc_src_data,
+                    destination=qc_dst_data,
+                    src_transform=src_transform,
+                    src_crs=src_crs,
+                    dst_transform=dst_transform,
+                    dst_crs=dst_crs,
+                    resampling=Resampling.nearest,
+                    src_nodata=np.nan,
+                    dst_nodata=np.nan,
+                )
+                logger.info(
+                    f"qc_dst_data {qc_field}: min={np.nanmin(qc_dst_data)}, max={np.nanmax(qc_dst_data)}, mean={np.nanmean(qc_dst_data)}, nan_count={np.sum(np.isnan(qc_dst_data))}"
+                )
+                qc_arr_warped = np.ma.masked_invalid(qc_dst_data)
+                logger.info(
+                    f"qc_arr_warped {qc_field}: masked={np.ma.is_masked(qc_arr_warped)}, valid_pixels={np.sum(~np.ma.getmaskarray(qc_arr_warped))}"
+                )
+                qc_warped[qc_field] = qc_arr_warped.astype(np.float32)
+            pkg_cached["qc_warped"] = qc_warped
+            print(f"DEBUG: qc_warped guardado con keys: {list(qc_warped.keys())}")
+
         GRID2D_CACHE[cache_key] = pkg_cached
 
         # Registrar en índice de sesión si existe session_id
@@ -413,7 +530,17 @@ def process_radar_to_cog(
         arr_warped = pkg_cached["arr_warped"]
         transform_warped = pkg_cached["transform_warped"]
         crs_warped = pkg_cached["crs_warped"]
-    
+        qc_warped = pkg_cached.get("qc_warped", {})
+        print(f"DEBUG: qc_warped desde cache con keys: {list(qc_warped.keys())}")
+
+    # Aplicar filtros QC post-interpolación sobre arrays warped
+    if qc_filters:
+        arr_warped = apply_qc_filters(arr_warped, qc_filters, qc_warped)
+
+    # Aplicar filtros visuales post-interpolación sobre el array warped
+    if visual_filters:
+        arr_warped = apply_visual_filters(arr_warped, visual_filters, field_to_use)
+
     # Crear COG RGB desde el array warped cacheado usando la función optimizada
     create_cog_from_warped_array(
         data_warped=arr_warped,
@@ -422,7 +549,7 @@ def process_radar_to_cog(
         crs=crs_warped,
         cmap=cmap,
         vmin=vmin,
-        vmax=vmax
+        vmax=vmax,
     )
 
     return summary
