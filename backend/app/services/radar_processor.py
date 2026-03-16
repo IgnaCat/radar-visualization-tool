@@ -285,8 +285,17 @@ def process_radar_to_cog(
     # Visual filters se aplican post-grid como máscaras 2D sobre el array warped
     qc_filters, visual_filters = separate_filters(filters, field_to_use)
 
-    # Siempre incluir campos QC disponibles en el radar para cachear
-    qc_fields = set(f for f in AFFECTS_INTERP_FIELDS if f in radar.fields)
+    # Siempre incluir campos QC disponibles en el radar para cachear.
+    # Usar resolve_field para obtener el nombre real en el archivo (ej: "rhohv" en lugar de "RHOHV")
+    # y mapear al nombre canónico (uppercase) que espera apply_qc_filters.
+    qc_fields_map = {}  # actual_name → canonical_name
+    for _canonical in AFFECTS_INTERP_FIELDS:
+        try:
+            _actual, _ = resolve_field(radar, _canonical)
+            qc_fields_map[_actual] = _canonical
+        except KeyError:
+            pass
+    qc_fields = set(qc_fields_map.keys())
 
     # Intentamos cachear la 2D colapsada
     product_upper = product.upper()
@@ -339,6 +348,10 @@ def process_radar_to_cog(
         print(f"DEBUG: qc_fields a interpolar: {qc_fields}")
         print(f"DEBUG: qc_filters aplicados: {[f.field for f in qc_filters]}")
 
+        # collapse_grid_to_2d modifica grid.z['data'] in-place (lo deja en un solo nivel).
+        # Guardamos el eje Z original para poder colapsar campos QC después sin romper PPI/CAPPI.
+        original_z_data = np.array(grid.z["data"], copy=True)
+
         collapse_grid_to_2d(
             grid,
             field=field_to_use,
@@ -359,6 +372,8 @@ def process_radar_to_cog(
         if field_to_use not in qc_fields:
             for qc_field in qc_fields:
                 if qc_field in grid.fields:
+                    # Restaurar eje Z original antes de cada colapso QC.
+                    grid.z["data"] = np.array(original_z_data, copy=True)
                     collapse_grid_to_2d(
                         grid,
                         field=qc_field,
@@ -372,7 +387,9 @@ def process_radar_to_cog(
                         qc_arr2d.astype(np.float32), mask=np.ma.getmaskarray(qc_arr2d)
                     )
                     qc_arr2d = qc_arr2d[::-1, :]  # Flip igual que principal
-                    qc_arrays[qc_field] = qc_arr2d
+                    # Guardar con clave canónica (ej: "RHOHV") para que apply_qc_filters lo encuentre
+                    canonical_key = qc_fields_map.get(qc_field, qc_field.upper())
+                    qc_arrays[canonical_key] = qc_arr2d
 
         # Obtener grid_origin para normalize_proj_dict
         grid_origin = (
@@ -514,6 +531,7 @@ def process_radar_to_cog(
                 logger.info(
                     f"qc_arr_warped {qc_field}: masked={np.ma.is_masked(qc_arr_warped)}, valid_pixels={np.sum(~np.ma.getmaskarray(qc_arr_warped))}"
                 )
+                # Guardar con clave canónica (ej: "RHOHV") igual que qc_arrays
                 qc_warped[qc_field] = qc_arr_warped.astype(np.float32)
             pkg_cached["qc_warped"] = qc_warped
             print(f"DEBUG: qc_warped guardado con keys: {list(qc_warped.keys())}")

@@ -118,22 +118,25 @@ def apply_qc_filters(
         logger.info(
             f"Tipo de q_warped para {qf}: {type(q_warped)}, shape: {getattr(q_warped, 'shape', 'N/A')}"
         )
-        q_warped_copy = np.array(q_warped, copy=True)
+        q_warped_copy = np.asarray(np.ma.filled(q_warped, np.nan), dtype=np.float32)
         logger.info(
             f"q_warped {qf}: min={np.nanmin(q_warped_copy)}, max={np.nanmax(q_warped_copy)}, mean={np.nanmean(q_warped_copy)}"
         )
         logger.info(
-            f"q_warped {qf}: masked={np.ma.is_masked(q_warped)}, valid_pixels={np.sum(~np.ma.getmaskarray(q_warped_copy))}"
+            f"q_warped {qf}: masked={np.ma.is_masked(q_warped)}, finite_pixels={np.sum(np.isfinite(q_warped_copy))}"
         )
 
         qmask = np.zeros(masked.shape, dtype=bool)
         fmin = getattr(f, "min", None)
         fmax = getattr(f, "max", None)
 
+        # Tratar NaN/inf del campo QC como no confiables: se enmascaran siempre.
+        qmask |= ~np.isfinite(q_warped_copy)
+
         if fmin is not None:
-            qmask |= q_warped < float(fmin)
+            qmask |= q_warped_copy < float(fmin)
         if fmax is not None:
-            qmask |= q_warped > float(fmax)
+            qmask |= q_warped_copy > float(fmax)
 
         logger.info(f"qmask para {qf}: True en {np.sum(qmask)} posiciones")
 
