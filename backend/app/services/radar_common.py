@@ -8,7 +8,13 @@ import json
 from pyproj import Geod
 
 from ..utils import colores
-from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS, ROI_PARAMS_BY_VOLUME, ROI_PARAMS_VOL01
+from ..core.constants import (
+    FIELD_ALIASES,
+    FIELD_RENDER,
+    AFFECTS_INTERP_FIELDS,
+    ROI_PARAMS_BY_VOLUME,
+    ROI_PARAMS_VOL01,
+)
 from ..models import RangeFilter
 
 
@@ -16,7 +22,8 @@ from ..models import RangeFilter
 # Hashes utilitarios
 # ------------------------------
 
-def md5_file(path, chunk=1024*1024):
+
+def md5_file(path, chunk=1024 * 1024):
     """
     Devuelve el hash MD5 (hexadecimal) de un archivo.
     """
@@ -26,16 +33,19 @@ def md5_file(path, chunk=1024*1024):
             h.update(b)
     return h.hexdigest()
 
+
 def stable_hash(obj):
     """Hash estable de un objeto JSON-serializable."""
     s = json.dumps(obj, sort_keys=True, default=str)
     return hashlib.sha1(s.encode("utf-8")).hexdigest()
+
 
 def _roundf(x: float, nd=6) -> float:
     try:
         return float(round(float(x), nd))
     except Exception:
         return float(x)
+
 
 def _stable(obj: Any):
     """
@@ -49,6 +59,7 @@ def _stable(obj: Any):
         return _roundf(obj, 6)
     return obj
 
+
 # Usado para generar las cache keys
 def _hash_of(payload: Any) -> str:
     s = json.dumps(_stable(payload), separators=(",", ":"), ensure_ascii=False)
@@ -58,6 +69,7 @@ def _hash_of(payload: Any) -> str:
 # ------------------------------
 # Campos / colormaps
 # ------------------------------
+
 
 def resolve_field(radar: pyart.core.Radar, requested: str) -> Tuple[str, str]:
     """
@@ -72,17 +84,20 @@ def resolve_field(radar: pyart.core.Radar, requested: str) -> Tuple[str, str]:
             return cand, key
     raise KeyError(f"No se encontró alias disponible para '{requested}' en el archivo.")
 
+
 def colormap_for(field_key: str, override_cmap: Optional[str] = None):
     """
     Devuelve defaults (cmap, vmin, vmax, cmap_key) según FIELD_RENDER.
     Si override_cmap se provee, lo usa en lugar del default.
     """
     import matplotlib.pyplot as plt
-    
-    spec = FIELD_RENDER.get(field_key.upper(), {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"})
+
+    spec = FIELD_RENDER.get(
+        field_key.upper(), {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"}
+    )
     vmin, vmax = spec["vmin"], spec["vmax"]
     cmap_key = override_cmap if override_cmap else spec["cmap"]
-    
+
     # Determinar si es un cmap personalizado (grc_*) o uno de pyart/matplotlib
     if cmap_key.startswith("grc_"):
         # Colormap personalizado del módulo colores
@@ -102,13 +117,14 @@ def colormap_for(field_key: str, override_cmap: Optional[str] = None):
             cmap = pyart.graph.cm.get_colormap(cmap_key)
         except (AttributeError, KeyError):
             cmap = plt.get_cmap(cmap_key)
-    
+
     return cmap, vmin, vmax, cmap_key
 
 
 # ------------------------------
 # Radar metadata segura
 # ------------------------------
+
 
 def get_radar_site(radar: pyart.core.Radar) -> Tuple[float, float, float]:
     """
@@ -123,22 +139,25 @@ def get_radar_site(radar: pyart.core.Radar) -> Tuple[float, float, float]:
         pass
     return lon, lat, alt
 
-def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3, round_to_km: int = 20) -> float:
+
+def safe_range_max_m(
+    radar: pyart.core.Radar, default: float = 240e3, round_to_km: int = 20
+) -> float:
     """
     Devuelve el alcance máximo (último gate) en metros, con fallback.
     Redondea hacia arriba al múltiplo de round_to_km km para alinear grids.
-    
+
     Args:
         radar: Objeto radar de PyART
         default: Valor por defecto si no se puede determinar
         round_to_km: Redondear hacia arriba a múltiplos de este valor en km (default: 20km)
                      Ejemplos: 116580m → 120000m, 236460m → 240000m
-    
+
     Returns:
         Rango máximo redondeado en metros
     """
     import math
-    
+
     r = radar.range["data"]
     arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)
     if arr.size == 0:
@@ -151,12 +170,12 @@ def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3, round_to_k
             # fallback al máximo finito
             finite = arr[np.isfinite(arr)]
             range_m = float(finite.max()) if finite.size else float(default)
-    
+
     # Redondear hacia arriba al múltiplo más cercano
     if round_to_km > 0:
         step_m = round_to_km * 1000.0
         range_m = math.ceil(range_m / step_m) * step_m
-    
+
     return float(range_m)
 
 
@@ -164,11 +183,12 @@ def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3, round_to_k
 # GateFilter común
 # ------------------------------
 
+
 def build_gatefilter(
     radar: pyart.core.Radar,
     field: Optional[str],
     filters: Optional[Iterable[RangeFilter]] = [],
-    is_rhi: Optional[bool] = False
+    is_rhi: Optional[bool] = False,
 ) -> pyart.filters.GateFilter:
     """
     Construye un GateFilter consistente:
@@ -189,20 +209,22 @@ def build_gatefilter(
         except Exception:
             pass
 
-    for f in (filters or []):
+    for f in filters or []:
         fld = getattr(f, "field", None)
         if not fld:
             continue
         # solo aplicamos por ahora si es RHOHV (QC) si es otro campo se hace post-grid el filtro
         # si es RHI, los aplicamos todos (porque no hay grilla ni cacheo)
-        if fld in radar.fields and (fld in AFFECTS_INTERP_FIELDS or (is_rhi and fld == field)):
+        if fld in radar.fields and (
+            fld in AFFECTS_INTERP_FIELDS or (is_rhi and fld == field)
+        ):
             fmin = getattr(f, "min", None)
             fmax = getattr(f, "max", None)
             if fmin is not None:
-                    if fmin <= 0.3 and fld in AFFECTS_INTERP_FIELDS:
-                        continue
-                    else:
-                        gf.exclude_below(fld, float(fmin))
+                if fmin <= 0.3 and fld in AFFECTS_INTERP_FIELDS:
+                    continue
+                else:
+                    gf.exclude_below(fld, float(fmin))
             if fmax is not None:
                 gf.exclude_above(fld, float(fmax))
     return gf
@@ -212,13 +234,14 @@ def build_gatefilter(
 # Grilla 2D cacheada
 # ------------------------------
 
+
 def filters_affect_interpolation(filters, field_to_use):
     """
     Regla: regridear si hay filtros sobre campos QC (RHOHV/NCP/SNR)
     o sobre un campo distinto al visualizado (porque cambia qué gates aportan).
     """
     ft = field_to_use.upper()
-    for f in (filters or []):
+    for f in filters or []:
         ffield = getattr(f, "field", None)
         if not ffield:
             continue
@@ -233,13 +256,14 @@ def filters_affect_interpolation(filters, field_to_use):
             return True
     return False
 
+
 def qc_signature(filters):
     """
     Solo los filtros que afectan interpolación entran a la firma QC (para cache).
     QC(Quality Control): filtros que sí cambian qué datos se usan para construir la grilla
     """
     sig = []
-    for f in (filters or []):
+    for f in filters or []:
         ffield = getattr(f, "field", None)
         if not ffield:
             continue
@@ -253,12 +277,23 @@ def qc_signature(filters):
             pass
     return tuple(sig)
 
-def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
-                     elevation, cappi_height, volume,
-                     interp, qc_sig, max_neighbors=None, session_id=None) -> str:
+
+def grid2d_cache_key(
+    *,
+    file_hash,
+    product_upper,
+    field_to_use,
+    elevation,
+    cappi_height,
+    volume,
+    interp,
+    qc_sig,
+    max_neighbors=None,
+    session_id=None,
+) -> str:
     """
     Genera cache key para grilla 2D con soporte para aislamiento por sesión.
-    
+
     Args:
         max_neighbors: Máximo número de vecinos usados en interpolación (afecta W operator)
         session_id: Identificador único de sesión (None = compartido globalmente)
@@ -278,6 +313,7 @@ def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
     }
     return "g2d_" + _hash_of(payload)
 
+
 def w_operator_cache_key(
     *,
     radar: str,
@@ -285,7 +321,7 @@ def w_operator_cache_key(
     volumen: str,
     grid_shape: tuple,
     grid_limits: tuple,
-    weight_func: str = 'Barnes2',
+    weight_func: str = "Barnes2",
     max_neighbors: int | None = None,
 ) -> str:
     """
@@ -294,10 +330,10 @@ def w_operator_cache_key(
     - Geometría de grilla (shape, limits)
     - Parámetros ROI específicos del volumen (ROI_PARAMS_BY_VOLUME)
     - Función de ponderación y max_neighbors
-    
+
     NOTA: Cache W es COMPARTIDO entre sesiones - el operador depende solo
     de la geometría del radar, no de datos específicos del archivo.
-    
+
     Args:
         radar: Código del radar (ej: RMA1)
         estrategia: Estrategia de escaneo (ej: 0315)
@@ -309,7 +345,7 @@ def w_operator_cache_key(
     """
     # Seleccionar parámetros ROI específicos del volumen (constantes, no adaptativos)
     roi_params = ROI_PARAMS_BY_VOLUME.get(volumen, ROI_PARAMS_VOL01)
-    
+
     payload = {
         "v": 5,  # versión 5: below-beam mask integrada en W
         "radar": str(radar),
@@ -321,12 +357,15 @@ def w_operator_cache_key(
             [float(grid_limits[1][0]), float(grid_limits[1][1])],
             [float(grid_limits[2][0]), float(grid_limits[2][1])],
         ],
-        "roi": list(roi_params),  # (h_factor, nb, bsp, min_radius) - constante por volumen
+        "roi": list(
+            roi_params
+        ),  # (h_factor, nb, bsp, min_radius) - constante por volumen
         "wfunc": str(weight_func),
         "maxn": int(max_neighbors) if max_neighbors is not None else None,
     }
-    
+
     return f"W_{radar}_{estrategia}_{volumen}_{_hash_of(payload)}"
+
 
 def normalize_proj_dict(grid, grid_origin):
     """
@@ -359,9 +398,17 @@ def normalize_proj_dict(grid, grid_origin):
     proj.pop("type", None)
     return proj
 
-def collapse_field_3d_to_2d(data3d, product, *,
-                            x_coords=None, y_coords=None, z_levels=None,
-                            elevation_deg=None, target_height_m=None):
+
+def collapse_field_3d_to_2d(
+    data3d,
+    product,
+    *,
+    x_coords=None,
+    y_coords=None,
+    z_levels=None,
+    elevation_deg=None,
+    target_height_m=None,
+):
     """Versión no destructiva para colapsar un solo campo 3D a 2D.
     No modifica el objeto Grid, sólo recibe los arrays necesarios.
     """
@@ -369,15 +416,20 @@ def collapse_field_3d_to_2d(data3d, product, *,
     # Eliminar dimensión temporal si existe
     if data3d.ndim == 4:
         data3d = data3d[0, :, :, :]  # Tomar primer (y único) timestep
-    
+
     if data3d.ndim == 2:
         arr2d = data3d
     else:
         if product == "ppi":
-            assert elevation_deg is not None and x_coords is not None and y_coords is not None and z_levels is not None
-            X, Y = np.meshgrid(x_coords, y_coords, indexing='xy')
+            assert (
+                elevation_deg is not None
+                and x_coords is not None
+                and y_coords is not None
+                and z_levels is not None
+            )
+            X, Y = np.meshgrid(x_coords, y_coords, indexing="xy")
             r = np.sqrt(X**2 + Y**2)
-            Re = 8.49e6
+            Re = 6.371e6
             z_target = r * np.sin(np.deg2rad(elevation_deg)) + (r**2) / (2.0 * Re)
             iz = np.abs(z_target[..., None] - z_levels[None, None, :]).argmin(axis=2)
             yy = np.arange(len(y_coords))[:, None]
@@ -394,12 +446,12 @@ def collapse_field_3d_to_2d(data3d, product, *,
     return np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
 
 
-
 # ------------------------------
 # Geodesia utilitaria (pseudo-RHI)
 # ------------------------------
 
 _GEOD = Geod(ellps="WGS84")
+
 
 def limit_line_to_range(
     lon0: float, lat0: float, lon1: float, lat1: float, max_len_km: float

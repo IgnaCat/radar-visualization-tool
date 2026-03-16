@@ -3,7 +3,7 @@ Tests para app.services.radar_processing.grid_geometry — geometría de grillas
 
 Qué testea este archivo:
 1. beam_height_max_km: Calcula la altura máxima del haz dada una distancia y elevación.
-   - Usa la ecuación con radio terrestre efectivo Re = 8.49e6 m.
+   - Usa la ecuación con radio terrestre efectivo Re = 6.371e6 m.
    - Resultados validados contra valores conocidos de la literatura.
 
 2. compute_beam_height: Calcula la altura del haz con curvatura terrestre (modelo 4/3).
@@ -40,17 +40,18 @@ from app.services.radar_processing.grid_geometry import (
 # beam_height_max_km
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestBeamHeightMaxKm:
     """
     Calcula h = r*sin(θ) + r²/(2*Re) + h_antena, en km.
-    Re = 8.49e6 m (radio terrestre efectivo).
+    Re = 6.371e6 m (radio terrestre efectivo).
     """
 
     def test_elevacion_cero(self):
         """
         Con elevación 0°, sin(0)=0, la altura es solo por curvatura terrestre:
         h = 0 + r²/(2*Re)
-        Con r=240km: h = (240000)²/(2*8.49e6) = 3393m ≈ 3.39 km
+        Con r=240km: h = (240000)²/(2*6.371e6) = 3393m ≈ 3.39 km
         """
         h = beam_height_max_km(240_000, 0.0)
         assert 3.0 < h < 4.0, f"Esperado ~3.4 km, obtenido {h}"
@@ -60,21 +61,21 @@ class TestBeamHeightMaxKm:
         h_0 = beam_height_max_km(240_000, 0.0)
         h_5 = beam_height_max_km(240_000, 5.0)
         h_10 = beam_height_max_km(240_000, 10.0)
-        
+
         assert h_5 > h_0, "5° debe dar más altura que 0°"
         assert h_10 > h_5, "10° debe dar más altura que 5°"
 
     def test_rango_corto(self):
         """Con rango corto (10km), la curvatura es despreciable."""
         h = beam_height_max_km(10_000, 0.0)
-        # r²/(2*Re) = (10000)²/(2*8.49e6) ≈ 5.9 m = 0.006 km
+        # r²/(2*Re) = (10000)²/(2*6.371e6) ≈ 8.0 m = 0.008 km
         assert h < 0.1, f"Para 10km a 0°, la altura debe ser mínima: {h}"
 
     def test_con_altura_antena(self):
         """La altura de la antena se suma directamente."""
         h_sin = beam_height_max_km(100_000, 5.0, antenna_alt_m=0)
         h_con = beam_height_max_km(100_000, 5.0, antenna_alt_m=500)
-        
+
         np.testing.assert_allclose(h_con - h_sin, 0.5, atol=0.01)
 
     def test_resultado_positivo(self):
@@ -88,6 +89,7 @@ class TestBeamHeightMaxKm:
 # ═══════════════════════════════════════════════════════════════════
 # compute_beam_height
 # ═══════════════════════════════════════════════════════════════════
+
 
 class TestComputeBeamHeight:
     """
@@ -105,9 +107,9 @@ class TestComputeBeamHeight:
         """La altura crece monótonamente con la distancia."""
         distancias = np.array([10_000, 50_000, 100_000, 200_000], dtype=float)
         h = compute_beam_height(distancias, 2.0)
-        
+
         for i in range(1, len(h)):
-            assert h[i] > h[i-1], f"h[{i}]={h[i]} no es mayor que h[{i-1}]={h[i-1]}"
+            assert h[i] > h[i - 1], f"h[{i}]={h[i]} no es mayor que h[{i-1}]={h[i-1]}"
 
     def test_crece_con_elevacion(self):
         """A misma distancia, más elevación → más altura."""
@@ -143,6 +145,7 @@ class TestComputeBeamHeight:
 # calculate_grid_resolution
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestCalculateGridResolution:
     """
     La resolución depende del volumen:
@@ -152,21 +155,21 @@ class TestCalculateGridResolution:
     """
 
     def test_volumen_03_alta_resolucion(self):
-        xy, z = calculate_grid_resolution('03')
+        xy, z = calculate_grid_resolution("03")
         assert xy == 300
         assert z == 600
 
     def test_volumen_01_resolucion_estandar(self):
-        xy, z = calculate_grid_resolution('01')
+        xy, z = calculate_grid_resolution("01")
         assert xy == 1000
         assert z == 600
 
     def test_volumen_02(self):
-        xy, z = calculate_grid_resolution('02')
+        xy, z = calculate_grid_resolution("02")
         assert xy == 1000
 
     def test_volumen_04(self):
-        xy, z = calculate_grid_resolution('04')
+        xy, z = calculate_grid_resolution("04")
         assert xy == 1000
 
     def test_volumen_none(self):
@@ -176,7 +179,7 @@ class TestCalculateGridResolution:
 
     def test_z_siempre_600(self):
         """La resolución Z no cambia nunca."""
-        for vol in ['01', '02', '03', '04', None]:
+        for vol in ["01", "02", "03", "04", None]:
             _, z = calculate_grid_resolution(vol)
             assert z == 600
 
@@ -184,6 +187,7 @@ class TestCalculateGridResolution:
 # ═══════════════════════════════════════════════════════════════════
 # calculate_grid_points
 # ═══════════════════════════════════════════════════════════════════
+
 
 class TestCalculateGridPoints:
     """
@@ -193,13 +197,13 @@ class TestCalculateGridPoints:
     def test_caso_simple(self):
         """100km de rango con 1km de resolución → ~201 puntos por eje."""
         nz, ny, nx = calculate_grid_points(
-            z_limits=(0, 10_000),       # 10km de alto
+            z_limits=(0, 10_000),  # 10km de alto
             y_limits=(-100_000, 100_000),  # 200km de ancho
             x_limits=(-100_000, 100_000),
             resolution_xy=1000,
-            resolution_z=600
+            resolution_z=600,
         )
-        
+
         # Z: ceil(10000/600) + 1 = 17 + 1 = 18
         assert nz == 18
         # Y: (100000 - (-100000)) / 1000 + 1 = 201
@@ -214,16 +218,16 @@ class TestCalculateGridPoints:
             y_limits=(-50_000, 50_000),
             x_limits=(-50_000, 50_000),
             resolution_xy=300,
-            resolution_z=600
+            resolution_z=600,
         )
         _, ny_1000, nx_1000 = calculate_grid_points(
             z_limits=(0, 10_000),
             y_limits=(-50_000, 50_000),
             x_limits=(-50_000, 50_000),
             resolution_xy=1000,
-            resolution_z=600
+            resolution_z=600,
         )
-        
+
         assert ny_300 > ny_1000
         assert nx_300 > nx_1000
 
@@ -234,7 +238,7 @@ class TestCalculateGridPoints:
             y_limits=(0, 1000),
             x_limits=(0, 1000),
             resolution_xy=1000,
-            resolution_z=600
+            resolution_z=600,
         )
         assert nz >= 1
         assert ny >= 1
@@ -245,6 +249,7 @@ class TestCalculateGridPoints:
 # calculate_z_limits
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestCalculateZLimits:
     """
     Calcula los límites verticales (z_min, z_max) de la grilla.
@@ -253,26 +258,26 @@ class TestCalculateZLimits:
 
     def test_z_min_siempre_cero(self):
         z_min, z_max, _ = calculate_z_limits(
-            240_000, elevation=0,
-            radar_fixed_angles=np.array([0.5, 1.0, 2.0])
+            240_000, elevation=0, radar_fixed_angles=np.array([0.5, 1.0, 2.0])
         )
         assert z_min == 0.0
 
     def test_devuelve_elevacion_en_grados(self):
         """Devuelve el ángulo de elevación usado."""
         _, _, elev = calculate_z_limits(
-            240_000, elevation=1,
-            radar_fixed_angles=np.array([0.5, 1.5, 3.0])
+            240_000, elevation=1, radar_fixed_angles=np.array([0.5, 1.5, 3.0])
         )
         assert elev == 1.5
 
     def test_z_max_crece_con_elevacion(self):
         """Mayor elevación → z_max más alto."""
         angles = np.array([0.5, 2.0, 5.0, 10.0])
-        _, z_max_low, _ = calculate_z_limits(240_000, elevation=0,
-                                             radar_fixed_angles=angles)
-        _, z_max_high, _ = calculate_z_limits(240_000, elevation=3,
-                                              radar_fixed_angles=angles)
+        _, z_max_low, _ = calculate_z_limits(
+            240_000, elevation=0, radar_fixed_angles=angles
+        )
+        _, z_max_high, _ = calculate_z_limits(
+            240_000, elevation=3, radar_fixed_angles=angles
+        )
         assert z_max_high > z_max_low
 
     def test_sin_fixed_angles_lanza_error(self):
@@ -285,12 +290,13 @@ class TestCalculateZLimits:
 # calculate_roi_dist_beam
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestCalculateROIDistBeam:
     """
     Radio de Influencia (ROI) usando el método dist_beam.
-    
+
     Fórmula: ROI = max(h_factor*(z/20) + dist_xy*tan(nb*bsp*π/180), min_radius)
-    
+
     El ROI simula el ensanchamiento del haz con la distancia.
     """
 
@@ -326,7 +332,7 @@ class TestCalculateROIDistBeam:
         z = np.array([0.0, 5000.0, 20_000.0])
         y = np.array([0.0, 30_000.0, 100_000.0])
         x = np.array([0.0, 30_000.0, 100_000.0])
-        
+
         roi = calculate_roi_dist_beam(z, y, x)
         assert roi.shape == (3,)
         # Cada ROI sucesivo debe ser mayor (con valores suficientemente
@@ -337,13 +343,17 @@ class TestCalculateROIDistBeam:
         """Volumen 03 tiene ROI mucho más grande (bird bath)."""
         # Parámetros de vol 03: (5.0, 3.0, 2.5, 15000.0)
         roi_vol03 = calculate_roi_dist_beam(
-            5000.0, 10_000.0, 10_000.0,
-            h_factor=5.0, nb=3.0, bsp=2.5, min_radius=15_000.0
+            5000.0,
+            10_000.0,
+            10_000.0,
+            h_factor=5.0,
+            nb=3.0,
+            bsp=2.5,
+            min_radius=15_000.0,
         )
         # Parámetros de vol 01: (0.9, 1.2, 1.0, 700.0)
         roi_vol01 = calculate_roi_dist_beam(
-            5000.0, 10_000.0, 10_000.0,
-            h_factor=0.9, nb=1.2, bsp=1.0, min_radius=700.0
+            5000.0, 10_000.0, 10_000.0, h_factor=0.9, nb=1.2, bsp=1.0, min_radius=700.0
         )
-        
+
         assert roi_vol03 > roi_vol01, "Vol 03 debería tener ROI mucho mayor que vol 01"

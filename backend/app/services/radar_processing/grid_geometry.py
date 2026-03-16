@@ -21,7 +21,7 @@ def beam_height_max_km(
     Returns:
         Altura máxima del haz en kilómetros
     """
-    Re = 8.49e6  # Radio efectivo de la Tierra en metros
+    Re = 6.371e6  # Radio efectivo de la Tierra en metros
     r = float(range_max_m)
     th = math.radians(float(elev_deg))
     h = r * math.sin(th) + (r * r) / (2.0 * Re) + antenna_alt_m
