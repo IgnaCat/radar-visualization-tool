@@ -123,18 +123,17 @@ def calculate_z_limits(
         raise ValueError("radar_fixed_angles requerido para PPI/COLMAX")
 
     elev_deg = float(radar_fixed_angles[elevation])
-    max_elev_deg = float(radar_fixed_angles[-1])
-    hmax_km = beam_height_max_km(range_max_m, max_elev_deg)
+    hmax_km = beam_height_max_km(range_max_m, elev_deg)
     z_top_m = (hmax_km + 3) * 1000  # +3 km de margen
 
     if round_to_km > 0:
         step_m = round_to_km * 1000.0
         z_top_m = math.ceil(z_top_m / step_m) * step_m
 
-    return (0.0, float(z_top_m), elev_deg)
+    return (0.0, 25_000, elev_deg)
 
 
-def calculate_grid_resolution(volume: str | None) -> tuple[float, float]:
+def calculate_grid_resolution(volume: str) -> tuple[float, float]:
     """
     Calcula resolución XY y Z para la grilla según el volumen del radar.
 
