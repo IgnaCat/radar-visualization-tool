@@ -305,6 +305,8 @@ def get_or_build_grid3d_with_operator(
     field_to_use: str | None = None,
     qc_fields: set | None = None,
     session_id: str | None = None,
+    min_valid_neighbors: float | None = None,
+    is_nearest_neighbor: bool = False,
 ) -> pyart.core.Grid:
     """
     Construye grilla 3D usando operador disperso W con caché persistente.
@@ -325,6 +327,7 @@ def get_or_build_grid3d_with_operator(
         visual_filters: Lista de RangeFilter con filtros visuales (mismo campo) para aplicar durante interpolación
         field_to_use: Nombre resuelto del campo principal (necesario para aplicar visual_filters al campo correcto)
         session_id: Identificador de sesión
+        min_valid_neighbors: Umbral de soporte: rechaza voxels con menos de este número de vecinos válidos
 
     Returns:
         pyart.core.Grid con la grilla 3D multi-campo construida
@@ -377,7 +380,6 @@ def get_or_build_grid3d_with_operator(
     fields_to_interp = [field_to_use] if field_to_use else None
     if qc_fields and field_to_use:
         fields_to_interp = [field_to_use] + list(qc_fields)
-        logger.info(f"Interpolando campos: {fields_to_interp}")
 
     # Interpolar campo principal + campos QC
     fields_dict = apply_operator_to_all_fields(
@@ -387,6 +389,8 @@ def get_or_build_grid3d_with_operator(
         handle_mask=True,
         additional_filters=None,
         fields_to_interpolate=fields_to_interp,
+        min_valid_neighbors=min_valid_neighbors,
+        is_nearest_neighbor=is_nearest_neighbor,
     )
 
     # Generar coordenadas de la grilla

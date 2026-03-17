@@ -334,6 +334,8 @@ def process_radar_to_cog(
             field_to_use=field_to_use,
             qc_fields=qc_fields,  # Pasar campos QC para interpolar
             session_id=session_id,
+            min_valid_neighbors=2,  # Umbral de soporte mínimo para interpolar un voxel
+            is_nearest_neighbor=(interp == "nearest"),
         )
 
         # Verificar que el campo solicitado existe en la grilla
@@ -504,13 +506,7 @@ def process_radar_to_cog(
         qc_warped = {}
         if field_to_use not in qc_fields:
             for qc_field, qc_arr in qc_arrays.items():
-                logger.info(
-                    f"qc_arr {qc_field}: shape={qc_arr.shape}, dtype={qc_arr.dtype}, masked={np.ma.is_masked(qc_arr)}"
-                )
                 qc_arr_copy = np.array(qc_arr, copy=True)
-                logger.info(
-                    f"qc_arr {qc_field}: min={np.nanmin(qc_arr_copy)}, max={np.nanmax(qc_arr_copy)}, mean={np.nanmean(qc_arr_copy)}, valid_pixels={np.sum(~np.ma.getmaskarray(qc_arr_copy))}"
-                )
                 qc_src_data = np.ma.filled(qc_arr, fill_value=np.nan).astype(np.float32)
                 qc_dst_data = np.full((dst_height, dst_width), np.nan, dtype=np.float32)
                 reproject(
@@ -524,13 +520,7 @@ def process_radar_to_cog(
                     src_nodata=np.nan,
                     dst_nodata=np.nan,
                 )
-                logger.info(
-                    f"qc_dst_data {qc_field}: min={np.nanmin(qc_dst_data)}, max={np.nanmax(qc_dst_data)}, mean={np.nanmean(qc_dst_data)}, nan_count={np.sum(np.isnan(qc_dst_data))}"
-                )
                 qc_arr_warped = np.ma.masked_invalid(qc_dst_data)
-                logger.info(
-                    f"qc_arr_warped {qc_field}: masked={np.ma.is_masked(qc_arr_warped)}, valid_pixels={np.sum(~np.ma.getmaskarray(qc_arr_warped))}"
-                )
                 # Guardar con clave canónica (ej: "RHOHV") igual que qc_arrays
                 qc_warped[qc_field] = qc_arr_warped.astype(np.float32)
             pkg_cached["qc_warped"] = qc_warped
