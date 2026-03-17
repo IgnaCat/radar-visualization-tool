@@ -20,15 +20,16 @@ from .grid_geometry import calculate_roi_dist_beam, compute_beam_height
 
 logger = logging.getLogger(__name__)
 
-def compute_weights(distances, roi, method='Barnes2'):
+
+def compute_weights(distances, roi, method="Barnes2"):
     """
     Calcula pesos de interpolación según la distancia y el método.
-    
+
     Args:
         distances: np.ndarray de distancias en metros
         roi: Radio de influencia en metros (puede ser escalar o array del mismo tamaño que distances)
         method: 'Barnes', 'Cressman', o 'nearest'
-    
+
     Returns:
         np.ndarray: Pesos (sin normalizar)
     """
@@ -50,28 +51,30 @@ def compute_weights(distances, roi, method='Barnes2'):
             if not valid_roi.any():
                 return result
 
-    if method == 'Barnes':
-         # Barnes: w = exp(-d²/(2σ²)) con σ = ROI/2
+    if method == "Barnes":
+        # Barnes: w = exp(-d²/(2σ²)) con σ = ROI/2
         sigma = roi / 2.0
         # sigma > 0 ya garantizado por roi > 0
-        return np.exp(-(distances * distances) / (2.0 * sigma * sigma)).astype(np.float32)
-    
-    elif method == 'Barnes2':
+        return np.exp(-(distances * distances) / (2.0 * sigma * sigma)).astype(
+            np.float32
+        )
+
+    elif method == "Barnes2":
         # Py-ART: weights = exp(-dist2 / (r2/4)) + 1e-5
         r2 = roi * roi
         dist2 = distances * distances
         w = np.exp(-dist2 / (r2 / 4.0)) + 1e-5
         return w.astype(np.float32)
 
-    elif method == 'Cressman':
+    elif method == "Cressman":
         # Cressman: w = (ROI² - d²) / (ROI² + d²)
         r2 = roi * roi
         dist2 = distances * distances
-        w = (r2 - dist2) / (r2 + dist2 + 1e-12)   # epsilon para estabilidad
+        w = (r2 - dist2) / (r2 + dist2 + 1e-12)  # epsilon para estabilidad
         w = np.clip(w, 0.0, 1.0)  # evita negativos
         return w.astype(np.float32)
 
-    elif method == 'nearest':
+    elif method == "nearest":
         # Nearest: solo el más cercano tiene peso 1
         weights = np.zeros_like(distances, dtype=np.float32)
         weights[int(np.argmin(distances))] = 1.0
@@ -84,41 +87,59 @@ def compute_weights(distances, roi, method='Barnes2'):
 def _process_single_level(args) -> Tuple[int, int, str]:
     """
     Worker function para procesar un único nivel Z (procesamiento paralelo).
-    
+
     Construye KD-tree para gates válidos y encuentra todos los mapeos gate-to-grid
     para una slice horizontal de la grilla.
-    
+
     Args:
         args: tuple con (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
                          gate_valid_mask, h_factor, nb, bsp, min_radius,
                          weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx,
                          min_beam_h)
-    
+
     Returns:
         (iz, n_pairs, temp_file): índice nivel, número de pares, archivo temporal
     """
-    (iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
-     gate_valid_mask, h_factor, nb, bsp, min_radius,
-     weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx,
-     min_beam_h) = args
-    
+    (
+        iz,
+        z_coord,
+        grid_y_2d,
+        grid_x_2d,
+        gate_x,
+        gate_y,
+        gate_z,
+        gate_valid_mask,
+        h_factor,
+        nb,
+        bsp,
+        min_radius,
+        weight_func,
+        max_neighbors,
+        temp_dir,
+        dtype_val,
+        dtype_idx,
+        min_beam_h,
+    ) = args
+
     n_points = grid_y_2d.shape[0]
-    
+
     # Filter gates by mask dentro del workers
     valid_indices = np.where(gate_valid_mask)[0]
     gate_x_valid = gate_x[gate_valid_mask]
     gate_y_valid = gate_y[gate_valid_mask]
     gate_z_valid = gate_z[gate_valid_mask]
     ngates = len(valid_indices)
-    
+
     # Build KD-tree from valid gates only
-    gate_coords = np.column_stack([gate_x_valid, gate_y_valid, gate_z_valid]).astype('float32')
+    gate_coords = np.column_stack([gate_x_valid, gate_y_valid, gate_z_valid]).astype(
+        "float32"
+    )
     tree = cKDTree(gate_coords)
     del gate_coords
     gc.collect()
-    
-    grid_z_level = np.full(n_points, z_coord, dtype='float32')
-    
+
+    grid_z_level = np.full(n_points, z_coord, dtype="float32")
+
     # ROI para este nivel usando dist_beam
     roi = calculate_roi_dist_beam(
         z_coords=grid_z_level,
@@ -128,56 +149,56 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         nb=nb,
         bsp=bsp,
         min_radius=min_radius,
-        radar_offset=(0, 0, 0)
+        radar_offset=(0, 0, 0),
     )
-    
+
     # Máscara below-beam: si este nivel Z está debajo del haz más bajo,
     # se salta el voxel directamente (fila vacía en W → NaN al interpolar)
     if min_beam_h is not None and z_coord < np.max(min_beam_h):
         below_beam = z_coord < min_beam_h  # bool array (n_points,)
     else:
         below_beam = None  # Ningún voxel de este nivel está debajo del haz
-    
+
     # Storage para este nivel (listas temporales)
     level_indices = []
     level_weights = []
     level_indptr = [0]
-    
+
     for i in range(n_points):
         # Saltar voxels debajo del haz más bajo del radar
         if below_beam is not None and below_beam[i]:
             level_indptr.append(level_indptr[-1])
             continue
-        
+
         gx, gy, gz_pt = grid_x_2d[i], grid_y_2d[i], grid_z_level[i]
         r = roi[i]
         r2 = r * r
-        
-        point = np.array([gx, gy, gz_pt], dtype='float32')
+
+        point = np.array([gx, gy, gz_pt], dtype="float32")
         candidate_indices_local = tree.query_ball_point(point, r)
-        
+
         if not candidate_indices_local:
             level_indptr.append(level_indptr[-1])
             continue
-        
-        candidate_indices_local = np.array(candidate_indices_local, dtype='int32')
+
+        candidate_indices_local = np.array(candidate_indices_local, dtype="int32")
         candidate_indices_global = valid_indices[candidate_indices_local]
-        
+
         # Calcular distancias
         dx = gate_x_valid[candidate_indices_local] - gx
         dy = gate_y_valid[candidate_indices_local] - gy
         dz = gate_z_valid[candidate_indices_local] - gz_pt
-        d2 = dx*dx + dy*dy + dz*dz
-        
+        d2 = dx * dx + dy * dy + dz * dz
+
         # Doble validación ROI (como compute.py)
         mask = d2 < r2
         if not np.any(mask):
             level_indptr.append(level_indptr[-1])
             continue
-        
+
         final_indices = candidate_indices_global[mask]
         final_d2 = d2[mask]
-        
+
         # Limitar a max_neighbors si está especificado
         if max_neighbors is not None and len(final_indices) > max_neighbors:
             # Usar argpartition para seleccionar k más cercanos eficientemente: O(n) + O(k log k)
@@ -188,37 +209,37 @@ def _process_single_level(args) -> Tuple[int, int, str]:
             kth_indices = kth_indices[np.argsort(final_d2[kth_indices])]
             final_indices = final_indices[kth_indices]
             final_d2 = final_d2[kth_indices]
-        
+
         # Calcular pesos
-        d = np.sqrt(final_d2).astype('float32')
+        d = np.sqrt(final_d2).astype("float32")
         w = compute_weights(d, r, weight_func).astype(dtype_val)
-        
+
         level_indices.extend(final_indices)
         level_weights.extend(w)
         level_indptr.append(level_indptr[-1] + final_indices.shape[0])
-    
+
     # Guardar nivel a archivo temporal
-    temp_file = os.path.join(temp_dir, f'geometry_level_{iz}.npz')
+    temp_file = os.path.join(temp_dir, f"geometry_level_{iz}.npz")
     np.savez(
         temp_file,
         indptr=np.array(level_indptr, dtype=dtype_idx),
         gate_indices=np.array(level_indices, dtype=dtype_idx),
-        weights=np.array(level_weights, dtype=dtype_val)
+        weights=np.array(level_weights, dtype=dtype_val),
     )
-    
+
     n_pairs = len(level_indices)
-    
+
     # Limpiar memoria del worker
     del tree, level_indices, level_weights, level_indptr
     gc.collect()
-    
+
     return iz, n_pairs, temp_file
 
 
 def build_W_operator(
     gates_xyz,
     voxels_xyz,
-    toa=12000,
+    toa: float = 25000,
     h_factor=None,  # None = usar adaptativos por Z
     nb=None,
     bsp=None,
@@ -234,12 +255,12 @@ def build_W_operator(
 ):
     """
     Construye operador disperso W (CSR: Compressed Sparse Row) que mapea gates -> voxels.
-    
+
     OPERADOR W con PROCESAMIENTO PARALELO:
     Este operador se construye con z_max = TOA para servir a TODOS los sweeps.
     Usa filtro TOA para excluir gates (ecos no-meteorológicos).
     Procesa niveles Z en paralelo para mayor eficiencia.
-    
+
     Args:
     gates_xyz: (Ngates, 3) float - coordenadas (x,y,z) de todos los gates
     voxels_xyz: (Nvoxels, 3) float - coordenadas (x,y,z) de todos los voxels
@@ -275,73 +296,84 @@ def build_W_operator(
     - Using multiprocessing to parallelize across levels
     """
     t_start = time.time()
-    
+
     # Configurar workers
     if n_workers is None:
         n_workers = max(1, cpu_count() - 1)
-    
+
     # Configurar directorio temporal
     if temp_dir is None:
-        temp_dir = tempfile.mkdtemp(prefix='w_operator_')
+        temp_dir = tempfile.mkdtemp(prefix="w_operator_")
         cleanup_temp = True
     else:
         cleanup_temp = False
         if not os.path.isdir(temp_dir):
             raise ValueError(f"temp_dir no existe: {temp_dir}")
-    
+
     gates_xyz = np.asarray(gates_xyz, dtype=np.float32)
     voxels_xyz = np.asarray(voxels_xyz, dtype=np.float32)
 
     ngates_total = gates_xyz.shape[0]
     nvoxels = voxels_xyz.shape[0]
-    
+
     # Crear máscara TOA (filtrado se hace dentro del worker)
     gate_z = gates_xyz[:, 2]
     toa_mask = gate_z <= toa
     n_valid_gates = toa_mask.sum()
     n_excluded = ngates_total - n_valid_gates
-    logger.info(f"Filtro TOA ({toa/1000:.1f}km): {n_valid_gates:,}/{ngates_total:,} gates válidos ({n_excluded:,} excluidos)")
-    
+    logger.info(
+        f"Filtro TOA ({toa/1000:.1f}km): {n_valid_gates:,}/{ngates_total:,} gates válidos ({n_excluded:,} excluidos)"
+    )
+
     # Inferir grid_shape desde voxels_xyz
     # Necesitamos conocer (nz, ny, nx) para procesamiento por niveles
     # Asumimos que voxels están ordenados en Z-Y-X
     z_coords = np.unique(voxels_xyz[:, 2])
     y_coords = np.unique(voxels_xyz[:, 1])
     x_coords = np.unique(voxels_xyz[:, 0])
-    
+
     nz = len(z_coords)
     ny = len(y_coords)
     nx = len(x_coords)
-    
+
     if nz * ny * nx != nvoxels:
         # Si no es una grilla regular, caer a modo secuencial
         print(f"Grilla no regular detectada, usando modo secuencial...")
         n_workers = 1
-    
-    logger.info(f"Construyendo operador W: {nvoxels:,} voxels, {n_valid_gates:,} gates válidos")
-    logger.info(f"  ROI dist_beam: h_factor={h_factor}, nb={nb}°, bsp={bsp}, min_radius={min_radius}m")
-    logger.info(f"  Volumen: {volume} (ajustes de ROI específicos por volumen)")
-    logger.info(f"  Workers: {n_workers} (procesamiento {'paralelo' if n_workers > 1 else 'secuencial'})")
-    if max_neighbors is not None:
-        logger.info(f"  max_neighbors: {max_neighbors} (limitando a k vecinos más cercanos)")
 
+    logger.info(
+        f"Construyendo operador W: {nvoxels:,} voxels, {n_valid_gates:,} gates válidos"
+    )
+    logger.info(
+        f"  ROI dist_beam: h_factor={h_factor}, nb={nb}°, bsp={bsp}, min_radius={min_radius}m"
+    )
+    logger.info(f"  Volumen: {volume} (ajustes de ROI específicos por volumen)")
+    logger.info(
+        f"  Workers: {n_workers} (procesamiento {'paralelo' if n_workers > 1 else 'secuencial'})"
+    )
+    if max_neighbors is not None:
+        logger.info(
+            f"  max_neighbors: {max_neighbors} (limitando a k vecinos más cercanos)"
+        )
 
     # MODO PARALELO POR NIVELES Z
     if nz * ny * nx != nvoxels:
-        raise ValueError(f"Grilla no regular detectada: {nz}*{ny}*{nx}={nz*ny*nx} != {nvoxels}")
-    
+        raise ValueError(
+            f"Grilla no regular detectada: {nz}*{ny}*{nx}={nz*ny*nx} != {nvoxels}"
+        )
+
     logger.info(f"\nProcesando {nz} niveles Z con {n_workers} worker(s)...")
-        
+
     # Preparar grid 2D (Y-X plane)
-    yy, xx = np.meshgrid(y_coords, x_coords, indexing='ij')
-    grid_y_2d = yy.ravel().astype('float32')
-    grid_x_2d = xx.ravel().astype('float32')
-    
+    yy, xx = np.meshgrid(y_coords, x_coords, indexing="ij")
+    grid_y_2d = yy.ravel().astype("float32")
+    grid_x_2d = xx.ravel().astype("float32")
+
     # Extraer coordenadas individuales de gates (arrays 1D)
     gate_x = gates_xyz[:, 0]
     gate_y = gates_xyz[:, 1]
     gate_z = gates_xyz[:, 2]
-    
+
     # Precomputar altura mínima del haz para el plano XY (una sola vez)
     # Se pasa a cada worker para saltar voxels debajo del haz más bajo.
     # Se resta medio z_step como margen para no enmascarar niveles que
@@ -350,35 +382,59 @@ def build_W_operator(
         z_step = float(z_coords[1] - z_coords[0]) if len(z_coords) > 1 else 500.0
         below_beam_margin = 0.5 * z_step
         horiz_dist = np.sqrt(grid_x_2d**2 + grid_y_2d**2)
-        min_beam_h = (compute_beam_height(horiz_dist, lowest_elev_deg, radar_altitude=0.0) - below_beam_margin).astype('float32')
-        logger.info(f"  Below-beam mask: elev_min={lowest_elev_deg:.2f}°, margin={below_beam_margin:.0f}m, "
-                    f"beam_h range=[{min_beam_h.min():.0f}, {min_beam_h.max():.0f}]m")
+        min_beam_h = (
+            compute_beam_height(horiz_dist, lowest_elev_deg, radar_altitude=0.0)
+            - below_beam_margin
+        ).astype("float32")
+        logger.info(
+            f"  Below-beam mask: elev_min={lowest_elev_deg:.2f}°, margin={below_beam_margin:.0f}m, "
+            f"beam_h range=[{min_beam_h.min():.0f}, {min_beam_h.max():.0f}]m"
+        )
     else:
         min_beam_h = None
-    
+
     # Detectar modo con parámetros por volumen: cualquier parámetro None activa lookup de volumen
     use_volume_params = h_factor is None
-    
+
     if use_volume_params:
         # Importar función de lookup de ROI por volumen
         from .grid_builder import get_roi_params_for_volume
+
         params = get_roi_params_for_volume(volume)
-        logger.info(f"Usando parámetros ROI constantes para volumen '{volume}': h_factor={params[0]:.2f}, nb={params[1]:.2f}°, bsp={params[2]:.2f}, min_radius={params[3]:.0f}m")
+        logger.info(
+            f"Usando parámetros ROI constantes para volumen '{volume}': h_factor={params[0]:.2f}, nb={params[1]:.2f}°, bsp={params[2]:.2f}, min_radius={params[3]:.0f}m"
+        )
         h_factor, nb, bsp, min_radius = params
-    
+
     # Preparar argumentos para cada nivel Z (mismo ROI para todos los niveles)
     args_list = []
     for iz, z_coord in enumerate(z_coords):
         # Usar parámetros constantes (fijos o desde volumen)
         hf, nb_z, bsp_z, minr = h_factor, nb, bsp, min_radius
-        
-        args_list.append((
-            iz, z_coord, grid_y_2d, grid_x_2d, gate_x, gate_y, gate_z,
-            toa_mask, hf, nb_z, bsp_z, minr,
-            weight_func, max_neighbors, temp_dir, dtype_val, dtype_idx,
-            min_beam_h
-        ))
-    
+
+        args_list.append(
+            (
+                iz,
+                z_coord,
+                grid_y_2d,
+                grid_x_2d,
+                gate_x,
+                gate_y,
+                gate_z,
+                toa_mask,
+                hf,
+                nb_z,
+                bsp_z,
+                minr,
+                weight_func,
+                max_neighbors,
+                temp_dir,
+                dtype_val,
+                dtype_idx,
+                min_beam_h,
+            )
+        )
+
     # Procesar niveles en paralelo
     if n_workers == 1:
         # Secuencial con progreso
@@ -398,84 +454,89 @@ def build_W_operator(
                 completed += 1
                 progress = completed / nz * 100
                 logger.info(f"  Progreso: {completed}/{nz} niveles ({progress:.1f}%)")
-    
+
     # Ordenar resultados por nivel
     results.sort(key=lambda x: x[0])
-    
+
     # Calcular tamaño total para PRE-ALLOCATION
     total_pairs = sum(r[1] for r in results)
     total_grid_points = ny * nx * nz
-    
+
     logger.info(f"\nMerging {nz} niveles ({total_pairs:,} total pares)...")
-    
+
     # PRE-ALLOCATION: arrays con tamaño exacto conocido
     final_indptr = np.zeros(total_grid_points + 1, dtype=dtype_idx)
     final_indices = np.empty(total_pairs, dtype=dtype_idx)
     final_weights = np.empty(total_pairs, dtype=dtype_val)
-    
+
     # Llenar arrays pre-alocados nivel por nivel
     pair_offset = 0
     point_offset = 0
-    
+
     for iz, n_pairs, temp_file in results:
         # Cargar datos del nivel
         data = np.load(temp_file)
-        level_indptr = data['indptr']
-        level_indices = data['gate_indices']
-        level_weights = data['weights']
-        
+        level_indptr = data["indptr"]
+        level_indices = data["gate_indices"]
+        level_weights = data["weights"]
+
         n_level_points = len(level_indptr) - 1
         n_level_pairs = len(level_indices)
-        
+
         # Copiar índices y pesos directamente a arrays pre-alocados
         if n_level_pairs > 0:
-            final_indices[pair_offset:pair_offset + n_level_pairs] = level_indices
-            final_weights[pair_offset:pair_offset + n_level_pairs] = level_weights
-        
+            final_indices[pair_offset : pair_offset + n_level_pairs] = level_indices
+            final_weights[pair_offset : pair_offset + n_level_pairs] = level_weights
+
         # Construir indptr para este nivel con offset adecuado
         for j in range(n_level_points):
             final_indptr[point_offset + j + 1] = pair_offset + level_indptr[j + 1]
-        
+
         # Actualizar offsets
         pair_offset += n_level_pairs
         point_offset += n_level_points
-        
+
         # GESTIÓN DE MEMORIA: cerrar archivo y limpiar referencias
         data.close()
         del data, level_indptr, level_indices, level_weights
-        
+
         # Eliminar archivo temporal inmediatamente
         os.remove(temp_file)
-        
+
         # Forzar garbage collection después de cada nivel
         gc.collect()
-    
+
     logger.info("Merge completo.")
-    
+
     # Limpiar directorio temporal si fue creado automáticamente
     if cleanup_temp:
         try:
             os.rmdir(temp_dir)
         except:
             pass
-    
+
     # Construir CSR con dtype_idx especificado (int32 por defecto, int64 solo si necesario)
     final_indices = final_indices.astype(dtype_idx, copy=False)
     final_indptr = final_indptr.astype(dtype_idx, copy=False)
-    
-    W = csr_matrix((final_weights, final_indices, final_indptr),
-                    shape=(nvoxels, ngates_total), dtype=dtype_val)
-    
+
+    W = csr_matrix(
+        (final_weights, final_indices, final_indptr),
+        shape=(nvoxels, ngates_total),
+        dtype=dtype_val,
+    )
+
     # Verificar consistencia de dtype
     if W.indices.dtype != dtype_idx or W.indptr.dtype != dtype_idx:
-        logger.warning(f"Convirtiendo índices de W a {dtype_idx} (eran {W.indices.dtype}, {W.indptr.dtype})")
+        logger.warning(
+            f"Convirtiendo índices de W a {dtype_idx} (eran {W.indices.dtype}, {W.indptr.dtype})"
+        )
         W.indices = W.indices.astype(dtype_idx)
         W.indptr = W.indptr.astype(dtype_idx)
-    
+
     # Limpieza final
     del final_weights, final_indices, final_indptr
     gc.collect()
-    
+
     voxels_with_data = nvoxels  # Aproximación (no calculamos exacto en modo paralelo)
     total_neighbors = total_pairs
 
