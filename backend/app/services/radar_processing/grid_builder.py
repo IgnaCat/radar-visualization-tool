@@ -306,6 +306,7 @@ def get_or_build_grid3d_with_operator(
     qc_fields: set | None = None,
     session_id: str | None = None,
     min_valid_neighbors: float | None = None,
+    min_weight_sum: float | None = None,
     is_nearest_neighbor: bool = False,
 ) -> pyart.core.Grid:
     """
@@ -328,6 +329,7 @@ def get_or_build_grid3d_with_operator(
         field_to_use: Nombre resuelto del campo principal (necesario para aplicar visual_filters al campo correcto)
         session_id: Identificador de sesión
         min_valid_neighbors: Umbral de soporte: rechaza voxels con menos de este número de vecinos válidos
+        min_weight_sum: Umbral de soporte: rechaza voxels donde suma de pesos es menor a este valor
 
     Returns:
         pyart.core.Grid con la grilla 3D multi-campo construida
@@ -390,6 +392,7 @@ def get_or_build_grid3d_with_operator(
         additional_filters=None,
         fields_to_interpolate=fields_to_interp,
         min_valid_neighbors=min_valid_neighbors,
+        min_weight_sum=min_weight_sum,
         is_nearest_neighbor=is_nearest_neighbor,
     )
 

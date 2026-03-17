@@ -14,6 +14,7 @@ def apply_operator(
     handle_mask=True,
     additional_filters=None,
     min_valid_neighbors: Optional[float] = None,
+    min_weight_sum: Optional[float] = None,
     is_nearest_neighbor=False,
 ):
     """
@@ -28,6 +29,8 @@ def apply_operator(
                             para aplicar antes de interpolar
         min_valid_neighbors: Optional[float] - Si se define, rechaza voxels con
                            menos de este número de vecinos válidos. Default None (sin filtro).
+        min_weight_sum: Optional[float] - Si se define, rechaza voxels donde la suma
+                        de pesos Barnes2 es menor a este umbral. Default None (sin filtro).
 
     Returns:
         np.ma.MaskedArray: Grilla 3D de shape (nz, ny, nx)
@@ -78,18 +81,29 @@ def apply_operator(
     else:
         n_valid = W @ np.ones(len(g), dtype=float)
 
+    # Guardar weight_sum ANTES de reemplazar por NaN
+    weight_sum = den.copy()
+
     # Evitar división por cero
     den = np.where(den > 1e-10, den, np.nan)
 
     # Resultado normalizado
     v = num / den
 
-    # FILTRO DE SOPORTE: rechazar voxels con pocos vecinos válidos
-    if min_valid_neighbors is not None and not is_nearest_neighbor:
-        support_mask = n_valid >= min_valid_neighbors
-        v = np.where(
-            support_mask, v, np.nan
-        )  # Poner NaN donde no hay soporte suficiente
+    # FILTRO DE SOPORTE: rechazar voxels con pocos vecinos válidos O pesos insuficientes
+    # Lógica OR para RECHAZAR: mantiene si (n_valid >= min_neighbors) AND (weight_sum >= min_weight)
+    if not is_nearest_neighbor:
+        support_mask = np.ones(len(v), dtype=bool)
+
+        if min_valid_neighbors is not None:
+            support_mask = support_mask & (n_valid >= min_valid_neighbors)
+
+        if min_weight_sum is not None:
+            support_mask = support_mask & (weight_sum >= min_weight_sum)
+
+        # Aplicar máscara si al menos un filtro está activo
+        if min_valid_neighbors is not None or min_weight_sum is not None:
+            v = np.where(support_mask, v, np.nan)
 
     # Crear masked array (marcar donde no hay datos)
     v_masked = np.ma.masked_invalid(v)
@@ -108,6 +122,7 @@ def apply_operator_to_all_fields(
     additional_filters=None,
     fields_to_interpolate=None,
     min_valid_neighbors: Optional[float] = None,
+    min_weight_sum: Optional[float] = None,
     is_nearest_neighbor=False,
 ):
     """
@@ -123,7 +138,8 @@ def apply_operator_to_all_fields(
                             se usa lista vacía para ese campo.
         fields_to_interpolate: Optional[List[str]] - Lista de campos a interpolar.
                                Si es None, se interpolan todos los campos del radar.
-        min_valid_neighbors: Optional[float] - Umbral de soporte por voxel.
+        min_valid_neighbors: Optional[float] - Umbral de soporte por voxel (vecinos).
+        min_weight_sum: Optional[float] - Umbral de soporte por voxel (suma de pesos).
 
     Returns:
         dict: Diccionario de campos formateado para pyart.core.Grid
@@ -152,7 +168,8 @@ def apply_operator_to_all_fields(
             handle_mask=handle_mask,
             additional_filters=field_filters,
             min_valid_neighbors=min_valid_neighbors,
-            is_nearest_neighbor=is_nearest_neighbor,  # Usar filtro de vecinos para este caso
+            min_weight_sum=min_weight_sum,
+            is_nearest_neighbor=is_nearest_neighbor,
         )
 
         # Guardar en formato PyART con dimensión temporal

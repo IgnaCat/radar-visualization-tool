@@ -335,6 +335,7 @@ def process_radar_to_cog(
             qc_fields=qc_fields,  # Pasar campos QC para interpolar
             session_id=session_id,
             min_valid_neighbors=2,  # Umbral de soporte mínimo para interpolar un voxel
+            min_weight_sum=1.0,  # Umbral de suma de pesos para interpolar un voxel
             is_nearest_neighbor=(interp == "nearest"),
         )
 
