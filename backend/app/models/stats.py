@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any
 
 from .common import RangeFilter
-from ..core.constants import TOA
+from ..core.constants import TOA, DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 
 
 class RadarStatsRequest(BaseModel):
@@ -39,11 +39,11 @@ class RadarStatsRequest(BaseModel):
         description="Mapeo de campo a colormap personalizado, ej. {'DBZH': 'grc_th2'}",
     )
     weight_func: Optional[str] = Field(
-        default="Barnes2",
+        default=DEFAULT_WEIGHT_FUNC,
         description="Función de ponderación: 'Barnes2', 'Barnes', 'Cressman', 'nearest'",
     )
     max_neighbors: Optional[int] = Field(
-        default=30,
+        default=DEFAULT_MAX_NEIGHBORS,
         ge=1,
         le=500,
         description="Máximo número de vecinos para interpolación",

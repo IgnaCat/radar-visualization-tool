@@ -22,12 +22,14 @@ Qué testea este archivo:
 import pytest
 from unittest.mock import patch
 from app.models import ProcessRequest
+from app.core.constants import TOA
 from app.services.orchestrators.processing_orchestrator import ProcessingOrchestrator
 
 
 # ═══════════════════════════════════════════════════════════════════
 # validate_request
 # ═══════════════════════════════════════════════════════════════════
+
 
 class TestValidateRequest:
     """
@@ -70,46 +72,47 @@ class TestValidateRequest:
     def test_altura_negativa(self):
         """Altura < 0 es rechazada por Pydantic (ge=0)."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             self._make_request(height=-100)
 
     def test_altura_excesiva(self):
-        """Altura > 12000 es rechazada por Pydantic (le=12000)."""
+        """Altura > TOA es rechazada por Pydantic (le=TOA)."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
-            self._make_request(height=15000)
+            self._make_request(height=TOA + 1)
 
     def test_elevacion_negativa(self):
         """Elevación negativa es rechazada por Pydantic (ge=0)."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             self._make_request(elevation=-1)
 
     def test_filepaths_vacio(self):
         """Sin archivos es rechazado por Pydantic (min_items=1)."""
         from pydantic import ValidationError
+
         with pytest.raises(ValidationError):
             self._make_request(filepaths=[])
 
     def test_mas_de_3_radares(self):
         """Más de 3 radares seleccionados lanza ValueError."""
-        req = self._make_request(
-            selectedRadars=["RMA1", "RMA2", "RMA3", "RMA4"]
-        )
+        req = self._make_request(selectedRadars=["RMA1", "RMA2", "RMA3", "RMA4"])
         with pytest.raises(ValueError, match="3 radares"):
             ProcessingOrchestrator.validate_request(req)
 
     def test_3_radares_es_valido(self):
         """Exactamente 3 radares es válido."""
-        req = self._make_request(
-            selectedRadars=["RMA1", "RMA2", "RMA3"]
-        )
+        req = self._make_request(selectedRadars=["RMA1", "RMA2", "RMA3"])
         ProcessingOrchestrator.validate_request(req)  # no lanza
 
 
 # ═══════════════════════════════════════════════════════════════════
 # filter_by_volumes
 # ═══════════════════════════════════════════════════════════════════
+
 
 class TestFilterByVolumes:
     """
@@ -176,6 +179,7 @@ class TestFilterByVolumes:
 # filter_by_radars
 # ═══════════════════════════════════════════════════════════════════
 
+
 class TestFilterByRadars:
     """Filtra archivos por radares seleccionados."""
 
@@ -197,9 +201,7 @@ class TestFilterByRadars:
             "RMA1_0315_01_20250819T001715Z.nc",
             "RMA3_0315_01_20250819T001715Z.nc",
         ]
-        filtered, warnings = ProcessingOrchestrator.filter_by_radars(
-            filepaths, []
-        )
+        filtered, warnings = ProcessingOrchestrator.filter_by_radars(filepaths, [])
         assert len(filtered) == 2
 
     def test_multiples_radares(self):

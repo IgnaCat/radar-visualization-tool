@@ -78,8 +78,8 @@ export default function SplitScreenContainer({
   const [settingsOpen2, setSettingsOpen2] = useState(false);
   const [deltaT2, setDeltaT2] = useState(0);
   const [interpSettings2, setInterpSettings2] = useState({
-    weightFunc: "Barnes2",
-    maxNeighbors: 30,
+    weightFunc: "nearest",
+    maxNeighbors: 1,
   });
 
   const drawnLayerRef2 = useRef(null);

@@ -13,6 +13,9 @@ FIELD_ALIASES = {
 
 TOA = 25000
 
+DEFAULT_WEIGHT_FUNC = "nearest"
+DEFAULT_MAX_NEIGHBORS = 1
+
 FIELD_RENDER = {
     "DBZH": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
     "DBZHF": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},

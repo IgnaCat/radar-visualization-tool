@@ -2,6 +2,7 @@
 Orchestrator para consulta de valores en píxeles individuales de radar.
 Contiene la lógica de negocio previamente en el router radar_pixel.py.
 """
+
 import numpy as np
 import pyproj
 from pathlib import Path
@@ -11,6 +12,7 @@ from pyproj import Transformer
 from ...models import RadarPixelRequest, RadarPixelResponse
 from ...core.cache import GRID2D_CACHE
 from ...core.config import settings
+from ...core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ...utils.helpers import extract_volume_from_filename
 from ..radar_common import (
     grid2d_cache_key,
@@ -37,7 +39,7 @@ class PixelOrchestrator:
         """
         if getattr(payload, "filepath", None) in (None, "", "undefined"):
             raise ValueError("El campo 'filepath' es obligatorio.")
-        
+
         if not (-90 <= float(payload.lat) <= 90 and -180 <= float(payload.lon) <= 180):
             raise ValueError("Coordenadas no WGS84 (use lat∈[-90,90], lon∈[-180,180])")
 
@@ -45,7 +47,7 @@ class PixelOrchestrator:
     def get_filepath(payload: RadarPixelRequest) -> str:
         """
         Construye el path completo del archivo desde el request.
-        
+
         Returns:
             Path absoluto al archivo de radar
         """
@@ -58,11 +60,11 @@ class PixelOrchestrator:
     def resolve_field_name(product: str, field: str) -> str:
         """
         Resuelve el nombre del campo según el producto.
-        
+
         Args:
             product: Tipo de producto (PPI, CAPPI, COLMAX)
             field: Campo solicitado
-        
+
         Returns:
             Nombre del campo resuelto
         """
@@ -82,12 +84,12 @@ class PixelOrchestrator:
         volume: Optional[str] = None,
         filters: Optional[List] = None,
         session_id: Optional[str] = None,
-        weight_func: str = "Barnes2",
-        max_neighbors: Optional[int] = None,
+        weight_func: str = DEFAULT_WEIGHT_FUNC,
+        max_neighbors: Optional[int] = DEFAULT_MAX_NEIGHBORS,
     ) -> str:
         """
         Genera cache key incluyendo filtros QC (afectan interpolación).
-        
+
         Returns:
             Cache key para GRID2D_CACHE
         """
@@ -97,12 +99,14 @@ class PixelOrchestrator:
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
-        
+
         # Generar signature de qc_filters para cache keys
         qc_filters, _ = separate_filters(filters or [], field_to_use)
-        qc_sig = tuple(sorted([
-            (f.field, f.min, f.max) for f in qc_filters
-        ])) if qc_filters else tuple()
+        qc_sig = (
+            tuple(sorted([(f.field, f.min, f.max) for f in qc_filters]))
+            if qc_filters
+            else tuple()
+        )
 
         cache_key = grid2d_cache_key(
             file_hash=file_hash,
@@ -121,48 +125,42 @@ class PixelOrchestrator:
 
     @staticmethod
     def apply_filters_to_cached_data(
-        arr: np.ma.MaskedArray,
-        pkg: Dict,
-        filters: List,
-        field: str
+        arr: np.ma.MaskedArray, pkg: Dict, filters: List, field: str
     ) -> np.ma.MaskedArray:
         """
         Aplica filtros dinámicamente sobre el array cacheado.
-        
+
         Args:
             arr: Array cacheado (posiblemente warped)
             pkg: Package del cache con metadata
             filters: Lista de filtros a aplicar
             field: Nombre del campo
-        
+
         Returns:
             Array con filtros aplicados
         """
         field_to_use = field.upper()
         _, visual_filters = separate_filters(filters, field_to_use)
-        
+
         # Solo aplicar filtros visuales - los QC ya están aplicados en el cache
         # (fueron aplicados durante la interpolación al generar la grilla)
         arr = apply_visual_filters(arr, visual_filters, field_to_use)
-        
+
         return arr
 
     @staticmethod
     def transform_coordinates_to_grid(
-        lon: float,
-        lat: float,
-        crs: pyproj.CRS,
-        transform
+        lon: float, lat: float, crs: pyproj.CRS, transform
     ) -> tuple:
         """
         Transforma coordenadas WGS84 a coordenadas del grid.
-        
+
         Args:
             lon: Longitud en WGS84
             lat: Latitud en WGS84
             crs: CRS del grid
             transform: Affine transform del grid
-        
+
         Returns:
             Tupla (col_f, row_f) coordenadas fraccionarias en pixel space
         """
@@ -172,7 +170,7 @@ class PixelOrchestrator:
 
         # Coordenadas continuas (fraccionarias) en pixel space
         col_f, row_f = ~transform * (xg, yg)  # inverso de transform
-        
+
         return col_f, row_f
 
     @staticmethod
@@ -183,11 +181,11 @@ class PixelOrchestrator:
         transform,
         crs: pyproj.CRS,
         user_lat: float,
-        user_lon: float
+        user_lon: float,
     ) -> RadarPixelResponse:
         """
         Obtiene valor del píxel más cercano (sin interpolación).
-        
+
         Args:
             arr: Array de datos
             row_f: Fila fraccionaria
@@ -196,7 +194,7 @@ class PixelOrchestrator:
             crs: CRS del grid
             user_lat: Latitud original del usuario (para respuesta)
             user_lon: Longitud original del usuario (para respuesta)
-        
+
         Returns:
             RadarPixelResponse con el valor y coordenadas originales del usuario
         """
@@ -205,36 +203,32 @@ class PixelOrchestrator:
         row_int = int(np.floor(row_f))
         col_int = int(np.floor(col_f))
         ny, nx = arr.shape
-        
+
         if row_int < 0 or row_int >= ny or col_int < 0 or col_int >= nx:
             return RadarPixelResponse(
-                value=None, 
-                masked=True, 
-                row=row_int, 
-                col=col_int, 
-                message="Fuera de limites"
+                value=None,
+                masked=True,
+                row=row_int,
+                col=col_int,
+                message="Fuera de limites",
             )
-        
+
         m = np.ma.getmaskarray(arr)
         if m[row_int, col_int]:
             return RadarPixelResponse(
-                value=None, 
-                masked=True, 
-                row=row_int, 
-                col=col_int, 
-                message="masked"
+                value=None, masked=True, row=row_int, col=col_int, message="masked"
             )
-        
+
         val = float(arr[row_int, col_int])
-        
+
         # Devolver coordenadas originales del usuario (no del centro del pixel)
         return RadarPixelResponse(
-            value=round(val, 2), 
-            masked=False, 
-            row=row_int, 
-            col=col_int, 
-            lat=user_lat, 
-            lon=user_lon
+            value=round(val, 2),
+            masked=False,
+            row=row_int,
+            col=col_int,
+            lat=user_lat,
+            lon=user_lon,
         )
 
     @staticmethod
@@ -245,11 +239,11 @@ class PixelOrchestrator:
         transform,
         crs: pyproj.CRS,
         user_lat: float,
-        user_lon: float
+        user_lon: float,
     ) -> RadarPixelResponse:
         """
         Obtiene valor interpolado bilinearmente entre 4 píxeles vecinos.
-        
+
         Args:
             arr: Array de datos
             row_f: Fila fraccionaria
@@ -258,7 +252,7 @@ class PixelOrchestrator:
             crs: CRS del grid
             user_lat: Latitud original del usuario (para respuesta)
             user_lon: Longitud original del usuario (para respuesta)
-        
+
         Returns:
             RadarPixelResponse con el valor interpolado y coordenadas originales del usuario
         """
@@ -267,40 +261,40 @@ class PixelOrchestrator:
         c0 = int(np.floor(col_f))
         r1 = r0 + 1
         c1 = c0 + 1
-        
+
         # Pesos
         dr = row_f - r0
         dc = col_f - c0
-        
+
         m = np.ma.getmaskarray(arr)
-        
+
         # Extraer valores y máscaras de los 4 vecinos
         v00 = arr[r0, c0] if not m[r0, c0] else np.nan
         v01 = arr[r0, c1] if not m[r0, c1] else np.nan
         v10 = arr[r1, c0] if not m[r1, c0] else np.nan
         v11 = arr[r1, c1] if not m[r1, c1] else np.nan
-        
+
         # Si todos masked -> retornar masked
         if np.isnan([v00, v01, v10, v11]).all():
             row_int = int(np.floor(row_f))
             col_int = int(np.floor(col_f))
             return RadarPixelResponse(
-                value=None, 
-                masked=True, 
-                row=row_int, 
-                col=col_int, 
-                message="masked (todos vecinos)"
+                value=None,
+                masked=True,
+                row=row_int,
+                col=col_int,
+                message="masked (todos vecinos)",
             )
-        
+
         # Interpolación bilinear (ignora NaN promediando los válidos con sus pesos)
         w00 = (1 - dr) * (1 - dc)
         w01 = (1 - dr) * dc
         w10 = dr * (1 - dc)
         w11 = dr * dc
-        
+
         total_weight = 0.0
         val_interp = 0.0
-        
+
         if not np.isnan(v00):
             val_interp += w00 * v00
             total_weight += w00
@@ -313,44 +307,40 @@ class PixelOrchestrator:
         if not np.isnan(v11):
             val_interp += w11 * v11
             total_weight += w11
-        
+
         if total_weight > 0:
             val_interp /= total_weight
         else:
             row_int = int(np.floor(row_f))
             col_int = int(np.floor(col_f))
             return RadarPixelResponse(
-                value=None, 
-                masked=True, 
-                row=row_int, 
-                col=col_int, 
-                message="masked"
+                value=None, masked=True, row=row_int, col=col_int, message="masked"
             )
-        
+
         row_int = int(np.floor(row_f))
         col_int = int(np.floor(col_f))
-        
+
         # Devolver coordenadas originales del usuario (no del centro del pixel)
         return RadarPixelResponse(
-            value=round(val_interp, 2), 
-            masked=False, 
-            row=row_int, 
-            col=col_int, 
-            lat=user_lat, 
-            lon=user_lon
+            value=round(val_interp, 2),
+            masked=False,
+            row=row_int,
+            col=col_int,
+            lat=user_lat,
+            lon=user_lon,
         )
 
     @staticmethod
     def process_pixel_request(payload: RadarPixelRequest) -> RadarPixelResponse:
         """
         Método principal que orquesta la consulta de píxel.
-        
+
         Args:
             payload: Request de consulta de píxel
-        
+
         Returns:
             Response con valor del píxel (interpolado o nearest)
-        
+
         Raises:
             ValueError: Si hay errores de validación o datos no disponibles
         """
@@ -365,8 +355,8 @@ class PixelOrchestrator:
 
         # 4. Generar cache key
         volume = extract_volume_from_filename(payload.filepath)
-        weight_func = payload.weight_func or "Barnes2"
-        max_neighbors = payload.max_neighbors or 30
+        weight_func = payload.weight_func or DEFAULT_WEIGHT_FUNC
+        max_neighbors = payload.max_neighbors or DEFAULT_MAX_NEIGHBORS
         cache_key = PixelOrchestrator.generate_cache_key(
             filepath=filepath,
             product=payload.product,
@@ -388,23 +378,21 @@ class PixelOrchestrator:
         # 6. Usar versión warped si está disponible (optimizado desde WGS84)
         arr = pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
         crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
-        transform = pkg["transform_warped"] if pkg.get("transform_warped") is not None else pkg["transform"]
+        transform = (
+            pkg["transform_warped"]
+            if pkg.get("transform_warped") is not None
+            else pkg["transform"]
+        )
         crs = pyproj.CRS.from_user_input(crs_wkt)
 
         # 7. Aplicar filtros dinámicamente
         arr = PixelOrchestrator.apply_filters_to_cached_data(
-            arr, 
-            pkg, 
-            payload.filters or [], 
-            field
+            arr, pkg, payload.filters or [], field
         )
 
         # 8. Transformar coordenadas a grid
         col_f, row_f = PixelOrchestrator.transform_coordinates_to_grid(
-            payload.lon, 
-            payload.lat, 
-            crs, 
-            transform
+            payload.lon, payload.lat, crs, transform
         )
 
         ny, nx = arr.shape
@@ -414,11 +402,11 @@ class PixelOrchestrator:
         return PixelOrchestrator.get_pixel_value_nearest(
             arr, row_f, col_f, transform, crs, payload.lat, payload.lon
         )
-        
+
         # NOTA: Interpolación bilinear comentada - producía valores diferentes
         # para clicks dentro del mismo pixel debido a los pesos fraccionarios.
         # Si se desea reactivar, descomentar el bloque siguiente:
-        
+
         # # 9. Verificar si está en bordes (no se puede interpolar)
         # if row_f < 0 or row_f >= ny - 1 or col_f < 0 or col_f >= nx - 1:
         #     # Fuera de límites o en borde -> usar nearest
@@ -428,10 +416,10 @@ class PixelOrchestrator:
         #
         # # 10. Interpolación bilinear (dentro de la grilla)
         # return PixelOrchestrator.get_pixel_value_bilinear(
-        #     arr, 
-        #     row_f, 
-        #     col_f, 
-        #     transform, 
+        #     arr,
+        #     row_f,
+        #     col_f,
+        #     transform,
         #     crs,
         #     payload.lat,
         #     payload.lon

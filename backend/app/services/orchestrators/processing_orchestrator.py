@@ -19,7 +19,11 @@ from ...models import (
     RadarProcessResult,
 )
 from ...core.config import settings
-from ...core.constants import TOA
+from ...core.constants import (
+    TOA,
+    DEFAULT_WEIGHT_FUNC,
+    DEFAULT_MAX_NEIGHBORS,
+)
 from .. import radar_processor
 from ...utils import helpers
 
@@ -205,8 +209,8 @@ class ProcessingOrchestrator:
         colormap_overrides: Optional[Dict] = None,
         session_id: Optional[str] = None,
         filters_per_field: Optional[Dict[str, List[RangeFilter]]] = None,
-        weight_func: str = "Barnes2",
-        max_neighbors: int = 30,
+        weight_func: str = DEFAULT_WEIGHT_FUNC,
+        max_neighbors: int = DEFAULT_MAX_NEIGHBORS,
         max_workers: int = 4,
     ) -> Tuple[Dict, Dict, Dict, Dict]:
         """
@@ -218,7 +222,7 @@ class ProcessingOrchestrator:
 
         Args:
             items: Lista de (filepath_rel, filepath_abs, timestamp, volume, radar, estrategia)
-            weight_func: Función de ponderación para interpolación ('Barnes2', 'Cressman', 'nearest')
+            weight_func: Función de ponderación para interpolación ('nearest', 'Barnes2', 'Cressman')
             max_neighbors: Máximo número de vecinos por punto de grilla
             max_workers: Número máximo de threads (default 4, conservador porque cada
                         archivo puede usar threads internos para niveles Z)
@@ -429,8 +433,8 @@ class ProcessingOrchestrator:
                 payload.colormap_overrides,
                 payload.session_id,
                 getattr(payload, "filters_per_field", None),
-                payload.weight_func or "Barnes2",
-                payload.max_neighbors or 30,
+                payload.weight_func or DEFAULT_WEIGHT_FUNC,
+                payload.max_neighbors or DEFAULT_MAX_NEIGHBORS,
             )
         )
 

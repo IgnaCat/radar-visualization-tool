@@ -23,6 +23,8 @@ from ...core.constants import (
     ROI_PARAMS_BY_VOLUME,
     ROI_PARAMS_VOL01,
     TOA,
+    DEFAULT_WEIGHT_FUNC,
+    DEFAULT_MAX_NEIGHBORS,
 )
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
@@ -53,7 +55,8 @@ def get_roi_params_for_volume(volume: str | None = None):
     Returns:
         tuple: (h_factor, nb, bsp, min_radius) específicos del volumen
     """
-    return ROI_PARAMS_BY_VOLUME.get(volume, ROI_PARAMS_VOL01)
+    volume_key = volume if volume is not None else "01"
+    return ROI_PARAMS_BY_VOLUME.get(volume_key, ROI_PARAMS_VOL01)
 
 
 def get_gate_xyz_coords(radar, edges=False):
@@ -155,8 +158,8 @@ def get_or_build_W_operator(
     bsp: float | None,
     min_radius: float | None,
     toa: float = TOA,
-    weight_func: str = "Barnes2",
-    max_neighbors: int | None = None,
+    weight_func: str = DEFAULT_WEIGHT_FUNC,
+    max_neighbors: int | None = DEFAULT_MAX_NEIGHBORS,
     session_id: str | None = None,
 ) -> csr_matrix:
     """
@@ -298,8 +301,8 @@ def get_or_build_grid3d_with_operator(
     grid_shape: tuple,
     grid_resolution_xy: float,
     grid_resolution_z: float,
-    weight_func: str = "Barnes2",
-    max_neighbors: int | None = 30,
+    weight_func: str = DEFAULT_WEIGHT_FUNC,
+    max_neighbors: int | None = DEFAULT_MAX_NEIGHBORS,
     qc_filters: list | None = None,
     visual_filters: list | None = None,
     field_to_use: str | None = None,
@@ -319,7 +322,7 @@ def get_or_build_grid3d_with_operator(
         grid_resolution_xy: Resolución horizontal en metros
         grid_resolution_z: Resolución vertical en metros
         weight_func: Función de ponderación para el operador W
-        max_neighbors: Máximo número de vecinos (default 30, None = todos dentro del ROI)
+        max_neighbors: Máximo número de vecinos (default 1, None = todos dentro del ROI)
         qc_filters: Lista de RangeFilter con filtros QC (ej. RHOHV) para aplicar durante interpolación
         visual_filters: Lista de RangeFilter con filtros visuales (mismo campo) para aplicar durante interpolación
         field_to_use: Nombre resuelto del campo principal (necesario para aplicar visual_filters al campo correcto)

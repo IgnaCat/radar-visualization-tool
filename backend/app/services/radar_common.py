@@ -8,7 +8,15 @@ import json
 from pyproj import Geod
 
 from ..utils import colores
-from ..core.constants import FIELD_ALIASES, FIELD_RENDER, AFFECTS_INTERP_FIELDS, ROI_PARAMS_BY_VOLUME, ROI_PARAMS_VOL01
+from ..core.constants import (
+    FIELD_ALIASES,
+    FIELD_RENDER,
+    AFFECTS_INTERP_FIELDS,
+    ROI_PARAMS_BY_VOLUME,
+    ROI_PARAMS_VOL01,
+    DEFAULT_WEIGHT_FUNC,
+    DEFAULT_MAX_NEIGHBORS,
+)
 from ..models import RangeFilter
 
 
@@ -255,7 +263,7 @@ def qc_signature(filters):
 
 def grid2d_cache_key(*, file_hash, product_upper, field_to_use,
                      elevation, cappi_height, volume,
-                     interp, qc_sig, max_neighbors=None, session_id=None) -> str:
+                     interp, qc_sig, max_neighbors=DEFAULT_MAX_NEIGHBORS, session_id=None) -> str:
     """
     Genera cache key para grilla 2D con soporte para aislamiento por sesión.
     
@@ -285,8 +293,8 @@ def w_operator_cache_key(
     volumen: str,
     grid_shape: tuple,
     grid_limits: tuple,
-    weight_func: str = 'Barnes2',
-    max_neighbors: int | None = None,
+    weight_func: str = DEFAULT_WEIGHT_FUNC,
+    max_neighbors: int | None = DEFAULT_MAX_NEIGHBORS,
 ) -> str:
     """
     Genera cache key para operador W basado en:

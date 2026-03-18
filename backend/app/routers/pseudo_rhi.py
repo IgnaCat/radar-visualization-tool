@@ -6,9 +6,11 @@ from fastapi.concurrency import run_in_threadpool
 from ..models import PseudoRHIRequest, PseudoRHIResponse, RangeFilter
 from ..services.pseudo_rhi import generate_pseudo_rhi_png
 from ..core.config import settings
+from ..core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ..utils import helpers
 
 router = APIRouter(prefix="/process", tags=["process"])
+
 
 @router.post("/pseudo_rhi", response_model=List[PseudoRHIResponse])
 async def pseudo_rhi(payload: PseudoRHIRequest):
@@ -24,46 +26,54 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
     start_lat: float = payload.start_lat
     max_length_km: float = payload.max_length_km
     max_height_km: float = payload.max_height_km
-    min_length_km: float = payload.min_length_km if payload.min_length_km is not None else 0.0
-    min_height_km: float = payload.min_height_km if payload.min_height_km is not None else 0.0
+    min_length_km: float = (
+        payload.min_length_km if payload.min_length_km is not None else 0.0
+    )
+    min_height_km: float = (
+        payload.min_height_km if payload.min_height_km is not None else 0.0
+    )
     elevation: int = payload.elevation
     filters: List[RangeFilter] = payload.filters
-    weight_func: str = payload.weight_func or "Barnes2"
-    max_neighbors: int = payload.max_neighbors if payload.max_neighbors is not None else 30
+    weight_func: str = payload.weight_func or DEFAULT_WEIGHT_FUNC
+    max_neighbors: int = (
+        payload.max_neighbors
+        if payload.max_neighbors is not None
+        else DEFAULT_MAX_NEIGHBORS
+    )
 
     # Validar inputs
     if not filepaths:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Debe proporcionar una lista de 'filepaths'"
+            detail="Debe proporcionar una lista de 'filepaths'",
         )
     if max_length_km <= 0 or max_length_km > 240:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La longitud máxima debe estar entre 0 y 240 km."
+            detail="La longitud máxima debe estar entre 0 y 240 km.",
         )
     if min_length_km < 0 or min_length_km >= max_length_km:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La longitud mínima debe ser >= 0 y menor que la máxima."
+            detail="La longitud mínima debe ser >= 0 y menor que la máxima.",
         )
     if max_height_km < 0.1 or max_height_km > 30:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La altura máxima debe estar entre 0.1 y 30 km."
+            detail="La altura máxima debe estar entre 0.1 y 30 km.",
         )
     if min_height_km < -10 or min_height_km >= max_height_km:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="La altura mínima debe ser >= -10 y menor que la máxima."
+            detail="La altura mínima debe ser >= -10 y menor que la máxima.",
         )
-    
+
     if elevation < 0 or elevation > 12:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El ángulo de elevación debe estar entre 0 y 12."
+            detail="El ángulo de elevación debe estar entre 0 y 12.",
         )
-    
+
     # Determinar directorio de uploads según session_id
     UPLOAD_DIR = Path(settings.UPLOAD_DIR)
     if payload.session_id:
@@ -75,9 +85,9 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
         if not Path(filepath).exists():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Archivo no encontrado: {file}"
+                detail=f"Archivo no encontrado: {file}",
             )
-    
+
     # Procesar y generar PNG
     try:
         # Limpieza de temporales (en threadpool para no bloquear)
@@ -117,7 +127,7 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
             processed.append(PseudoRHIResponse(**result_dict))
 
         return processed
-    
+
     except HTTPException:
         # Re-emitir las HTTPException tal cual
         raise
@@ -126,5 +136,5 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
         print(f"Error pseudo RHI: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error pseudo RHI: {e}"
+            detail=f"Error pseudo RHI: {e}",
         )

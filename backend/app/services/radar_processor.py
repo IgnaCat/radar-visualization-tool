@@ -11,7 +11,12 @@ from affine import Affine
 
 from ..core.config import settings
 from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, NETCDF_READ_LOCK
-from ..core.constants import AFFECTS_INTERP_FIELDS, FIELD_RENDER
+from ..core.constants import (
+    AFFECTS_INTERP_FIELDS,
+    FIELD_RENDER,
+    DEFAULT_WEIGHT_FUNC,
+    DEFAULT_MAX_NEIGHBORS,
+)
 
 from .radar_common import (
     md5_file,
@@ -41,8 +46,8 @@ def _generate_cog_filename(
     filters,
     file_hash: str,
     colormap_overrides: dict | None,
-    weight_func: str = "Barnes2",
-    max_neighbors=None,
+    weight_func: str = DEFAULT_WEIGHT_FUNC,
+    max_neighbors=DEFAULT_MAX_NEIGHBORS,
 ) -> str:
     """
     Genera nombre único pero estable para el archivo COG.
@@ -134,8 +139,8 @@ def process_radar_to_cog(
     volume="",
     colormap_overrides=None,
     session_id=None,
-    weight_func="Barnes2",
-    max_neighbors=30,
+    weight_func=DEFAULT_WEIGHT_FUNC,
+    max_neighbors=DEFAULT_MAX_NEIGHBORS,
 ):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
