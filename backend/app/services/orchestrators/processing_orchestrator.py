@@ -211,6 +211,9 @@ class ProcessingOrchestrator:
         filters_per_field: Optional[Dict[str, List[RangeFilter]]] = None,
         weight_func: str = DEFAULT_WEIGHT_FUNC,
         max_neighbors: int = DEFAULT_MAX_NEIGHBORS,
+        smoothing_enabled: bool = False,
+        smoothing_sigma: float = 0.8,
+        smoothing_only_when_nearest: bool = True,
         max_workers: int = 4,
     ) -> Tuple[Dict, Dict, Dict, Dict]:
         """
@@ -224,6 +227,9 @@ class ProcessingOrchestrator:
             items: Lista de (filepath_rel, filepath_abs, timestamp, volume, radar, estrategia)
             weight_func: Función de ponderación para interpolación ('nearest', 'Barnes2', 'Cressman')
             max_neighbors: Máximo número de vecinos por punto de grilla
+            smoothing_enabled: Activa/desactiva suavizado visual opcional
+            smoothing_sigma: Intensidad del suavizado gaussiano
+            smoothing_only_when_nearest: Si suavizar solo cuando interp='nearest'
             max_workers: Número máximo de threads (default 4, conservador porque cada
                         archivo puede usar threads internos para niveles Z)
 
@@ -259,6 +265,9 @@ class ProcessingOrchestrator:
                         session_id=session_id,
                         weight_func=weight_func,
                         max_neighbors=max_neighbors,
+                        smoothing_enabled=smoothing_enabled,
+                        smoothing_sigma=smoothing_sigma,
+                        smoothing_only_when_nearest=smoothing_only_when_nearest,
                     )
                     result_dict["timestamp"] = ts
                     result_dict["order"] = field_idx
@@ -435,6 +444,9 @@ class ProcessingOrchestrator:
                 getattr(payload, "filters_per_field", None),
                 payload.weight_func or DEFAULT_WEIGHT_FUNC,
                 payload.max_neighbors or DEFAULT_MAX_NEIGHBORS,
+                bool(getattr(payload.smoothing, "enabled", False)),
+                float(getattr(payload.smoothing, "sigma", 0.8)),
+                bool(getattr(payload.smoothing, "only_when_nearest", True)),
             )
         )
 

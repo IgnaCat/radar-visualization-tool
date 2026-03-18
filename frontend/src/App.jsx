@@ -101,6 +101,7 @@ function buildComputeKey({
   colormap_overrides,
   weightFunc,
   maxNeighbors,
+  smoothing,
 }) {
   return stableStringify({
     files,
@@ -114,6 +115,7 @@ function buildComputeKey({
     colormap_overrides,
     weightFunc,
     maxNeighbors,
+    smoothing,
   });
 }
 
@@ -137,6 +139,11 @@ export default function App() {
   const [interpSettings, setInterpSettings] = useState({
     weightFunc: "nearest",
     maxNeighbors: 1,
+    smoothing: {
+      enabled: false,
+      sigma: 0.8,
+      only_when_nearest: true,
+    },
   });
   const [settingsApplyVersion, setSettingsApplyVersion] = useState(0);
   const lastProcessedSettingsVersionRef = useRef(0);
@@ -519,6 +526,7 @@ export default function App() {
         colormap_overrides: selectedColormaps,
         weightFunc: interpSettings.weightFunc,
         maxNeighbors: interpSettings.maxNeighbors,
+        smoothing: interpSettings.smoothing,
       });
 
       // Si solo cambió UI (opacidad/orden), no reproceses:
@@ -539,6 +547,7 @@ export default function App() {
         session_id: sessionId,
         weight_func: interpSettings.weightFunc,
         max_neighbors: interpSettings.maxNeighbors,
+        smoothing: interpSettings.smoothing,
       });
       if (
         !processResp.data ||
@@ -588,6 +597,7 @@ export default function App() {
     max_height_km,
     min_length_km,
     min_height_km,
+    smoothing,
   }) => {
     const resp = await generatePseudoRHI({
       filepath,
@@ -604,6 +614,7 @@ export default function App() {
       colormap_overrides: selectedColormaps,
       weight_func: interpSettings.weightFunc,
       max_neighbors: interpSettings.maxNeighbors,
+      smoothing: smoothing ?? interpSettings.smoothing,
       session_id: sessionId,
     });
     // devolvemos lo que el dialog espera
@@ -721,6 +732,7 @@ export default function App() {
           session_id: sessionId,
           weight_func: interpSettings.weightFunc,
           max_neighbors: interpSettings.maxNeighbors,
+          smoothing: interpSettings.smoothing,
         });
         if (processResp.data?.results?.length > 0) {
           setOverlayData(processResp.data);
@@ -784,6 +796,7 @@ export default function App() {
           session_id: sessionId,
           weight_func: settings.weightFunc,
           max_neighbors: settings.maxNeighbors,
+          smoothing: settings.smoothing,
         });
 
         if (processResp.data) {
@@ -803,6 +816,7 @@ export default function App() {
               colormap_overrides: selectedColormaps,
               weightFunc: settings.weightFunc,
               maxNeighbors: settings.maxNeighbors,
+              smoothing: settings.smoothing,
             }),
           );
           setHiddenLayers(new Set());
@@ -1319,15 +1333,21 @@ export default function App() {
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onApply={({ deltaT: newDeltaT, weightFunc, maxNeighbors }) => {
+        onApply={({
+          deltaT: newDeltaT,
+          weightFunc,
+          maxNeighbors,
+          smoothing,
+        }) => {
           setDeltaT(newDeltaT);
-          setInterpSettings({ weightFunc, maxNeighbors });
+          setInterpSettings({ weightFunc, maxNeighbors, smoothing });
           setSettingsApplyVersion((prev) => prev + 1);
         }}
         initialSettings={{
           deltaT,
           weightFunc: interpSettings.weightFunc,
           maxNeighbors: interpSettings.maxNeighbors,
+          smoothing: interpSettings.smoothing,
         }}
       />
 

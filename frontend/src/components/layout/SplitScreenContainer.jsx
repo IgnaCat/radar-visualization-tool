@@ -80,6 +80,11 @@ export default function SplitScreenContainer({
   const [interpSettings2, setInterpSettings2] = useState({
     weightFunc: "nearest",
     maxNeighbors: 1,
+    smoothing: {
+      enabled: false,
+      sigma: 0.8,
+      only_when_nearest: true,
+    },
   });
 
   const drawnLayerRef2 = useRef(null);
@@ -185,6 +190,7 @@ export default function SplitScreenContainer({
         session_id: sharedProps.sessionId,
         weight_func: interpSettings2.weightFunc,
         max_neighbors: interpSettings2.maxNeighbors,
+        smoothing: interpSettings2.smoothing,
       });
 
       if (processResp.data) {
@@ -250,6 +256,7 @@ export default function SplitScreenContainer({
         session_id: sharedProps.sessionId,
         weight_func: newInterpSettings.weightFunc,
         max_neighbors: newInterpSettings.maxNeighbors,
+        smoothing: newInterpSettings.smoothing,
       });
 
       if (processResp.data) {
@@ -340,6 +347,7 @@ export default function SplitScreenContainer({
     max_height_km,
     min_length_km,
     min_height_km,
+    smoothing,
   }) => {
     const resp = await sharedProps.generatePseudoRHI({
       filepath,
@@ -356,6 +364,7 @@ export default function SplitScreenContainer({
       colormap_overrides: selectedColormaps2,
       weight_func: interpSettings2.weightFunc,
       max_neighbors: interpSettings2.maxNeighbors,
+      smoothing: smoothing ?? interpSettings2.smoothing,
       session_id: sharedProps.sessionId,
     });
     return resp.data;
@@ -673,8 +682,13 @@ export default function SplitScreenContainer({
       <SettingsDialog
         open={settingsOpen2}
         onClose={() => setSettingsOpen2(false)}
-        onApply={({ deltaT: newDeltaT, weightFunc, maxNeighbors }) => {
-          const newSettings = { weightFunc, maxNeighbors };
+        onApply={({
+          deltaT: newDeltaT,
+          weightFunc,
+          maxNeighbors,
+          smoothing,
+        }) => {
+          const newSettings = { weightFunc, maxNeighbors, smoothing };
           setDeltaT2(newDeltaT);
           setInterpSettings2(newSettings);
           reprocessMap2(newSettings);
@@ -683,6 +697,7 @@ export default function SplitScreenContainer({
           deltaT: deltaT2,
           weightFunc: interpSettings2.weightFunc,
           maxNeighbors: interpSettings2.maxNeighbors,
+          smoothing: interpSettings2.smoothing,
         }}
       />
     </Box>

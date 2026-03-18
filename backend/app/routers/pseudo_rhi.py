@@ -40,6 +40,11 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
         if payload.max_neighbors is not None
         else DEFAULT_MAX_NEIGHBORS
     )
+    smoothing_enabled: bool = bool(getattr(payload.smoothing, "enabled", False))
+    smoothing_sigma: float = float(getattr(payload.smoothing, "sigma", 0.8))
+    smoothing_only_when_nearest: bool = bool(
+        getattr(payload.smoothing, "only_when_nearest", True)
+    )
 
     # Validar inputs
     if not filepaths:
@@ -121,6 +126,9 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 colormap_overrides=payload.colormap_overrides,
                 weight_func=weight_func,
                 max_neighbors=max_neighbors,
+                smoothing_enabled=smoothing_enabled,
+                smoothing_sigma=smoothing_sigma,
+                smoothing_only_when_nearest=smoothing_only_when_nearest,
                 session_id=payload.session_id,
             )
             result_dict["timestamp"] = timestamp

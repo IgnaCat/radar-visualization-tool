@@ -11,6 +11,25 @@ from .common import RangeFilter
 from ..core.constants import TOA, DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 
 
+class ImageSmoothing(BaseModel):
+    """Configuración de suavizado opcional para la imagen final."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Activa/desactiva suavizado en la imagen final",
+    )
+    sigma: float = Field(
+        default=0.8,
+        ge=0.0,
+        le=5.0,
+        description="Intensidad de suavizado Gaussiano (desvío estándar en píxeles)",
+    )
+    only_when_nearest: bool = Field(
+        default=True,
+        description="Si es true, aplica suavizado solo cuando weight_func='nearest'",
+    )
+
+
 class ProcessRequest(BaseModel):
     """Request para procesamiento de archivos de radar."""
 
@@ -53,6 +72,10 @@ class ProcessRequest(BaseModel):
         ge=1,
         le=500,
         description=f"Máximo número de vecinos para interpolación (default {DEFAULT_MAX_NEIGHBORS})",
+    )
+    smoothing: Optional[ImageSmoothing] = Field(
+        default=None,
+        description="Configuración opcional de suavizado visual de imagen",
     )
 
 

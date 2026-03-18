@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .common import RangeFilter
+from .process import ImageSmoothing
 from ..core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 
 
@@ -66,6 +67,10 @@ class PseudoRHIRequest(BaseModel):
     )
     session_id: Optional[str] = Field(
         default=None, description="Identificador único de sesión"
+    )
+    smoothing: Optional[ImageSmoothing] = Field(
+        default=None,
+        description="Configuración opcional de suavizado visual",
     )
 
 

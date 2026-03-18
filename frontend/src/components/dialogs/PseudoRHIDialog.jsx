@@ -15,6 +15,9 @@ import {
   Collapse,
   Autocomplete,
   Chip,
+  Checkbox,
+  FormControlLabel,
+  Slider,
 } from "@mui/material";
 import { useDraggableDialogPaper } from "./DraggableDialogPaper";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
@@ -80,6 +83,10 @@ export default function PseudoRHIDialog({
   const [expandedImage, setExpandedImage] = useState(null);
   const [elevationProfile, setElevationProfile] = useState(null);
   const [expandedElevation, setExpandedElevation] = useState(false);
+  const [smoothingEnabled, setSmoothingEnabled] = useState(false);
+  const [smoothingSigma, setSmoothingSigma] = useState(0.8);
+  const [smoothingOnlyWhenNearest, setSmoothingOnlyWhenNearest] =
+    useState(true);
 
   const { downloadImage, generateFilename } = useDownloads();
   const { enqueueSnackbar } = useSnackbar();
@@ -325,6 +332,11 @@ export default function PseudoRHIDialog({
               30,
               parseFloat(maxHeightKm.replace(",", ".")) || 20,
             ),
+            smoothing: {
+              enabled: Boolean(smoothingEnabled),
+              sigma: Number(smoothingSigma),
+              only_when_nearest: Boolean(smoothingOnlyWhenNearest),
+            },
           });
           if (resp?.[0]?.image_url) {
             results.push({ field, image_url: resp[0].image_url });
@@ -560,6 +572,59 @@ export default function PseudoRHIDialog({
                     value={maxHeightKm}
                     onChange={(e) => setMaxHeightKm(e.target.value)}
                     helperText="Fin vertical del corte"
+                  />
+                </Box>
+
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                  Suavizado del corte
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={smoothingEnabled}
+                      onChange={(e) => setSmoothingEnabled(e.target.checked)}
+                    />
+                  }
+                  label="Aplicar suavizado"
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={smoothingOnlyWhenNearest}
+                      onChange={(e) =>
+                        setSmoothingOnlyWhenNearest(e.target.checked)
+                      }
+                    />
+                  }
+                  label="Aplicar solo con nearest"
+                />
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}
+                >
+                  <Slider
+                    value={Number(smoothingSigma)}
+                    onChange={(_, val) => setSmoothingSigma(Number(val))}
+                    min={0}
+                    max={3}
+                    step={0.1}
+                    disabled={!smoothingEnabled}
+                    sx={{ flex: 1 }}
+                  />
+                  <TextField
+                    size="small"
+                    label="Sigma"
+                    type="number"
+                    value={smoothingSigma}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      if (!Number.isNaN(v) && v >= 0 && v <= 5) {
+                        setSmoothingSigma(v);
+                      }
+                    }}
+                    disabled={!smoothingEnabled}
+                    inputProps={{ min: 0, max: 5, step: 0.1 }}
+                    sx={{ width: 100 }}
                   />
                 </Box>
               </Box>

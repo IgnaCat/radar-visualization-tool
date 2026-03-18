@@ -24,38 +24,37 @@ from .grid_geometry import (
     calculate_grid_resolution,
     calculate_grid_points,
     calculate_roi_dist_beam,
-    beam_height_max_km
+    beam_height_max_km,
 )
-from .product_preparation import (
-    prepare_radar_for_product,
-    fill_dbzh_if_needed
-)
+from .product_preparation import prepare_radar_for_product, fill_dbzh_if_needed
 from .filter_application import (
     separate_filters,
     apply_qc_filters,
     apply_visual_filters,
-    build_gatefilter_for_visual
+    build_gatefilter_for_visual,
 )
+from .smoothing import apply_gaussian_smoothing_masked
 
 __all__ = [
-    'get_or_build_grid3d_with_operator',
-    'get_or_build_W_operator',
-    'build_W_operator',
-    'apply_operator_to_all_fields',
-    'apply_operator',
-    'collapse_grid_to_2d',
-    'warp_array_to_mercator',
-    'convert_to_cog',
-    'create_cog_from_warped_array',
-    'calculate_z_limits',
-    'calculate_grid_resolution',
-    'calculate_grid_points',
-    'calculate_roi_dist_beam',
-    'beam_height_max_km',
-    'prepare_radar_for_product',
-    'fill_dbzh_if_needed',
-    'separate_filters',
-    'apply_qc_filters',
-    'apply_visual_filters',
-    'build_gatefilter_for_visual',
+    "get_or_build_grid3d_with_operator",
+    "get_or_build_W_operator",
+    "build_W_operator",
+    "apply_operator_to_all_fields",
+    "apply_operator",
+    "collapse_grid_to_2d",
+    "warp_array_to_mercator",
+    "convert_to_cog",
+    "create_cog_from_warped_array",
+    "calculate_z_limits",
+    "calculate_grid_resolution",
+    "calculate_grid_points",
+    "calculate_roi_dist_beam",
+    "beam_height_max_km",
+    "prepare_radar_for_product",
+    "fill_dbzh_if_needed",
+    "separate_filters",
+    "apply_qc_filters",
+    "apply_visual_filters",
+    "build_gatefilter_for_visual",
+    "apply_gaussian_smoothing_masked",
 ]

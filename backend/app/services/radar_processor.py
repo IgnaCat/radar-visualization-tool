@@ -35,6 +35,7 @@ from .radar_processing import (
     calculate_grid_points,
     fill_dbzh_if_needed,
     separate_filters,
+    apply_gaussian_smoothing_masked,
 )
 
 
@@ -48,6 +49,9 @@ def _generate_cog_filename(
     colormap_overrides: dict | None,
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors=DEFAULT_MAX_NEIGHBORS,
+    smoothing_enabled: bool = False,
+    smoothing_sigma: float = 0.8,
+    smoothing_only_when_nearest: bool = True,
 ) -> str:
     """
     Genera nombre único pero estable para el archivo COG.
@@ -62,6 +66,9 @@ def _generate_cog_filename(
         colormap_overrides: Dict opcional con overrides de colormap
         weight_func: Función de ponderación usada en interpolación
         max_neighbors: Máximo número de vecinos
+        smoothing_enabled: Si se aplica suavizado opcional
+        smoothing_sigma: Intensidad de suavizado gaussiano
+        smoothing_only_when_nearest: Si el suavizado aplica solo para nearest
 
     Returns:
         Nombre del archivo COG (sin path)
@@ -84,7 +91,21 @@ def _generate_cog_filename(
     interp_suffix = (
         f"_{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
     )
-    return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}{interp_suffix}.tif"
+
+    effective_smoothing = (
+        smoothing_enabled
+        and smoothing_sigma > 0
+        and ((weight_func == "nearest") or (not smoothing_only_when_nearest))
+    )
+    if effective_smoothing:
+        sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
+        sigma_tag = sigma_tag.replace(".", "p")
+        mode_tag = "nearestonly" if smoothing_only_when_nearest else "allinterp"
+        smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
+    else:
+        smooth_suffix = "_nosmooth"
+
+    return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}{interp_suffix}{smooth_suffix}.tif"
 
 
 def _build_output_summary(
@@ -141,6 +162,9 @@ def process_radar_to_cog(
     session_id=None,
     weight_func=DEFAULT_WEIGHT_FUNC,
     max_neighbors=DEFAULT_MAX_NEIGHBORS,
+    smoothing_enabled=False,
+    smoothing_sigma=0.8,
+    smoothing_only_when_nearest=True,
 ):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).
@@ -172,6 +196,9 @@ def process_radar_to_cog(
         colormap_overrides,
         weight_func=weight_func,
         max_neighbors=max_neighbors,
+        smoothing_enabled=smoothing_enabled,
+        smoothing_sigma=smoothing_sigma,
+        smoothing_only_when_nearest=smoothing_only_when_nearest,
     )
     cog_path = Path(output_dir) / unique_cog_name
 
@@ -475,9 +502,22 @@ def process_radar_to_cog(
         transform_warped = pkg_cached["transform_warped"]
         crs_warped = pkg_cached["crs_warped"]
 
-    # Crear COG RGB desde el array warped cacheado usando la función optimizada
+    should_apply_smoothing = (
+        bool(smoothing_enabled)
+        and float(smoothing_sigma) > 0.0
+        and (weight_func == "nearest" or not smoothing_only_when_nearest)
+    )
+
+    # Mantener cache base intacto: aplicar suavizado sobre copia para salida final.
+    arr_to_render = arr_warped
+    if should_apply_smoothing:
+        arr_to_render = apply_gaussian_smoothing_masked(
+            arr_warped, float(smoothing_sigma)
+        )
+
+    # Crear COG RGB desde el array warped (suavizado opcional) usando la función optimizada
     create_cog_from_warped_array(
-        data_warped=arr_warped,
+        data_warped=arr_to_render,
         output_path=cog_path,
         transform=transform_warped,
         crs=crs_warped,

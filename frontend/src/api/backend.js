@@ -27,6 +27,7 @@ export const processFile = async ({
   session_id,
   weight_func,
   max_neighbors,
+  smoothing,
 }) => {
   const payload = {
     filepaths: files,
@@ -45,6 +46,7 @@ export const processFile = async ({
     ...(session_id && { session_id }),
     ...(weight_func && { weight_func }),
     ...(max_neighbors != null && { max_neighbors: parseInt(max_neighbors) }),
+    ...(smoothing && { smoothing }),
   };
 
   return api.post("/process", payload);
@@ -75,6 +77,7 @@ export async function generatePseudoRHI({
   colormap_overrides,
   weight_func,
   max_neighbors,
+  smoothing,
   session_id,
 }) {
   return api.post("/process/pseudo_rhi", {
@@ -98,6 +101,7 @@ export async function generatePseudoRHI({
     ...(colormap_overrides && { colormap_overrides }),
     ...(weight_func && { weight_func }),
     ...(max_neighbors != null && { max_neighbors: parseInt(max_neighbors) }),
+    ...(smoothing && { smoothing }),
     ...(session_id && { session_id }),
   });
 }

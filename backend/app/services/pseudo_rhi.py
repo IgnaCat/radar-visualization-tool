@@ -30,6 +30,7 @@ from .radar_processing import (
     apply_operator,
     separate_filters,
     apply_visual_filters,
+    apply_gaussian_smoothing_masked,
 )
 from .radar_common import (
     resolve_field,
@@ -310,6 +311,9 @@ def generate_pseudo_rhi_png(
     colormap_overrides: Optional[dict] = None,
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors: int = DEFAULT_MAX_NEIGHBORS,
+    smoothing_enabled: bool = False,
+    smoothing_sigma: float = 0.8,
+    smoothing_only_when_nearest: bool = True,
     session_id: Optional[str] = None,
 ):
 
@@ -332,7 +336,20 @@ def generate_pseudo_rhi_png(
     interp_suffix = (
         f"{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
     )
-    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{int(min_length_km)}kmin_{int(min_height_km)}hmin_{interp_suffix}_{file_hash}.png"
+    effective_smoothing = (
+        bool(smoothing_enabled)
+        and float(smoothing_sigma) > 0.0
+        and (weight_func == "nearest" or not smoothing_only_when_nearest)
+    )
+    if effective_smoothing:
+        sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
+        sigma_tag = sigma_tag.replace(".", "p")
+        mode_tag = "nearestonly" if smoothing_only_when_nearest else "allinterp"
+        smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
+    else:
+        smooth_suffix = "_nosmooth"
+
+    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{int(min_length_km)}kmin_{int(min_height_km)}hmin_{interp_suffix}{smooth_suffix}_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
     # Construir URL relativa incluyendo session_id si existe
@@ -413,6 +430,9 @@ def generate_pseudo_rhi_png(
                 min_length_km=min_length_km,
                 weight_func=weight_func,
                 max_neighbors=max_neighbors,
+                smoothing_enabled=smoothing_enabled,
+                smoothing_sigma=smoothing_sigma,
+                smoothing_only_when_nearest=smoothing_only_when_nearest,
                 session_id=session_id,
             )
         else:
@@ -490,6 +510,9 @@ def _generate_segment_transect_png(
     min_length_km: Optional[float] = None,
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors: int = DEFAULT_MAX_NEIGHBORS,
+    smoothing_enabled: bool = False,
+    smoothing_sigma: float = 0.8,
+    smoothing_only_when_nearest: bool = True,
     session_id: Optional[str] = None,
 ):
     """
@@ -703,6 +726,17 @@ def _generate_segment_transect_png(
         below_terrain = z_bottom[:, np.newaxis] < terrain_elev_km
 
         image[below_terrain] = np.nan
+
+    # ── Suavizado opcional sobre imagen final del transecto ──
+    should_apply_smoothing = (
+        bool(smoothing_enabled)
+        and float(smoothing_sigma) > 0.0
+        and (weight_func == "nearest" or not smoothing_only_when_nearest)
+    )
+    if should_apply_smoothing:
+        image_ma = np.ma.masked_invalid(image)
+        image_smooth = apply_gaussian_smoothing_masked(image_ma, float(smoothing_sigma))
+        image = np.ma.filled(image_smooth, np.nan)
 
     # ── Elevación del punto final (para marcador) ──
     end_elev_km = None
