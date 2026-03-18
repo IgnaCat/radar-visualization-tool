@@ -155,7 +155,7 @@ def get_or_build_W_operator(
     bsp: float = 0.9,
     min_radius: float = 300.0,
     toa: float = 12000.0,
-    weight_func: str = "Barnes2",
+    weight_func: str = "nearest",
     max_neighbors: int | None = None,
     session_id: str | None = None,
 ) -> csr_matrix:
@@ -298,8 +298,8 @@ def get_or_build_grid3d_with_operator(
     grid_shape: tuple,
     grid_resolution_xy: float,
     grid_resolution_z: float,
-    weight_func: str = "Barnes2",
-    max_neighbors: int | None = 30,
+    weight_func: str = "nearest",
+    max_neighbors: int | None = 1,
     qc_filters: list | None = None,
     visual_filters: list | None = None,
     field_to_use: str | None = None,
@@ -323,7 +323,7 @@ def get_or_build_grid3d_with_operator(
         grid_resolution_xy: Resolución horizontal en metros
         grid_resolution_z: Resolución vertical en metros
         weight_func: Función de ponderación para el operador W
-        max_neighbors: Máximo número de vecinos (default 30, None = todos dentro del ROI)
+        max_neighbors: Máximo número de vecinos (default 1, None = todos dentro del ROI)
         qc_filters: Lista de RangeFilter con filtros QC (ej. RHOHV) para aplicar durante interpolación
         visual_filters: Lista de RangeFilter con filtros visuales (mismo campo) para aplicar durante interpolación
         field_to_use: Nombre resuelto del campo principal (necesario para aplicar visual_filters al campo correcto)

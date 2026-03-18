@@ -321,7 +321,7 @@ def w_operator_cache_key(
     volumen: str,
     grid_shape: tuple,
     grid_limits: tuple,
-    weight_func: str = "Barnes2",
+    weight_func: str = "nearest",
     max_neighbors: int | None = None,
 ) -> str:
     """

@@ -2,6 +2,7 @@
 Generación bajo demanda de grillas 2D para estadísticas.
 No cachea resultados - solo para uso en stats cuando el campo no está cacheado.
 """
+
 import pyart
 import numpy as np
 import pyproj
@@ -10,8 +11,8 @@ from affine import Affine
 
 from ..core.constants import AFFECTS_INTERP_FIELDS
 from .radar_common import (
-    resolve_field, 
-    safe_range_max_m, 
+    resolve_field,
+    safe_range_max_m,
     normalize_proj_dict,
 )
 from .radar_processing import (
@@ -22,7 +23,7 @@ from .radar_processing import (
     calculate_grid_points,
     prepare_radar_for_product,
     fill_dbzh_if_needed,
-    separate_filters
+    separate_filters,
 )
 
 
@@ -37,15 +38,15 @@ def generate_grid2d_on_demand(
     elevation: Optional[int] = 0,
     cappi_height: Optional[int] = 4000,
     filters: List = None,
-    interp: Optional[str] = "Barnes2",
-    max_neighbors: int = 30,
+    interp: Optional[str] = "nearest",
+    max_neighbors: int = 1,
     session_id: Optional[str] = None,
 ) -> Dict:
     """
     Genera una grilla 2D bajo demanda SIN cachearla.
     Reutiliza get_or_build_grid3d_with_operator y luego colapsa.
     (Mas q nada utilizada para estadísticas cuando el campo no está cacheado)
-    
+
     Args:
         radar: Objeto radar de PyART
         field_requested: Campo solicitado (ej: 'DBZH')
@@ -59,51 +60,54 @@ def generate_grid2d_on_demand(
         estrategia: Estrategia de procesamiento
         interp: Método de interpolación
         session_id: ID de sesión para índices de cache (opcional)
-    
+
     Returns:
         Dict con: arr (np.ma.MaskedArray), transform (Affine), crs (WKT), qc (dict)
     """
     filters = filters or []
     product_upper = product.upper()
     field_requested_upper = field_requested.upper()
-    
+
     # Resolver nombre del campo en el radar (devuelve tupla: field_name, field_key)
     field_name, field_key = resolve_field(radar, field_requested)
-    
+
     # Preparar radar según producto (rellena DBZH si es CAPPI/COLMAX)
     field_name = fill_dbzh_if_needed(radar, field_name, product)
     radar_to_use, field_to_use = prepare_radar_for_product(
         radar, product, field_name, elevation, cappi_height
     )
-    
+
     # Separar filtros QC
     qc_filters, _ = separate_filters(filters, field_requested_upper)
-    
+
     # Determinar rango máximo del radar usando función segura
     range_max_m = safe_range_max_m(radar)
-    
+
     # Calcular límites y resolución de grilla con todos los parámetros necesarios
     z_min, z_max, elev_deg_used = calculate_z_limits(
         range_max_m=range_max_m,
         elevation=elevation,
         cappi_height=cappi_height,
-        radar_fixed_angles=radar.fixed_angle['data']
+        radar_fixed_angles=radar.fixed_angle["data"],
     )
     z_grid_limits = (z_min, z_max)
     y_grid_limits = (-range_max_m, range_max_m)
     x_grid_limits = (-range_max_m, range_max_m)
     grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
-    
+
     # Resolución según volumen
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
 
     # Calcular puntos de grilla
     z_points, y_points, x_points = calculate_grid_points(
-        grid_limits[0], grid_limits[1], grid_limits[2],
-        grid_resolution_xy, grid_resolution_z
+        grid_limits[0],
+        grid_limits[1],
+        grid_limits[2],
+        grid_resolution_xy,
+        grid_resolution_z,
     )
     grid_shape = (z_points, y_points, x_points)
-    
+
     # Obtener o construir grilla 3D (usa cache 3D multi-campo con TODOS los campos incluyendo QC)
     grid = get_or_build_grid3d_with_operator(
         radar_to_use=radar_to_use,
@@ -118,61 +122,61 @@ def generate_grid2d_on_demand(
         grid_resolution_z=grid_resolution_z,
         weight_func=interp,
         max_neighbors=max_neighbors,
-        session_id=session_id
+        session_id=session_id,
     )
-    
+
     # Verificar que el campo existe en la grilla
     if field_to_use not in grid.fields:
         raise ValueError(f"Campo '{field_to_use}' no encontrado en grilla 3D")
-    
+
     # Colapsar 3D -> 2D según producto
     if product_upper == "PPI":
-        collapse_grid_to_2d(
-            grid, field_to_use, "ppi",
-            elevation_deg=elev_deg_used
-        )
+        collapse_grid_to_2d(grid, field_to_use, "ppi", elevation_deg=elev_deg_used)
     elif product_upper == "CAPPI":
-        collapse_grid_to_2d(
-            grid, field_to_use, "cappi",
-            target_height_m=cappi_height
-        )
+        collapse_grid_to_2d(grid, field_to_use, "cappi", target_height_m=cappi_height)
     elif product_upper == "COLMAX":
-        collapse_grid_to_2d(
-            grid, field_to_use, "colmax"
-        )
+        collapse_grid_to_2d(grid, field_to_use, "colmax")
     else:
         raise ValueError(f"Producto '{product}' no soportado")
-    
+
     # Extraer array 2D colapsado
-    arr2d = grid.fields[field_to_use]['data'][0, :, :]  # (ny, nx)
+    arr2d = grid.fields[field_to_use]["data"][0, :, :]  # (ny, nx)
     arr2d = np.ma.masked_invalid(arr2d)
-    
+
     # PyART grid: y[0]=ymin (sur), y[-1]=ymax (norte).
     # GeoTIFF north-up: fila 0 = norte. Flip para consistencia con radar_processor.
     arr2d = arr2d[::-1, :]
 
     # Obtener grid_origin para normalize_proj_dict
     grid_origin = (
-        float(radar_to_use.latitude['data'][0]),
-        float(radar_to_use.longitude['data'][0]),
+        float(radar_to_use.latitude["data"][0]),
+        float(radar_to_use.longitude["data"][0]),
     )
-    
+
     # Construir transform (Affine)
-    x = grid.x['data'].astype(float)
-    y = grid.y['data'].astype(float)
+    x = grid.x["data"].astype(float)
+    y = grid.y["data"].astype(float)
     ny, nx = arr2d.shape
-    dx = float(np.mean(np.diff(x))) if x.size > 1 else (x_grid_limits[1]-x_grid_limits[0]) / max(nx-1, 1)
-    dy = float(np.mean(np.diff(y))) if y.size > 1 else (y_grid_limits[1]-y_grid_limits[0]) / max(ny-1, 1)
+    dx = (
+        float(np.mean(np.diff(x)))
+        if x.size > 1
+        else (x_grid_limits[1] - x_grid_limits[0]) / max(nx - 1, 1)
+    )
+    dy = (
+        float(np.mean(np.diff(y)))
+        if y.size > 1
+        else (y_grid_limits[1] - y_grid_limits[0]) / max(ny - 1, 1)
+    )
     xmin = float(x.min()) if x.size else x_grid_limits[0]
     ymax = float(y.max()) if y.size else y_grid_limits[1]
 
     # Los valores de linspace(-R, R, N) representan CENTROS de píxeles.
     # El dominio va desde (xmin - dx/2) hasta (xmax + dx/2).
     # Transform debe mapear (col=0, row=0) a la ESQUINA superior izquierda del dominio.
-    transform = Affine.translation(xmin - dx/2, ymax + dy/2) * Affine.scale(dx, -dy)
+    transform = Affine.translation(xmin - dx / 2, ymax + dy / 2) * Affine.scale(dx, -dy)
     proj_dict_norm = normalize_proj_dict(grid, grid_origin)
     crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
-    
+
     # Recopilar campos QC que YA ESTÁN en la grilla 3D cacheada (no recalcular)
     qc_dict = {}
     for qc_field_name in AFFECTS_INTERP_FIELDS:
@@ -181,28 +185,22 @@ def generate_grid2d_on_demand(
             continue
         if qc_field_name not in grid.fields:
             continue
-            
+
         # Colapsar el campo QC con el mismo método que el campo principal
         if product_upper == "PPI":
-            collapse_grid_to_2d(
-                grid, qc_field_name, "ppi",
-                elevation_deg=elev_deg_used
-            )
+            collapse_grid_to_2d(grid, qc_field_name, "ppi", elevation_deg=elev_deg_used)
         elif product_upper == "CAPPI":
             collapse_grid_to_2d(
-                grid, qc_field_name, "cappi",
-                target_height_m=cappi_height
+                grid, qc_field_name, "cappi", target_height_m=cappi_height
             )
         elif product_upper == "COLMAX":
-            collapse_grid_to_2d(
-                grid, qc_field_name, "colmax"
-            )
-        
-        qc_arr = grid.fields[qc_field_name]['data'][0, :, :]
+            collapse_grid_to_2d(grid, qc_field_name, "colmax")
+
+        qc_arr = grid.fields[qc_field_name]["data"][0, :, :]
         # Aplicar mismo flip que al array principal para consistencia
         qc_arr = qc_arr[::-1, :]
         qc_dict[qc_field_name] = np.ma.masked_invalid(qc_arr)
-    
+
     return {
         "arr": arr2d,
         "transform": transform,

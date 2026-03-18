@@ -19,10 +19,9 @@ import {
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 const WEIGHT_FUNC_OPTIONS = [
-  { value: "Barnes2", label: "Barnes2 (default)" },
-  { value: "Barnes", label: "Barnes" },
+  { value: "nearest", label: "Nearest Neighbor (default)" },
+  { value: "Barnes2", label: "Barnes2" },
   { value: "Cressman", label: "Cressman" },
-  { value: "nearest", label: "Vecino más cercano (NN)" },
 ];
 
 /**
@@ -42,18 +41,18 @@ export default function SettingsDialog({
 }) {
   const [deltaT, setDeltaT] = useState(initialSettings.deltaT ?? 0);
   const [weightFunc, setWeightFunc] = useState(
-    initialSettings.weightFunc ?? "Barnes2",
+    initialSettings.weightFunc ?? "nearest",
   );
   const [maxNeighbors, setMaxNeighbors] = useState(
-    initialSettings.maxNeighbors ?? 30,
+    initialSettings.maxNeighbors ?? 1,
   );
 
   // Sincronizar con initialSettings cada vez que el diálogo se abre
   useEffect(() => {
     if (open) {
       setDeltaT(initialSettings.deltaT ?? 0);
-      setWeightFunc(initialSettings.weightFunc ?? "Barnes2");
-      setMaxNeighbors(initialSettings.maxNeighbors ?? 30);
+      setWeightFunc(initialSettings.weightFunc ?? "nearest");
+      setMaxNeighbors(initialSettings.maxNeighbors ?? 1);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

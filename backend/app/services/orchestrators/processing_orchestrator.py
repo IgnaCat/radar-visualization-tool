@@ -2,6 +2,7 @@
 Orchestrator para coordinar el procesamiento de múltiples archivos de radar.
 Contiene la lógica de negocio previamente en el router process.py.
 """
+
 import logging
 from pathlib import Path
 from typing import List, Set, Dict, Tuple, Optional
@@ -10,7 +11,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import traceback
 
-from ...models import ProcessRequest, ProcessResponse, LayerResult, RangeFilter, RadarProcessResult
+from ...models import (
+    ProcessRequest,
+    ProcessResponse,
+    LayerResult,
+    RangeFilter,
+    RadarProcessResult,
+)
 from ...core.config import settings
 from .. import radar_processor
 from ...utils import helpers
@@ -32,30 +39,30 @@ class ProcessingOrchestrator:
         Raises: ValueError con mensaje de error si hay problemas críticos
         """
         warnings = []
-        
+
         # Validar producto
         if payload.product.upper() not in settings.ALLOWED_PRODUCTS:
             raise ValueError(
                 f"Producto '{payload.product}' no permitido. Debe ser uno de {settings.ALLOWED_PRODUCTS}"
             )
-        
+
         # Validar altura
         if payload.height < 0 or payload.height > 12000:
             raise ValueError("La altura debe estar entre 0 y 12000 metros.")
-        
+
         # Validar elevación
         if payload.elevation < 0:
             raise ValueError("El ángulo de elevación debe ser positivo.")
-        
+
         # Validar filepaths
         if not payload.filepaths:
             raise ValueError("Debe proporcionar una lista de 'filepaths'")
-        
+
         # Validar límite de radares
         selected_radars = getattr(payload, "selectedRadars", None) or []
         if selected_radars and len(selected_radars) > 3:
             raise ValueError("No se pueden seleccionar más de 3 radares a la vez.")
-        
+
         return warnings
 
     @staticmethod
@@ -83,71 +90,68 @@ class ProcessingOrchestrator:
 
     @staticmethod
     def filter_by_volumes(
-        filepaths: List[str],
-        selected_volumes: List[str],
-        product: str
+        filepaths: List[str], selected_volumes: List[str], product: str
     ) -> Tuple[List[str], List[str]]:
         """
         Filtra archivos por los volúmenes seleccionados.
         Returns: (filtered_filepaths, warnings)
         """
         warnings = []
-        
+
         if not selected_volumes:
             msg = "No se seleccionaron volúmenes, procesando todo."
             warnings.append(msg)
             logger.warning(msg)
             return filepaths, warnings
-        
+
         filtered_filepaths = []
         for f in filepaths:
             vol = helpers.extract_volume_from_filename(f)
             filename = Path(f).name
-            
+
             # Validar volumen 03 con producto PPI
-            if vol == '03' and product.upper() == 'PPI':
+            if vol == "03" and product.upper() == "PPI":
                 msg = f"{filename}: El volumen '03' no es válido para el producto PPI."
                 warnings.append(msg)
                 logger.warning(msg)
                 continue
-            
+
             if vol in selected_volumes:
                 filtered_filepaths.append(f)
             else:
                 msg = f"{filename}: Volumen '{vol}' no seleccionado, se omite."
                 warnings.append(msg)
                 logger.warning(msg)
-        
+
         return filtered_filepaths, warnings
 
     @staticmethod
     def filter_by_radars(
-        filepaths: List[str],
-        selected_radars: List[str]
+        filepaths: List[str], selected_radars: List[str]
     ) -> Tuple[List[str], List[str]]:
         """
         Filtra archivos por radares seleccionados.
         Returns: (filtered_filepaths, warnings)
         """
         warnings = []
-        
+
         if not selected_radars:
             return filepaths, warnings
-        
+
         filtered_filepaths = []
         for f in filepaths:
             try:
                 radar, _, _, _ = helpers.extract_metadata_from_filename(Path(f).name)
             except Exception:
                 radar = None
-            
+
             if radar and radar in selected_radars:
                 filtered_filepaths.append(f)
             else:
                 msg = f"{Path(f).name}: Radar '{radar}' no seleccionado, se omite."
                 warnings.append(msg)
                 logger.warning(msg)
-        
+
         return filtered_filepaths, warnings
 
     @staticmethod
@@ -164,8 +168,7 @@ class ProcessingOrchestrator:
 
     @staticmethod
     def prepare_items(
-        filepaths: List[str],
-        upload_dir: Path
+        filepaths: List[str], upload_dir: Path
     ) -> List[Tuple[str, str, Optional[datetime], str, str, str]]:
         """
         Prepara la lista de items para procesar.
@@ -175,7 +178,9 @@ class ProcessingOrchestrator:
         for f in filepaths:
             fp_abs = str(upload_dir / f)
             ts = ProcessingOrchestrator.extract_timestamp(f)
-            radar, estrategia, vol, _ = helpers.extract_metadata_from_filename(Path(f).name)
+            radar, estrategia, vol, _ = helpers.extract_metadata_from_filename(
+                Path(f).name
+            )
             items.append((f, fp_abs, ts, vol, radar, estrategia))
         return items
 
@@ -199,24 +204,24 @@ class ProcessingOrchestrator:
         colormap_overrides: Optional[Dict] = None,
         session_id: Optional[str] = None,
         filters_per_field: Optional[Dict[str, List[RangeFilter]]] = None,
-        weight_func: str = 'Barnes2',
-        max_neighbors: int = 30,
-        max_workers: int = 4
+        weight_func: str = "nearest",
+        max_neighbors: int = 1,
+        max_workers: int = 4,
     ) -> Tuple[Dict, Dict, Dict, Dict]:
         """
         Procesa archivos de radar en paralelo por archivo.
-        
+
         Cada archivo NetCDF es independiente y se procesa en un thread separado.
         Internamente cada archivo puede paralelizar por niveles Z si el operador W
         no está cacheado. El lock por cache_key evita construcción duplicada.
-        
+
         Args:
             items: Lista de (filepath_rel, filepath_abs, timestamp, volume, radar, estrategia)
-            weight_func: Función de ponderación para interpolación ('Barnes2', 'Cressman', 'nearest')
+            weight_func: Función de ponderación para interpolación ('nearest', 'Barnes2', 'Cressman')
             max_neighbors: Máximo número de vecinos por punto de grilla
             max_workers: Número máximo de threads (default 4, conservador porque cada
                         archivo puede usar threads internos para niveles Z)
-        
+
         Returns:
             (results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar)
         """
@@ -231,7 +236,7 @@ class ProcessingOrchestrator:
             item_results = []
             item_warnings = []
             item_fields = set()
-            
+
             for field_idx, field in enumerate(fields):
                 try:
                     field_filters = (filters_per_field or {}).get(field, filters)
@@ -252,43 +257,50 @@ class ProcessingOrchestrator:
                     )
                     result_dict["timestamp"] = ts
                     result_dict["order"] = field_idx
-                    item_results.append((radar, ts, vol, field, LayerResult(**result_dict)))
+                    item_results.append(
+                        (radar, ts, vol, field, LayerResult(**result_dict))
+                    )
                     item_fields.add(field)
-                    
+
                 except Exception as e:
                     msg = f"{Path(f_rel).name}: {e}"
                     item_warnings.append((radar, msg))
                     logger.error(f"{radar}: {msg}", exc_info=True)
-            
+
             return item_results, item_warnings, item_fields, vol, radar
 
         # Preparar items con índice para tracking
         indexed_items = list(enumerate(items))
-        
+
         # Procesar en paralelo (max_workers conservador por paralelismo interno de niveles Z)
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {executor.submit(process_single_item, item): item for item in indexed_items}
-            
+            futures = {
+                executor.submit(process_single_item, item): item
+                for item in indexed_items
+            }
+
             for future in as_completed(futures):
                 try:
-                    item_results, item_warnings, item_fields, vol, radar = future.result()
-                    
+                    item_results, item_warnings, item_fields, vol, radar = (
+                        future.result()
+                    )
+
                     # Agregar resultados
-                    for (r_radar, r_ts, r_vol, r_field, layer_result) in item_results:
+                    for r_radar, r_ts, r_vol, r_field, layer_result in item_results:
                         if r_radar not in results_by_radar:
                             results_by_radar[r_radar] = {}
                         if r_ts not in results_by_radar[r_radar]:
                             results_by_radar[r_radar][r_ts] = []
                         results_by_radar[r_radar][r_ts].append(layer_result)
-                        
+
                         fields_by_radar.setdefault(r_radar, set()).add(r_field)
                         if r_vol:
                             volumes_by_radar.setdefault(r_radar, set()).add(r_vol)
-                    
+
                     # Agregar warnings
-                    for (w_radar, msg) in item_warnings:
+                    for w_radar, msg in item_warnings:
                         warnings_by_radar.setdefault(w_radar, []).append(msg)
-                        
+
                 except Exception as e:
                     logger.error(f"Error procesando future: {e}", exc_info=True)
 
@@ -299,7 +311,7 @@ class ProcessingOrchestrator:
         results_by_radar: Dict,
         fields_by_radar: Dict,
         volumes_by_radar: Dict,
-        warnings_by_radar: Dict
+        warnings_by_radar: Dict,
     ) -> None:
         """
         Calcula warnings por campos/volúmenes faltantes.
@@ -317,7 +329,7 @@ class ProcessingOrchestrator:
         for radar in results_by_radar:
             missing_fields = all_fields - fields_by_radar.get(radar, set())
             missing_vols = all_volumes - volumes_by_radar.get(radar, set())
-            
+
             if missing_fields:
                 msg = f"El radar {radar} no tiene los siguientes campos: {', '.join(sorted(missing_fields))}"
                 warnings_by_radar.setdefault(radar, []).append(msg)
@@ -329,9 +341,7 @@ class ProcessingOrchestrator:
 
     @staticmethod
     def build_radar_results(
-        results_by_radar: Dict,
-        warnings_by_radar: Dict,
-        initial_warnings: List[str]
+        results_by_radar: Dict, warnings_by_radar: Dict, initial_warnings: List[str]
     ) -> Tuple[List[RadarProcessResult], List[str]]:
         """
         Construye la respuesta final con resultados por radar.
@@ -346,20 +356,24 @@ class ProcessingOrchestrator:
         radar_results = []
         for radar, ts_dict in results_by_radar.items():
             # Ordenar timestamps (None al final usando tupla: is_none, timestamp)
-            sorted_ts = sorted(ts_dict.keys(), key=lambda t: (t is None, t or datetime.min))
+            sorted_ts = sorted(
+                ts_dict.keys(), key=lambda t: (t is None, t or datetime.min)
+            )
             frames = []
             for ts in sorted_ts:
                 layers = ts_dict[ts]
                 layers.sort(key=lambda r: r.order)
                 frames.append(layers)
-            
+
             # Decidir si animación
             animation = len(frames) > 1
-            radar_results.append(RadarProcessResult(
-                radar=radar,
-                animation=animation,
-                outputs=frames,
-            ))
+            radar_results.append(
+                RadarProcessResult(
+                    radar=radar,
+                    animation=animation,
+                    outputs=frames,
+                )
+            )
 
         if not radar_results:
             msg = "No se generaron imágenes de salida."
@@ -385,17 +399,14 @@ class ProcessingOrchestrator:
         # 4. Filtrar por volúmenes
         selected_volumes = getattr(payload, "selectedVolumes", None) or []
         filepaths, volume_warnings = ProcessingOrchestrator.filter_by_volumes(
-            payload.filepaths,
-            selected_volumes,
-            payload.product
+            payload.filepaths, selected_volumes, payload.product
         )
         warnings.extend(volume_warnings)
 
         # 5. Filtrar por radares
         selected_radars = getattr(payload, "selectedRadars", None) or []
         filepaths, radar_warnings = ProcessingOrchestrator.filter_by_radars(
-            filepaths,
-            selected_radars
+            filepaths, selected_radars
         )
         warnings.extend(radar_warnings)
 
@@ -406,7 +417,7 @@ class ProcessingOrchestrator:
         ProcessingOrchestrator.create_session_tmp_dir(payload.session_id)
 
         # 8. Procesar archivos
-        results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar = \
+        results_by_radar, warnings_by_radar, fields_by_radar, volumes_by_radar = (
             ProcessingOrchestrator.process_files(
                 items,
                 payload.product,
@@ -416,28 +427,22 @@ class ProcessingOrchestrator:
                 payload.filters,
                 payload.colormap_overrides,
                 payload.session_id,
-                getattr(payload, 'filters_per_field', None),
-                payload.weight_func or 'Barnes2',
-                payload.max_neighbors or 30,
+                getattr(payload, "filters_per_field", None),
+                payload.weight_func or "nearest",
+                payload.max_neighbors or 1,
             )
+        )
 
         # 9. Calcular warnings por campos/volúmenes faltantes
         ProcessingOrchestrator.calculate_missing_fields_warnings(
-            results_by_radar,
-            fields_by_radar,
-            volumes_by_radar,
-            warnings_by_radar
+            results_by_radar, fields_by_radar, volumes_by_radar, warnings_by_radar
         )
 
         # 10. Construir respuesta final
         radar_results, all_warnings = ProcessingOrchestrator.build_radar_results(
-            results_by_radar,
-            warnings_by_radar,
-            warnings
+            results_by_radar, warnings_by_radar, warnings
         )
 
         return ProcessResponse(
-            results=radar_results,
-            product=payload.product,
-            warnings=all_warnings
+            results=radar_results, product=payload.product, warnings=all_warnings
         )

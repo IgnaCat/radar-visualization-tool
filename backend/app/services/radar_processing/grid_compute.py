@@ -21,7 +21,7 @@ from .grid_geometry import calculate_roi_dist_beam, compute_beam_height
 logger = logging.getLogger(__name__)
 
 
-def compute_weights(distances, roi, method="Barnes2"):
+def compute_weights(distances, roi, method="nearest"):
     """
     Calcula pesos de interpolación según la distancia y el método.
 
@@ -245,8 +245,8 @@ def build_W_operator(
     bsp=None,
     min_radius=None,
     volume=None,  # Volumen del radar para ajustes de ROI por volumen
-    weight_func="Barnes2",
-    max_neighbors=None,
+    weight_func="nearest",
+    max_neighbors=1,
     lowest_elev_deg=None,  # Elevación mínima para máscara below-beam
     n_workers=None,
     temp_dir=None,
@@ -273,6 +273,7 @@ def build_W_operator(
     volume: str o None, volumen del radar para aplicar multiplicadores de ROI específicos
     weight_func: 'Barnes', 'Barnes2', 'Cressman', 'nearest'
     max_neighbors: int o None
+        - 1: default (vecino más cercano)
         - None: usa TODOS los gates dentro del ROI
         - int > 0: limita a los k gates más cercanos (por distancia euclidiana 3D)
                    Usa np.argpartition para selección eficiente O(n)

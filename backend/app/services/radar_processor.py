@@ -48,7 +48,7 @@ def _generate_cog_filename(
     filters,
     file_hash: str,
     colormap_overrides: dict = None,
-    weight_func: str = "Barnes2",
+    weight_func: str = "nearest",
     max_neighbors=None,
 ) -> str:
     """
@@ -141,8 +141,8 @@ def process_radar_to_cog(
     volume=None,
     colormap_overrides=None,
     session_id=None,
-    weight_func="Barnes2",
-    max_neighbors=30,
+    weight_func="nearest",
+    max_neighbors=1,
 ):
     """
     Procesa un archivo NetCDF de radar y genera una COG (Cloud Optimized GeoTIFF).

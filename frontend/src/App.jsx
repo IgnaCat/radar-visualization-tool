@@ -135,8 +135,8 @@ export default function App() {
     useState(false);
   const [deltaT, setDeltaT] = useState(0);
   const [interpSettings, setInterpSettings] = useState({
-    weightFunc: "Barnes2",
-    maxNeighbors: 30,
+    weightFunc: "nearest",
+    maxNeighbors: 1,
   });
   const [settingsApplyVersion, setSettingsApplyVersion] = useState(0);
   const lastProcessedSettingsVersionRef = useRef(0);
