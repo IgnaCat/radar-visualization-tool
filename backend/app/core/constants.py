@@ -1,23 +1,24 @@
-
 FIELD_ALIASES = {
     "DBZH": ["DBZH", "corrected_reflectivity_horizontal"],  # Reflectividad horizontal
-    "DBZV": ["DBZV", "corrected_reflectivity_vertical"],    # Reflectividad vertical
+    "DBZV": ["DBZV", "corrected_reflectivity_vertical"],  # Reflectividad vertical
     "DBZHF": ["DBZHF", "DBZHf"],
-    "ZDR":  ["ZDR", "zdr"],                                 # Diferencia de reflectividad
-    "RHOHV":["RHOHV","rhohv"],                              # Correlación cruzada
-    "KDP":  ["KDP","kdp"],                                  # Diferencial de fase
-    "VRAD": ["VRAD","velocity","corrected_velocity"],       # Velocidad radial
-    "WRAD": ["WRAD","spectrum_width"],                      # Velocidad radial del viento
-    "PHIDP":["PHIDP","differential_phase"],                 # Fase diferencial específica
-    "COLMAX": ["COLMAX", "colmax"],                         # Campo de colmax para interpolación
+    "ZDR": ["ZDR", "zdr"],  # Diferencia de reflectividad
+    "RHOHV": ["RHOHV", "rhohv"],  # Correlación cruzada
+    "KDP": ["KDP", "kdp"],  # Diferencial de fase
+    "VRAD": ["VRAD", "velocity", "corrected_velocity"],  # Velocidad radial
+    "WRAD": ["WRAD", "spectrum_width"],  # Velocidad radial del viento
+    "PHIDP": ["PHIDP", "differential_phase"],  # Fase diferencial específica
+    "COLMAX": ["COLMAX", "colmax"],  # Campo de colmax para interpolación
 }
 
-FIELD_RENDER = { 
+TOA = 25000
+
+FIELD_RENDER = {
     "DBZH": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
     "DBZHF": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
     "DBZV": {"vmin": -30.0, "vmax": 70.0, "cmap": "grc_th"},
-    "ZDR": {"vmin": -5.0, "vmax": 10.5, "cmap": "grc_zdr2"}, 
-    "RHOHV": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"}, 
+    "ZDR": {"vmin": -5.0, "vmax": 10.5, "cmap": "grc_zdr2"},
+    "RHOHV": {"vmin": 0.0, "vmax": 1.0, "cmap": "grc_rho"},
     "KDP": {"vmin": 0.0, "vmax": 8.0, "cmap": "grc_rain"},
     "VRAD": {"vmin": -35.0, "vmax": 35.0, "cmap": "NWSVel"},
     "WRAD": {"vmin": 0.0, "vmax": 10.0, "cmap": "Oranges"},
@@ -37,20 +38,20 @@ FIELD_LEGEND_VALUES = {
     "VRAD": [35, 30, 20, 10, 0, -10, -20, -30, -35],
     "WRAD": [10, 8, 6, 4, 2, 1, 0],
     "PHIDP": [360, 300, 240, 180, 120, 60, 0],
-    "COLMAX": [70, 60, 50, 40, 30, 20, 10, 0, -10, -20, -30]
+    "COLMAX": [70, 60, 50, 40, 30, 20, 10, 0, -10, -20, -30],
 }
 
 VARIABLE_UNITS = {
-    'WRAD': 'm/s',
-    'KDP': 'deg/km',
-    'DBZV': 'dBZ',
-    'DBZH': 'dBZ',
-    'ZDR': 'dBZ',
-    'VRAD': 'm/s',
-    'RHOHV': '',
-    'PHIDP': 'deg',
-    'DBZHF': 'dBZ',
-    'COLMAX': 'dBZ',
+    "WRAD": "m/s",
+    "KDP": "deg/km",
+    "DBZV": "dBZ",
+    "DBZH": "dBZ",
+    "ZDR": "dBZ",
+    "VRAD": "m/s",
+    "RHOHV": "",
+    "PHIDP": "deg",
+    "DBZHF": "dBZ",
+    "COLMAX": "dBZ",
 }
 
 # Opciones de colormaps disponibles por campo
@@ -93,8 +94,8 @@ ROI_PARAMS_VOL04 = (1.1, 1.6, 1.3, 900.0)
 
 # Mapeo de volumen a sus parámetros (constantes, no adaptativos por altura)
 ROI_PARAMS_BY_VOLUME = {
-    '01': ROI_PARAMS_VOL01,
-    '02': ROI_PARAMS_VOL02,
-    '03': ROI_PARAMS_VOL03,
-    '04': ROI_PARAMS_VOL04,
+    "01": ROI_PARAMS_VOL01,
+    "02": ROI_PARAMS_VOL02,
+    "03": ROI_PARAMS_VOL03,
+    "04": ROI_PARAMS_VOL04,
 }

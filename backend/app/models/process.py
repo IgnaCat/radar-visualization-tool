@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .common import RangeFilter
+from ..core.constants import TOA
 
 
 class ProcessRequest(BaseModel):
@@ -15,8 +16,8 @@ class ProcessRequest(BaseModel):
     product: str = Field(..., description="Producto a procesar, ej PPI")
     fields: List[str] = Field(..., min_items=1, description="Campos a procesar")
     height: Optional[int] = Field(
-        default=4000, ge=0, le=12000,
-        description="Altura en metros (0-12000). Default 4000m"
+        default=4000, ge=0, le=TOA,
+        description=f"Altura en metros (0-{TOA}). Default 4000m"
     )
     elevation: Optional[int] = Field(
         default=0, ge=0, le=12,

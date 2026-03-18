@@ -5,6 +5,7 @@ Incluye límites espaciales, resolución, roi y altura del haz del radar.
 
 import math
 import numpy as np
+from ...core.constants import TOA
 
 
 def beam_height_max_km(
@@ -130,7 +131,7 @@ def calculate_z_limits(
         step_m = round_to_km * 1000.0
         z_top_m = math.ceil(z_top_m / step_m) * step_m
 
-    return (0.0, 25_000, elev_deg)
+    return (0.0, TOA, elev_deg)
 
 
 def calculate_grid_resolution(volume: str) -> tuple[float, float]:

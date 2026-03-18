@@ -22,6 +22,7 @@ from ...core.constants import (
     AFFECTS_INTERP_FIELDS,
     ROI_PARAMS_BY_VOLUME,
     ROI_PARAMS_VOL01,
+    TOA,
 )
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
@@ -153,7 +154,7 @@ def get_or_build_W_operator(
     nb: float | None,
     bsp: float | None,
     min_radius: float | None,
-    toa: float = 25000.0,
+    toa: float = TOA,
     weight_func: str = "Barnes2",
     max_neighbors: int | None = None,
     session_id: str | None = None,

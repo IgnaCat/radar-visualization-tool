@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from .common import RangeFilter
+from ..core.constants import TOA
 
 
 class RadarPixelRequest(BaseModel):
@@ -13,8 +14,8 @@ class RadarPixelRequest(BaseModel):
     product: str
     field: str
     height: Optional[int] = Field(
-        default=4000, ge=0, le=12000,
-        description="Altura en metros (0-12000). Default 4000m"
+        default=4000, ge=0, le=TOA,
+        description=f"Altura en metros (0-{TOA}). Default 4000m"
     )
     elevation: Optional[int] = Field(
         default=0, ge=0, le=12,

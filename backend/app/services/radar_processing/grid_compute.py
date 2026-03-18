@@ -17,6 +17,7 @@ from multiprocessing import Pool, cpu_count
 from typing import Tuple
 
 from .grid_geometry import calculate_roi_dist_beam, compute_beam_height
+from ...core.constants import TOA
 
 logger = logging.getLogger(__name__)
 
@@ -239,7 +240,7 @@ def _process_single_level(args) -> Tuple[int, int, str]:
 def build_W_operator(
     gates_xyz,
     voxels_xyz,
-    toa: float = 25000,
+    toa: float = TOA,
     h_factor=None,  # None = usar adaptativos por Z
     nb=None,
     bsp=None,
@@ -264,7 +265,7 @@ def build_W_operator(
     Args:
     gates_xyz: (Ngates, 3) float - coordenadas (x,y,z) de todos los gates
     voxels_xyz: (Nvoxels, 3) float - coordenadas (x,y,z) de todos los voxels
-    toa: float, Top Of Atmosphere en metros (default 12000)
+    toa: float, Top Of Atmosphere en metros (default TOA)
          Límite físico para excluir ecos no-meteorológicos sobre tropopausa
     h_factor: float o None, escalado de altura (None=usar valor fijo por volumen desde ROI_PARAMS_BY_VOLUME)
     nb: float o None, ancho de haz virtual en grados
