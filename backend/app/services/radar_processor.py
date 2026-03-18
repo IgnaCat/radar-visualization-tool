@@ -120,7 +120,7 @@ def _build_output_summary(
     return {
         "image_url": relative_url,
         "field": field_requested,
-        "source_file": filepath,
+        "source_file": Path(filepath).name,
         "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
         "colormap": cmap_key,
     }
