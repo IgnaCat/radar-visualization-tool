@@ -323,6 +323,7 @@ def w_operator_cache_key(
     grid_limits: tuple,
     weight_func: str = "nearest",
     max_neighbors: int | None = None,
+    gate_shape: tuple | None = None,
 ) -> str:
     """
     Genera cache key para operador W basado en:
@@ -362,6 +363,7 @@ def w_operator_cache_key(
         ),  # (h_factor, nb, bsp, min_radius) - constante por volumen
         "wfunc": str(weight_func),
         "maxn": int(max_neighbors) if max_neighbors is not None else None,
+        "gshape": list(gate_shape) if gate_shape is not None else None,
     }
 
     return f"W_{radar}_{estrategia}_{volumen}_{_hash_of(payload)}"

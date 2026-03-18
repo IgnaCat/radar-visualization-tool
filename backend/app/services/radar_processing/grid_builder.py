@@ -154,7 +154,7 @@ def get_or_build_W_operator(
     nb: float = 1.1,
     bsp: float = 0.9,
     min_radius: float = 300.0,
-    toa: float = 12000.0,
+    toa: float = 25000.0,
     weight_func: str = "nearest",
     max_neighbors: int | None = None,
     session_id: str | None = None,
@@ -194,6 +194,7 @@ def get_or_build_W_operator(
             grid_limits=grid_limits,
             weight_func=weight_func,
             max_neighbors=max_neighbors,
+            gate_shape=(int(radar_to_use.nrays), int(radar_to_use.ngates)),
         )
     except Exception as e:
         logger.error(f"Error generando cache_key: {e}")

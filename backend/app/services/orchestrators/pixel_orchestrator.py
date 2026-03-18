@@ -12,6 +12,7 @@ from pyproj import Transformer
 from ...models import RadarPixelRequest, RadarPixelResponse
 from ...core.cache import GRID2D_CACHE
 from ...core.config import settings
+from ...core.constants import FIELD_ALIASES
 from ...utils.helpers import extract_volume_from_filename
 from ..radar_common import (
     grid2d_cache_key,
@@ -20,7 +21,6 @@ from ..radar_common import (
 from ..radar_processing import (
     separate_filters,
     apply_visual_filters,
-    apply_qc_filters,
 )
 
 
@@ -67,11 +67,34 @@ class PixelOrchestrator:
         Returns:
             Nombre del campo resuelto
         """
-        if product.upper() == "CAPPI":
-            return "cappi"
-        if product.upper() == "COLMAX" and field.upper() == "DBZH":
-            return "composite_reflectivity"
         return field
+
+    @staticmethod
+    def get_field_candidates(field: str) -> List[str]:
+        """
+        Genera candidatos de nombre de campo para buscar en cache.
+
+        Incluye el campo solicitado y aliases canónicos para soportar
+        nombres reales del archivo usados por `process_radar_to_cog`.
+        """
+        key = str(field).upper()
+        raw_candidates = [field]
+
+        if key in FIELD_ALIASES:
+            raw_candidates.extend(FIELD_ALIASES[key])
+            raw_candidates.append(key)
+
+        seen = set()
+        candidates = []
+        for candidate in raw_candidates:
+            c = str(candidate)
+            norm = c.upper()
+            if norm in seen:
+                continue
+            seen.add(norm)
+            candidates.append(c)
+
+        return candidates
 
     @staticmethod
     def generate_cache_key(
@@ -93,19 +116,11 @@ class PixelOrchestrator:
             Cache key para GRID2D_CACHE
         """
         product_upper = product.upper()
-        field_to_use = field.upper()
+        field_to_use = field
         interp = weight_func
 
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
-
-        # Generar signature de qc_filters para cache keys
-        qc_filters, _ = separate_filters(filters or [], field_to_use)
-        qc_sig = (
-            tuple(sorted([(f.field, f.min, f.max) for f in qc_filters]))
-            if qc_filters
-            else tuple()
-        )
 
         cache_key = grid2d_cache_key(
             file_hash=file_hash,
@@ -115,7 +130,7 @@ class PixelOrchestrator:
             cappi_height=cappi_height if product_upper == "CAPPI" else None,
             volume=volume,
             interp=interp,
-            qc_sig=qc_sig,  # Incluir filtros QC en cache key
+            qc_sig=None,
             max_neighbors=max_neighbors,
             session_id=session_id,
         )
@@ -356,18 +371,37 @@ class PixelOrchestrator:
         volume = extract_volume_from_filename(payload.filepath)
         weight_func = payload.weight_func or "nearest"
         max_neighbors = payload.max_neighbors or 1
-        cache_key = PixelOrchestrator.generate_cache_key(
-            filepath=filepath,
-            product=payload.product,
-            field=field,
-            elevation=payload.elevation,
-            cappi_height=payload.height,
-            volume=volume,
-            filters=payload.filters,
-            session_id=payload.session_id,
-            weight_func=weight_func,
-            max_neighbors=max_neighbors,
-        )
+        cache_key = None
+        for field_candidate in PixelOrchestrator.get_field_candidates(field):
+            candidate_key = PixelOrchestrator.generate_cache_key(
+                filepath=filepath,
+                product=payload.product,
+                field=field_candidate,
+                elevation=payload.elevation,
+                cappi_height=payload.height,
+                volume=volume,
+                filters=payload.filters,
+                session_id=payload.session_id,
+                weight_func=weight_func,
+                max_neighbors=max_neighbors,
+            )
+            if GRID2D_CACHE.get(candidate_key) is not None:
+                cache_key = candidate_key
+                break
+
+        if cache_key is None:
+            cache_key = PixelOrchestrator.generate_cache_key(
+                filepath=filepath,
+                product=payload.product,
+                field=field,
+                elevation=payload.elevation,
+                cappi_height=payload.height,
+                volume=volume,
+                filters=payload.filters,
+                session_id=payload.session_id,
+                weight_func=weight_func,
+                max_neighbors=max_neighbors,
+            )
 
         # 5. Obtener datos del cache
         pkg = GRID2D_CACHE.get(cache_key)

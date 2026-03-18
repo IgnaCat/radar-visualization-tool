@@ -239,7 +239,7 @@ def _process_single_level(args) -> Tuple[int, int, str]:
 def build_W_operator(
     gates_xyz,
     voxels_xyz,
-    toa=12000,
+    toa=25000,
     h_factor=None,  # None = usar adaptativos por Z
     nb=None,
     bsp=None,

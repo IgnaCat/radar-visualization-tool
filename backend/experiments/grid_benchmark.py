@@ -50,34 +50,39 @@ from app.services.radar_processing.grid_geometry import (
 OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-DEFAULT_NC = Path(__file__).resolve().parent.parent.parent / "biribiri" / "RMA1_0315_01_20250819T001715Z.nc"
+DEFAULT_NC = (
+    Path(__file__).resolve().parent.parent.parent
+    / "biribiri"
+    / "RMA1_0315_01_20250819T001715Z.nc"
+)
 
 # Parámetros fijos del benchmark (valores por defecto del vol 01)
 DEFAULT_ROI = dict(h_factor=0.9, nb=1.2, bsp=1.0, min_radius=700.0)
-DEFAULT_RES_XY = 1000   # metros
-DEFAULT_RES_Z = 600     # metros
-TOA = 12000.0
+DEFAULT_RES_XY = 1000  # metros
+DEFAULT_RES_Z = 600  # metros
+TOA = 25_000
 WEIGHT_FUNC = "Barnes2"
 MAX_NEIGHBORS = 30
-N_WORKERS = 1            # Secuencial para tiempos reproducibles
+N_WORKERS = 1  # Secuencial para tiempos reproducibles
 
 
 @dataclass
 class BenchResult:
     """Resultado de un benchmark individual."""
-    resolution_xy: float       # metros
-    resolution_z: float        # metros
-    min_radius: float          # metros
+
+    resolution_xy: float  # metros
+    resolution_z: float  # metros
+    min_radius: float  # metros
     h_factor: float
     nb: float
     bsp: float
-    grid_shape: tuple          # (nz, ny, nx)
+    grid_shape: tuple  # (nz, ny, nx)
     n_voxels: int
     n_gates: int
-    build_time_s: float        # seg
-    nnz: int                   # elementos no-cero en W
-    w_size_mb: float           # MB del operador W
-    avg_neighbors: float       # vecinos promedio por voxel
+    build_time_s: float  # seg
+    nnz: int  # elementos no-cero en W
+    w_size_mb: float  # MB del operador W
+    avg_neighbors: float  # vecinos promedio por voxel
 
 
 def find_nc_file(user_path: str | None = None) -> Path:
@@ -110,14 +115,18 @@ def compute_grid_params(radar, res_xy, res_z):
     """Calcula grid_shape y grid_limits a partir de la resolución."""
     range_max = float(radar.range["data"][-1])
     z_min, z_max, _ = calculate_z_limits(
-        range_max, elevation=0,
+        range_max,
+        elevation=0,
         radar_fixed_angles=radar.fixed_angle["data"],
     )
     xy_max = float(range_max)
     grid_limits = ((z_min, z_max), (-xy_max, xy_max), (-xy_max, xy_max))
     grid_shape = calculate_grid_points(
-        (z_min, z_max), (-xy_max, xy_max), (-xy_max, xy_max),
-        res_xy, res_z,
+        (z_min, z_max),
+        (-xy_max, xy_max),
+        (-xy_max, xy_max),
+        res_xy,
+        res_z,
     )
     return grid_shape, grid_limits
 
@@ -140,9 +149,11 @@ def run_single_benchmark(
     n_gates = gates_xyz.shape[0]
 
     print(f"  {label}")
-    print(f"    Grid: {grid_shape} = {n_voxels:,} voxels | "
-          f"res_xy={res_xy}m, res_z={res_z}m | "
-          f"min_r={min_radius:.0f}m, nb={nb}°")
+    print(
+        f"    Grid: {grid_shape} = {n_voxels:,} voxels | "
+        f"res_xy={res_xy}m, res_z={res_z}m | "
+        f"min_r={min_radius:.0f}m, nb={nb}°"
+    )
 
     # Generar coordenadas de la grilla
     voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
@@ -158,7 +169,7 @@ def run_single_benchmark(
         nb=nb,
         bsp=bsp,
         min_radius=min_radius,
-        volume=None,       # parámetros explícitos, no lookup por volumen
+        volume=None,  # parámetros explícitos, no lookup por volumen
         weight_func=WEIGHT_FUNC,
         max_neighbors=MAX_NEIGHBORS,
         n_workers=N_WORKERS,
@@ -168,8 +179,10 @@ def run_single_benchmark(
     w_size = (W.data.nbytes + W.indices.nbytes + W.indptr.nbytes) / 1024**2
     avg_n = W.nnz / n_voxels if n_voxels > 0 else 0
 
-    print(f"    → {elapsed:.2f}s | nnz={W.nnz:,} | "
-          f"W={w_size:.1f}MB | avg_neighbors={avg_n:.1f}")
+    print(
+        f"    → {elapsed:.2f}s | nnz={W.nnz:,} | "
+        f"W={w_size:.1f}MB | avg_neighbors={avg_n:.1f}"
+    )
 
     result = BenchResult(
         resolution_xy=res_xy,
@@ -198,16 +211,22 @@ def run_single_benchmark(
 # Benchmarks
 # ──────────────────────────────────────────────────────────────────
 
+
 def bench_vary_resolution(radar, gates_xyz, resolutions_xy, roi_params):
     """Benchmark variando resolución XY con ROI fijo."""
     results = []
     for res_xy in resolutions_xy:
         grid_shape, grid_limits = compute_grid_params(radar, res_xy, DEFAULT_RES_Z)
         r = run_single_benchmark(
-            gates_xyz, grid_shape, grid_limits,
-            roi_params["h_factor"], roi_params["nb"],
-            roi_params["bsp"], roi_params["min_radius"],
-            res_xy, DEFAULT_RES_Z,
+            gates_xyz,
+            grid_shape,
+            grid_limits,
+            roi_params["h_factor"],
+            roi_params["nb"],
+            roi_params["bsp"],
+            roi_params["min_radius"],
+            res_xy,
+            DEFAULT_RES_Z,
             label=f"res_xy={res_xy}m",
         )
         results.append(r)
@@ -220,10 +239,15 @@ def bench_vary_roi(radar, gates_xyz, min_radii, res_xy):
     results = []
     for mr in min_radii:
         r = run_single_benchmark(
-            gates_xyz, grid_shape, grid_limits,
-            DEFAULT_ROI["h_factor"], DEFAULT_ROI["nb"],
-            DEFAULT_ROI["bsp"], mr,
-            res_xy, DEFAULT_RES_Z,
+            gates_xyz,
+            grid_shape,
+            grid_limits,
+            DEFAULT_ROI["h_factor"],
+            DEFAULT_ROI["nb"],
+            DEFAULT_ROI["bsp"],
+            mr,
+            res_xy,
+            DEFAULT_RES_Z,
             label=f"min_radius={mr:.0f}m",
         )
         results.append(r)
@@ -236,10 +260,15 @@ def bench_vary_nb(radar, gates_xyz, nb_values, res_xy):
     results = []
     for nb_val in nb_values:
         r = run_single_benchmark(
-            gates_xyz, grid_shape, grid_limits,
-            DEFAULT_ROI["h_factor"], nb_val,
-            DEFAULT_ROI["bsp"], DEFAULT_ROI["min_radius"],
-            res_xy, DEFAULT_RES_Z,
+            gates_xyz,
+            grid_shape,
+            grid_limits,
+            DEFAULT_ROI["h_factor"],
+            nb_val,
+            DEFAULT_ROI["bsp"],
+            DEFAULT_ROI["min_radius"],
+            res_xy,
+            DEFAULT_RES_Z,
             label=f"nb={nb_val}°",
         )
         results.append(r)
@@ -256,10 +285,15 @@ def bench_heatmap(radar, gates_xyz, resolutions_xy, min_radii):
         for mr in min_radii:
             i += 1
             r = run_single_benchmark(
-                gates_xyz, grid_shape, grid_limits,
-                DEFAULT_ROI["h_factor"], DEFAULT_ROI["nb"],
-                DEFAULT_ROI["bsp"], mr,
-                res_xy, DEFAULT_RES_Z,
+                gates_xyz,
+                grid_shape,
+                grid_limits,
+                DEFAULT_ROI["h_factor"],
+                DEFAULT_ROI["nb"],
+                DEFAULT_ROI["bsp"],
+                mr,
+                res_xy,
+                DEFAULT_RES_Z,
                 label=f"[{i}/{total}] res={res_xy}m × min_r={mr:.0f}m",
             )
             results.append(r)
@@ -269,6 +303,7 @@ def bench_heatmap(radar, gates_xyz, resolutions_xy, min_radii):
 # ──────────────────────────────────────────────────────────────────
 # Gráficos
 # ──────────────────────────────────────────────────────────────────
+
 
 def plot_time_vs_resolution(results: list[BenchResult]):
     """Gráfico 1: Tiempo de construcción vs resolución XY."""
@@ -284,7 +319,9 @@ def plot_time_vs_resolution(results: list[BenchResult]):
     ax1.set_xlabel("Resolución XY (m)", fontsize=11)
     ax1.set_ylabel("Tiempo de construcción (s)", fontsize=11, color=color1)
     ax1.tick_params(axis="y", labelcolor=color1)
-    ax1.set_title("Tiempo vs Resolución espacial\n(ROI fijo)", fontsize=12, fontweight="bold")
+    ax1.set_title(
+        "Tiempo vs Resolución espacial\n(ROI fijo)", fontsize=12, fontweight="bold"
+    )
     ax1.grid(True, alpha=0.3, linestyle="--")
     ax1.invert_xaxis()  # menor resolución = más voxels → derecha
 
@@ -298,15 +335,23 @@ def plot_time_vs_resolution(results: list[BenchResult]):
     # Anotar grid_shape
     for r in results:
         nz, ny, nx = r.grid_shape
-        ax1.annotate(f"{nz}×{ny}×{nx}", xy=(r.resolution_xy, r.build_time_s),
-                     xytext=(0, 12), textcoords="offset points", fontsize=7,
-                     ha="center", color="gray")
+        ax1.annotate(
+            f"{nz}×{ny}×{nx}",
+            xy=(r.resolution_xy, r.build_time_s),
+            xytext=(0, 12),
+            textcoords="offset points",
+            fontsize=7,
+            ha="center",
+            color="gray",
+        )
 
     # Panel 2: nnz (complejidad real)
     ax2.plot(res, nnz, "o-", color="C2", linewidth=2, markersize=8)
     ax2.set_xlabel("Resolución XY (m)", fontsize=11)
     ax2.set_ylabel("Elementos no-cero (nnz)", fontsize=11)
-    ax2.set_title("Complejidad del operador W vs Resolución", fontsize=12, fontweight="bold")
+    ax2.set_title(
+        "Complejidad del operador W vs Resolución", fontsize=12, fontweight="bold"
+    )
     ax2.grid(True, alpha=0.3, linestyle="--")
     ax2.invert_xaxis()
     ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda v, _: f"{v/1e6:.1f}M"))
@@ -330,7 +375,11 @@ def plot_time_vs_roi(results: list[BenchResult]):
     ax1.plot(mr, times, "o-", color="C0", linewidth=2, markersize=8)
     ax1.set_xlabel("min_radius (m)", fontsize=11)
     ax1.set_ylabel("Tiempo de construcción (s)", fontsize=11)
-    ax1.set_title("Tiempo vs Radio mínimo del ROI\n(resolución fija)", fontsize=12, fontweight="bold")
+    ax1.set_title(
+        "Tiempo vs Radio mínimo del ROI\n(resolución fija)",
+        fontsize=12,
+        fontweight="bold",
+    )
     ax1.grid(True, alpha=0.3, linestyle="--")
 
     # Eje secundario: avg_neighbors
@@ -367,7 +416,9 @@ def plot_time_vs_nb(results: list[BenchResult]):
     ax1.plot(nb_vals, times, "o-", color="C0", linewidth=2, markersize=8)
     ax1.set_xlabel("nb — ancho de haz (°)", fontsize=11)
     ax1.set_ylabel("Tiempo de construcción (s)", fontsize=11)
-    ax1.set_title("Tiempo vs Ancho de haz (nb)\n(resolución fija)", fontsize=12, fontweight="bold")
+    ax1.set_title(
+        "Tiempo vs Ancho de haz (nb)\n(resolución fija)", fontsize=12, fontweight="bold"
+    )
     ax1.grid(True, alpha=0.3, linestyle="--")
 
     ax1b = ax1.twinx()
@@ -419,8 +470,15 @@ def plot_heatmap(results: list[BenchResult], resolutions_xy, min_radii):
     # Anotar valores
     for i in range(nr):
         for j in range(nm):
-            ax1.text(j, i, f"{time_grid[i,j]:.1f}s", ha="center", va="center",
-                     fontsize=7, color="white" if time_grid[i,j] > time_grid.mean() else "black")
+            ax1.text(
+                j,
+                i,
+                f"{time_grid[i,j]:.1f}s",
+                ha="center",
+                va="center",
+                fontsize=7,
+                color="white" if time_grid[i, j] > time_grid.mean() else "black",
+            )
 
     # Heatmap nnz
     im2 = ax2.imshow(nnz_grid / 1e6, aspect="auto", cmap="YlGnBu", origin="lower")
@@ -435,8 +493,15 @@ def plot_heatmap(results: list[BenchResult], resolutions_xy, min_radii):
     cbar2.set_label("nnz (M)")
     for i in range(nr):
         for j in range(nm):
-            ax2.text(j, i, f"{nnz_grid[i,j]/1e6:.1f}M", ha="center", va="center",
-                     fontsize=7, color="white" if nnz_grid[i,j] > nnz_grid.mean() else "black")
+            ax2.text(
+                j,
+                i,
+                f"{nnz_grid[i,j]/1e6:.1f}M",
+                ha="center",
+                va="center",
+                fontsize=7,
+                color="white" if nnz_grid[i, j] > nnz_grid.mean() else "black",
+            )
 
     fig.tight_layout()
     path = OUTPUT_DIR / "bench_heatmap_resolucion_x_roi.png"
@@ -450,26 +515,37 @@ def plot_summary_table(all_results: list[BenchResult]):
     fig, ax = plt.subplots(figsize=(16, max(4, 0.4 * len(all_results) + 1.5)))
     ax.axis("off")
 
-    headers = ["Res XY (m)", "Res Z (m)", "Grid (nz×ny×nx)", "Voxels",
-               "min_r (m)", "nb (°)", "Tiempo (s)", "nnz", "W (MB)", "Avg Neigh"]
+    headers = [
+        "Res XY (m)",
+        "Res Z (m)",
+        "Grid (nz×ny×nx)",
+        "Voxels",
+        "min_r (m)",
+        "nb (°)",
+        "Tiempo (s)",
+        "nnz",
+        "W (MB)",
+        "Avg Neigh",
+    ]
     rows = []
     for r in all_results:
         nz, ny, nx = r.grid_shape
-        rows.append([
-            f"{r.resolution_xy:.0f}",
-            f"{r.resolution_z:.0f}",
-            f"{nz}×{ny}×{nx}",
-            f"{r.n_voxels:,}",
-            f"{r.min_radius:.0f}",
-            f"{r.nb:.1f}",
-            f"{r.build_time_s:.2f}",
-            f"{r.nnz:,}",
-            f"{r.w_size_mb:.1f}",
-            f"{r.avg_neighbors:.1f}",
-        ])
+        rows.append(
+            [
+                f"{r.resolution_xy:.0f}",
+                f"{r.resolution_z:.0f}",
+                f"{nz}×{ny}×{nx}",
+                f"{r.n_voxels:,}",
+                f"{r.min_radius:.0f}",
+                f"{r.nb:.1f}",
+                f"{r.build_time_s:.2f}",
+                f"{r.nnz:,}",
+                f"{r.w_size_mb:.1f}",
+                f"{r.avg_neighbors:.1f}",
+            ]
+        )
 
-    table = ax.table(cellText=rows, colLabels=headers, loc="center",
-                     cellLoc="center")
+    table = ax.table(cellText=rows, colLabels=headers, loc="center", cellLoc="center")
     table.auto_set_font_size(False)
     table.set_fontsize(8)
     table.scale(1.0, 1.4)
@@ -485,8 +561,9 @@ def plot_summary_table(all_results: list[BenchResult]):
         for j in range(len(headers)):
             table[i + 1, j].set_facecolor(color)
 
-    ax.set_title("Resumen de benchmarks — Operador W",
-                 fontsize=13, fontweight="bold", pad=20)
+    ax.set_title(
+        "Resumen de benchmarks — Operador W", fontsize=13, fontweight="bold", pad=20
+    )
     fig.tight_layout()
     path = OUTPUT_DIR / "bench_tabla_resumen.png"
     fig.savefig(path, dpi=150, bbox_inches="tight")
@@ -511,12 +588,15 @@ def save_results_json(all_results: list[BenchResult]):
 # Main
 # ──────────────────────────────────────────────────────────────────
 
+
 def main():
     parser = argparse.ArgumentParser(description="Benchmark de grilla 3D")
-    parser.add_argument("--nc", type=str, default=None,
-                        help="Path al archivo NetCDF del radar")
-    parser.add_argument("--quick", action="store_true",
-                        help="Modo rápido con menos combinaciones")
+    parser.add_argument(
+        "--nc", type=str, default=None, help="Path al archivo NetCDF del radar"
+    )
+    parser.add_argument(
+        "--quick", action="store_true", help="Modo rápido con menos combinaciones"
+    )
     args = parser.parse_args()
 
     print("=" * 65)
@@ -527,9 +607,11 @@ def main():
     nc_path = find_nc_file(args.nc)
     print(f"\nArchivo: {nc_path}")
     radar = pyart.io.read(str(nc_path))
-    print(f"Radar: {radar.metadata.get('instrument_name', '?')} | "
-          f"{radar.nsweeps} sweeps | {radar.nrays} rays × {radar.ngates} gates | "
-          f"range_max={radar.range['data'][-1]/1000:.0f} km")
+    print(
+        f"Radar: {radar.metadata.get('instrument_name', '?')} | "
+        f"{radar.nsweeps} sweeps | {radar.nrays} rays × {radar.ngates} gates | "
+        f"range_max={radar.range['data'][-1]/1000:.0f} km"
+    )
 
     # Pre-calcular coordenadas de gates (una sola vez)
     gates_xyz = get_gate_xyz_coords(radar)
@@ -597,12 +679,16 @@ def main():
     print("=" * 65)
     fastest = min(all_results, key=lambda r: r.build_time_s)
     slowest = max(all_results, key=lambda r: r.build_time_s)
-    print(f"  Más rápido: {fastest.build_time_s:.2f}s  "
-          f"(res={fastest.resolution_xy}m, min_r={fastest.min_radius}m, "
-          f"grid={fastest.grid_shape})")
-    print(f"  Más lento:  {slowest.build_time_s:.2f}s  "
-          f"(res={slowest.resolution_xy}m, min_r={slowest.min_radius}m, "
-          f"grid={slowest.grid_shape})")
+    print(
+        f"  Más rápido: {fastest.build_time_s:.2f}s  "
+        f"(res={fastest.resolution_xy}m, min_r={fastest.min_radius}m, "
+        f"grid={fastest.grid_shape})"
+    )
+    print(
+        f"  Más lento:  {slowest.build_time_s:.2f}s  "
+        f"(res={slowest.resolution_xy}m, min_r={slowest.min_radius}m, "
+        f"grid={slowest.grid_shape})"
+    )
     print(f"  Factor:     {slowest.build_time_s/fastest.build_time_s:.1f}x")
     print(f"\n  Gráficos en: {OUTPUT_DIR}")
     print("=" * 65)
