@@ -26,6 +26,7 @@ export default function ColorLegendField({
         setLegend({
           values: data.values,
           colors: data.colors,
+          unit: data.unit,
         });
       } catch (error) {
         console.error(`Error loading legend ${field}/${colormap}:`, error);
@@ -44,6 +45,7 @@ export default function ColorLegendField({
 
   const colors = legend.colors || [];
   const fieldValues = legend.values || [];
+  const unit = (legend.unit || "").trim();
 
   if (fieldValues.length === 0) {
     return null;
@@ -63,10 +65,10 @@ export default function ColorLegendField({
         display: "flex",
         flexDirection: "row",
         alignItems: "center",
-        gap: 2,
+        gap: 1,
         padding: 1.5,
         backgroundColor: "rgba(0, 0, 0, 0.7)",
-        borderRadius: 1,
+        borderRadius: 3,
         userSelect: "none",
       }}
     >
@@ -101,6 +103,21 @@ export default function ColorLegendField({
             position: "relative",
           }}
         />
+
+        {unit ? (
+          <Typography
+            variant="caption"
+            sx={{
+              color: "white",
+              marginTop: 0.8,
+              fontWeight: 500,
+              fontSize: "0.68rem",
+              textShadow: "1px 1px 1px rgba(0,0,0,0.9)",
+            }}
+          >
+            {unit}
+          </Typography>
+        ) : null}
       </div>
 
       {/* Valores a la derecha */}

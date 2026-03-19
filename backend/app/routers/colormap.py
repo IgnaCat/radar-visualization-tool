@@ -1,6 +1,11 @@
 from fastapi import APIRouter, HTTPException
 from typing import Dict, List
-from ..core.constants import FIELD_COLORMAP_OPTIONS, FIELD_RENDER, FIELD_LEGEND_VALUES
+from ..core.constants import (
+    FIELD_COLORMAP_OPTIONS,
+    FIELD_RENDER,
+    FIELD_LEGEND_VALUES,
+    VARIABLE_UNITS,
+)
 from ..services.radar_common import colormap_for
 import numpy as np
 
@@ -96,6 +101,7 @@ async def get_colormap_legend(field_key: str, cmap_name: str | None = None):
             "vmax": float(vmax),
             "values": values,
             "colors": hex_colors,
+            "unit": VARIABLE_UNITS.get(key, ""),
         }
     except HTTPException:
         raise

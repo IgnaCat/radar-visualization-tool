@@ -42,22 +42,61 @@ export default function ColorLegend({
     return Array.from(pairs.values());
   }, [overlayData]);
 
+  // Mantener slots estables por leyenda para que nuevas capas no "salten"
+  // a posiciones previas cuando cambia el orden del overlay.
+  const [legendSlots, setLegendSlots] = React.useState({});
+
+  React.useEffect(() => {
+    const keys = fieldColormapPairs.map(
+      ({ field, colormap }) => `${field}_${colormap}`,
+    );
+
+    setLegendSlots((prev) => {
+      const next = {};
+      const used = new Set();
+
+      // Preservar slots ya asignados para claves todavía visibles
+      keys.forEach((k) => {
+        if (Object.prototype.hasOwnProperty.call(prev, k)) {
+          next[k] = prev[k];
+          used.add(prev[k]);
+        }
+      });
+
+      // Asignar slots consecutivos a nuevas claves
+      keys.forEach((k) => {
+        if (!Object.prototype.hasOwnProperty.call(next, k)) {
+          let slot = 0;
+          while (used.has(slot)) slot += 1;
+          next[k] = slot;
+          used.add(slot);
+        }
+      });
+
+      return next;
+    });
+  }, [fieldColormapPairs]);
+
   if (fieldColormapPairs.length === 0) {
     return null;
   }
 
   return (
     <div style={{ display: "contents" }}>
-      {fieldColormapPairs.map(({ field, colormap }, idx) => (
-        <ColorLegendField
-          key={`${field}_${colormap}`}
-          field={field}
-          colormap={colormap}
-          defaultX={10 + idx * 100} // Escalonar horizontalmente desde abajo-izquierda
-          defaultY={10}
-          fromBottom={true}
-        />
-      ))}
+      {fieldColormapPairs.map(({ field, colormap }) => {
+        const key = `${field}_${colormap}`;
+        const slot = legendSlots[key] ?? 0;
+        return (
+          <ColorLegendField
+            key={key}
+            field={field}
+            colormap={colormap}
+            defaultX={10 + slot * 100} // Escalonar horizontalmente desde abajo-izquierda
+            defaultY={10}
+            fromBottom={true}
+          />
+        );
+      })}
     </div>
   );
 }
