@@ -5,6 +5,7 @@ Incluye límites espaciales, resolución, roi y altura del haz del radar.
 
 import math
 import numpy as np
+import pyart
 from ...core.constants import TOA
 
 
@@ -27,6 +28,54 @@ def beam_height_max_km(
     th = math.radians(float(elev_deg))
     h = r * math.sin(th) + (r * r) / (2.0 * Re) + antenna_alt_m
     return h / 1000.0  # Convertir a km
+
+
+def infer_blind_range_m(
+    radar: pyart.core.Radar,
+    default: float = 0.0,
+    extra_margin_m: float = 0.0,
+) -> float:
+    """
+    Infiere el radio ciego cercano al radar en metros.
+
+    Estrategia de inferencia (en orden):
+    1) ``radar.range['data'][0]`` (centro del primer gate)
+    2) atributo ``meters_to_center_of_first_gate`` de ``radar.range``
+    3) ``default``
+
+    Args:
+        radar: Objeto radar de PyART
+        default: Valor de fallback en metros si no se puede inferir
+        extra_margin_m: Margen adicional para ampliar el radio ciego
+
+    Returns:
+        Radio ciego en metros (>= 0)
+    """
+    first_gate_m = None
+
+    try:
+        r = radar.range.get("data", None)
+        if r is not None:
+            arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)
+            if arr.size > 0 and np.isfinite(arr[0]):
+                first_gate_m = float(arr[0])
+    except Exception:
+        first_gate_m = None
+
+    if first_gate_m is None:
+        try:
+            r = radar.range
+            attr_val = getattr(r, "meters_to_center_of_first_gate", None)
+            if attr_val is not None and np.isfinite(float(attr_val)):
+                first_gate_m = float(attr_val)
+        except Exception:
+            first_gate_m = None
+
+    if first_gate_m is None:
+        first_gate_m = float(default)
+
+    blind_range_m = max(0.0, float(first_gate_m) + float(extra_margin_m))
+    return blind_range_m
 
 
 def compute_beam_height(

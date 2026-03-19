@@ -28,6 +28,7 @@ from ...core.constants import (
 )
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
+from .grid_geometry import infer_blind_range_m
 from .grid_interpolate import apply_operator_to_all_fields
 from .filter_application import (
     build_gatefilter_for_gridding,
@@ -160,6 +161,7 @@ def get_or_build_W_operator(
     toa: float = TOA,
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors: int | None = DEFAULT_MAX_NEIGHBORS,
+    blind_range_m: float | None = None,
     session_id: str | None = None,
 ) -> csr_matrix:
     """
@@ -188,6 +190,9 @@ def get_or_build_W_operator(
         scipy.sparse.csr_matrix: Operador W
     """
     # Generar cache key (sin session_id - compartido globalmente)
+    if blind_range_m is None:
+        blind_range_m = infer_blind_range_m(radar_to_use)
+
     try:
         cache_key = w_operator_cache_key(
             radar=radar,
@@ -255,6 +260,7 @@ def get_or_build_W_operator(
             volume=volumen,  # Pasar volumen para ajustes de ROI específicos
             weight_func=weight_func,
             max_neighbors=max_neighbors,
+            blind_range_m=blind_range_m,
             lowest_elev_deg=lowest_elev_deg,
             n_workers=None,  # Auto: cpu_count() - 1 (usa todos los cores disponibles)
             temp_dir=None,  # Crea directorio temporal automáticamente
@@ -274,6 +280,7 @@ def get_or_build_W_operator(
             "min_radius": min_radius,
             "weight_func": weight_func,
             "max_neighbors": max_neighbors,
+            "blind_range_m": float(blind_range_m),
             "nnz": W.nnz,
             "shape": W.shape,
             "created_at": time.time(),

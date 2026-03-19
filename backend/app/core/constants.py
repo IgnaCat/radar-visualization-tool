@@ -80,7 +80,7 @@ AFFECTS_INTERP_FIELDS = {"RHOHV"}
 # IMPORTANTE: Cambiar estos valores invalida el caché de operadores W (hace que se recalculen)
 
 # Volumen 01: Parámetros base
-ROI_PARAMS_VOL01 = (0.9, 1.2, 1.0, 700.0)
+ROI_PARAMS_VOL01 = (1, 1.3, 1.1, 900.0)
 
 # Volumen 02: Escaneo estándar, alcance medio
 ROI_PARAMS_VOL02 = (1.1, 1.6, 1.3, 900.0)

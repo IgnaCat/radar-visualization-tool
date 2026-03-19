@@ -120,6 +120,7 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         dtype_val,
         dtype_idx,
         min_beam_h,
+        blind_range_m,
     ) = args
 
     n_points = grid_y_2d.shape[0]
@@ -153,6 +154,14 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         radar_offset=(0, 0, 0),
     )
 
+    # Máscara de radio ciego: si el voxel está más cerca que el primer gate,
+    # se salta para mantener "sin dato" en la zona no observada por el radar.
+    if blind_range_m is not None and blind_range_m > 0.0:
+        slant_dist = np.sqrt(grid_x_2d**2 + grid_y_2d**2 + grid_z_level**2)
+        in_blind_zone = slant_dist <= float(blind_range_m)
+    else:
+        in_blind_zone = None
+
     # Máscara below-beam: si este nivel Z está debajo del haz más bajo,
     # se salta el voxel directamente (fila vacía en W → NaN al interpolar)
     if min_beam_h is not None and z_coord < np.max(min_beam_h):
@@ -166,6 +175,10 @@ def _process_single_level(args) -> Tuple[int, int, str]:
     level_indptr = [0]
 
     for i in range(n_points):
+        if in_blind_zone is not None and in_blind_zone[i]:
+            level_indptr.append(level_indptr[-1])
+            continue
+
         # Saltar voxels debajo del haz más bajo del radar
         if below_beam is not None and below_beam[i]:
             level_indptr.append(level_indptr[-1])
@@ -248,6 +261,7 @@ def build_W_operator(
     volume=None,  # Volumen del radar para ajustes de ROI por volumen
     weight_func=DEFAULT_WEIGHT_FUNC,
     max_neighbors: int | None = DEFAULT_MAX_NEIGHBORS,
+    blind_range_m: float = 0.0,
     lowest_elev_deg=None,  # Elevación mínima para máscara below-beam
     n_workers=None,
     temp_dir=None,
@@ -349,6 +363,7 @@ def build_W_operator(
     logger.info(
         f"  ROI dist_beam: h_factor={h_factor}, nb={nb}°, bsp={bsp}, min_radius={min_radius}m"
     )
+    logger.info(f"  Blind range: {float(blind_range_m):.1f} m")
     logger.info(f"  Volumen: {volume} (ajustes de ROI específicos por volumen)")
     logger.info(
         f"  Workers: {n_workers} (procesamiento {'paralelo' if n_workers > 1 else 'secuencial'})"
@@ -434,6 +449,7 @@ def build_W_operator(
                 dtype_val,
                 dtype_idx,
                 min_beam_h,
+                float(blind_range_m),
             )
         )
 
