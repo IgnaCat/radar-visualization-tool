@@ -81,15 +81,15 @@ export default function RadarFilterControls({
 
   return (
     <Box
-      mt={2}
+      mt={1}
       sx={{
-        "& .MuiFormControlLabel-root": { m: 0.2 },
+        "& .MuiFormControlLabel-root": { m: 0 },
         "& .MuiSlider-root": { height: 4 }, // slider más fino
-        "& .MuiTextField-root": { width: 80, m: 0.2 },
-        "& .MuiTypography-subtitle1": { fontSize: "0.9rem" },
+        "& .MuiTextField-root": { width: 74, m: 0 },
+        "& .MuiTypography-subtitle1": { fontSize: "0.86rem" },
       }}
     >
-      <Divider sx={{ my: 2 }} />
+      <Divider sx={{ my: 1.25 }} />
 
       <Typography variant="subtitle1" gutterBottom>
         Filtros
@@ -97,16 +97,17 @@ export default function RadarFilterControls({
 
       {/* ---- RHOHV ---- */}
       {selectedField !== "RHOHV" && (
-        <Box mt={1} px={1}>
+        <Box mt={0.5} px={1}>
           <Box
             display="flex"
             alignItems="center"
-            gap={2}
+            gap={1}
             sx={{ flexWrap: "wrap" }}
           >
             <FormControlLabel
               control={
                 <Checkbox
+                  size="small"
                   checked={!!rhohv.enabled}
                   onChange={(e) =>
                     setRhohv((prev) => ({ ...prev, enabled: e.target.checked }))
@@ -114,6 +115,7 @@ export default function RadarFilterControls({
                 />
               }
               label="RHOHV"
+              sx={{ mr: 1 }}
             />
             <Slider
               value={[Number(rhohv.min ?? 0.92), Number(rhohv.max ?? 1.0)]}
@@ -127,7 +129,7 @@ export default function RadarFilterControls({
               marks={MARKS_01}
               valueLabelDisplay="auto"
               disabled={!rhohv.enabled}
-              sx={{ width: 353, mr: 6, ml: 6 }}
+              sx={{ flex: 1, minWidth: 170, mx: 1 }}
             />
             <TextField
               type="number"
@@ -158,15 +160,15 @@ export default function RadarFilterControls({
       {/* ---- Rango de variable activa ---- */}
       <Box
         mt={3}
-        mb={2}
+        mb={3}
         display="flex"
         alignItems="center"
-        gap={3}
-        pl={4}
+        gap={1.25}
+        pl={1.5}
         sx={{ flexWrap: "wrap" }}
       >
         <Typography variant="subtitle1">Rango de {activeField}</Typography>
-        <Box px={1} display="flex" alignItems="center" gap={2}>
+        <Box px={0.5} display="flex" alignItems="center" gap={1.25}>
           <Slider
             value={activeRange}
             onChange={(_, v) => setActiveRange(v)}
@@ -174,7 +176,7 @@ export default function RadarFilterControls({
             min={limits.min}
             max={limits.max}
             valueLabelDisplay="auto"
-            sx={{ flex: 1, minWidth: 220, mr: 6, ml: 1 }}
+            sx={{ flex: 1, minWidth: 170, mr: 1, ml: 1 }}
           />
           <TextField
             size="small"

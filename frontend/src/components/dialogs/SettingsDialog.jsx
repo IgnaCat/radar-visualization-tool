@@ -116,12 +116,25 @@ export default function SettingsDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Configuración</DialogTitle>
+      <DialogTitle sx={{ px: 2, py: 1.5, fontSize: "1.1rem", lineHeight: 1.2 }}>
+        Configuración
+      </DialogTitle>
 
-      <DialogContent dividers>
+      <DialogContent
+        dividers
+        sx={{
+          px: 2,
+          py: 1.25,
+          "& .MuiTypography-subtitle2": { fontSize: "0.9rem" },
+          "& .MuiFormControlLabel-label": { fontSize: "0.86rem" },
+          "& .MuiTypography-caption": { fontSize: "0.72rem" },
+        }}
+      >
         {/* ── Delta T ─────────────────────────────────────────── */}
-        <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
+        <Box sx={{ mb: 2 }}>
+          <Box
+            sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}
+          >
             <Typography variant="subtitle2">
               Tolerancia temporal entre radares (ΔT)
             </Typography>
@@ -130,11 +143,11 @@ export default function SettingsDialog({
               placement="right"
             >
               <InfoOutlinedIcon
-                sx={{ fontSize: 16, color: "text.secondary" }}
+                sx={{ fontSize: 15, color: "text.secondary" }}
               />
             </Tooltip>
           </Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
             <Slider
               value={Number(deltaT)}
               onChange={(_, val) => setDeltaT(val)}
@@ -148,7 +161,7 @@ export default function SettingsDialog({
               onChange={handleDeltaTInput}
               inputProps={{ min: 0, max: 600, type: "number" }}
               size="small"
-              sx={{ width: 90 }}
+              sx={{ width: 84 }}
               InputProps={{
                 endAdornment: (
                   <Typography variant="caption" sx={{ whiteSpace: "nowrap" }}>
@@ -160,11 +173,13 @@ export default function SettingsDialog({
           </Box>
         </Box>
 
-        <Divider sx={{ mb: 3 }} />
+        <Divider sx={{ mb: 2 }} />
 
         {/* ── Interpolación ────────────────────────────────────── */}
         <Box>
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 2 }}>
+          <Box
+            sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1.25 }}
+          >
             <Typography variant="subtitle2">
               Interpolación espacial (operador W)
             </Typography>
@@ -173,13 +188,13 @@ export default function SettingsDialog({
               placement="right"
             >
               <InfoOutlinedIcon
-                sx={{ fontSize: 16, color: "text.secondary" }}
+                sx={{ fontSize: 15, color: "text.secondary" }}
               />
             </Tooltip>
           </Box>
 
           {/* Función de peso */}
-          <FormControl fullWidth size="small" sx={{ mb: 3 }}>
+          <FormControl fullWidth size="small" sx={{ mb: 2 }}>
             <InputLabel>Función de peso</InputLabel>
             <Select
               value={weightFunc}
@@ -197,7 +212,7 @@ export default function SettingsDialog({
           {/* Max vecinos */}
           <Box>
             <Box
-              sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}
+              sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}
             >
               <Typography
                 variant="body2"
@@ -210,11 +225,11 @@ export default function SettingsDialog({
                 placement="right"
               >
                 <InfoOutlinedIcon
-                  sx={{ fontSize: 16, color: "text.secondary" }}
+                  sx={{ fontSize: 15, color: "text.secondary" }}
                 />
               </Tooltip>
             </Box>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
               <Slider
                 value={effectiveMaxNeighbors}
                 onChange={(_, val) => !isNearest && setMaxNeighbors(val)}
@@ -230,17 +245,17 @@ export default function SettingsDialog({
                 inputProps={{ min: 1, max: 500, type: "number" }}
                 size="small"
                 disabled={isNearest}
-                sx={{ width: 90 }}
+                sx={{ width: 84 }}
               />
             </Box>
           </Box>
 
-          <Divider sx={{ my: 3 }} />
+          <Divider sx={{ my: 2 }} />
 
           {/* Suavizado */}
           <Box>
             <Box
-              sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}
+              sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}
             >
               <Typography variant="subtitle2">Suavizado visual</Typography>
               <Tooltip
@@ -248,7 +263,7 @@ export default function SettingsDialog({
                 placement="right"
               >
                 <InfoOutlinedIcon
-                  sx={{ fontSize: 16, color: "text.secondary" }}
+                  sx={{ fontSize: 15, color: "text.secondary" }}
                 />
               </Tooltip>
             </Box>
@@ -256,6 +271,7 @@ export default function SettingsDialog({
             <FormControlLabel
               control={
                 <Checkbox
+                  size="small"
                   checked={smoothingEnabled}
                   onChange={(e) => setSmoothingEnabled(e.target.checked)}
                 />
@@ -263,7 +279,7 @@ export default function SettingsDialog({
               label="Habilitar suavizado"
             />
 
-            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+            <FormControl fullWidth size="small" sx={{ mt: 0.75 }}>
               <InputLabel>Método</InputLabel>
               <Select
                 value={smoothingMethod}
@@ -278,7 +294,12 @@ export default function SettingsDialog({
 
             {smoothingMethod === "gaussian" ? (
               <Box
-                sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.25,
+                  mt: 0.75,
+                }}
               >
                 <Slider
                   value={Number(smoothingSigma)}
@@ -298,7 +319,7 @@ export default function SettingsDialog({
                   inputProps={{ min: 0, max: 5, step: 0.1, type: "number" }}
                   size="small"
                   disabled={shouldSmoothBeDisabled}
-                  sx={{ width: 90 }}
+                  sx={{ width: 84 }}
                   InputProps={{
                     endAdornment: (
                       <Typography
@@ -312,7 +333,7 @@ export default function SettingsDialog({
                 />
               </Box>
             ) : (
-              <Box sx={{ mt: 1 }}>
+              <Box sx={{ mt: 0.75 }}>
                 <TextField
                   value={smoothingMedianSize}
                   onChange={(e) => {
@@ -325,7 +346,7 @@ export default function SettingsDialog({
                   size="small"
                   label="Ventana (px)"
                   disabled={shouldSmoothBeDisabled}
-                  sx={{ width: 140 }}
+                  sx={{ width: 130 }}
                 />
               </Box>
             )}
@@ -333,9 +354,11 @@ export default function SettingsDialog({
         </Box>
       </DialogContent>
 
-      <DialogActions>
-        <Button onClick={onClose}>Cancelar</Button>
-        <Button onClick={handleApply} variant="contained">
+      <DialogActions sx={{ px: 2, py: 1, gap: 0.5 }}>
+        <Button onClick={onClose} size="small">
+          Cancelar
+        </Button>
+        <Button onClick={handleApply} variant="contained" size="small">
           Aplicar
         </Button>
       </DialogActions>

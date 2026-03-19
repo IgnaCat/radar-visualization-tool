@@ -27,7 +27,26 @@ import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import LayerControlList from "../controls/LayerControlList";
 import { formatSourceDisplay } from "../../utils/fieldAnalysis";
-import { FIELD_LIMITS, MARKS_01 } from "../../utils/radarFields";
+import { MARKS_01 } from "../../utils/radarFields";
+
+/**
+ * ProductSelectorDialog - Diálogo para seleccionar producto (PPI, CAPPI, COLMAX), campos a visualizar, volúmenes, radares y filtros.
+ *
+ * Props:
+ * - open: boolean
+ * - fieldAnalysis: object con análisis de campos comunes y específicos (opcional, pero recomendado)
+ * - fields_present: array de campos presentes (solo para compatibilidad legacy, se recomienda usar fieldAnalysis)
+ * - elevations: array de elevaciones disponibles (en grados)
+ * - volumes: array de volúmenes disponibles
+ * - radars: array de radares disponibles
+ * - onClose: () => void
+ * - onConfirm: (options) => void, donde options incluye { layers, product, height, elevation, filters, selectedVolumes, selectedRadars }
+ * - initialProduct: "ppi" | "cappi" | "colmax"
+ * - initialCappiHeight: número (altura inicial para CAPPI)
+ * - initialElevation: número (índice de elevación inicial para PPI)
+ * - initialLayers: array de capas con estado inicial (opcional, se recomienda manejar esto desde fieldAnalysis para consistencia)
+ * - initialFilters: objeto con estado inicial de filtros (opcional)
+ */
 
 // Si llega un alias raro del archivo, lo “canonizamos”
 const CANON = {
@@ -208,10 +227,10 @@ export default function ProductSelectorDialog({
   const MAX_RADARS = 3;
 
   const { PaperComponent: PaperWithState } = useDraggableDialogPaper({
-    defaultWidth: 600,
-    defaultHeight: 700,
-    minWidth: 500,
-    minHeight: 400,
+    defaultWidth: 450,
+    defaultHeight: 550,
+    minWidth: 350,
+    minHeight: 360,
   });
 
   // Siempre recalcular desde fieldAnalysis si está disponible
@@ -400,31 +419,11 @@ export default function ProductSelectorDialog({
     setSelectedRadars(Array.isArray(radars) ? radars.slice(0, MAX_RADARS) : []);
   }, [radars]);
 
-  // Variable activa (usamos para los filtros)
-  const activeField = (
-    layers.find((l) => l.enabled)?.field ||
-    layers.find((l) => l.enabled)?.label ||
-    "DBZH"
-  ).toUpperCase();
-  const limits = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
-
-  const [activeRange, setActiveRange] = useState([limits.min, limits.max]);
-
-  useEffect(() => {
-    const lim = FIELD_LIMITS[activeField] || { min: 0, max: 1 };
-    // Si el filtro other está habilitado, mantener sus valores, sino resetear a los límites del campo
-    if (!filters.other?.enabled) {
-      setActiveRange([lim.min, lim.max]);
-    }
-  }, [activeField, filters.other?.enabled]);
-
   const isCAPPI = product === "cappi";
   const isPPI = product === "ppi";
 
   const setRhohv = (patch) =>
     setFilters((f) => ({ ...f, rhohv: { ...f.rhohv, ...patch } }));
-  const setOther = (patch) =>
-    setFilters((f) => ({ ...f, other: { ...f.other, ...patch } }));
 
   const clamp01 = (v) => Math.max(0, Math.min(1, Number(v)));
 
@@ -440,18 +439,6 @@ export default function ProductSelectorDialog({
     }
 
     const filtersOut = [];
-
-    // Filtro de rango de variable activa (solo si está habilitado)
-    if (filters.other?.enabled) {
-      const [amin, amax] = activeRange;
-      filtersOut.push({
-        field: activeField,
-        type: "range",
-        min: amin,
-        max: amax,
-        enabled: true,
-      });
-    }
 
     // Filtro RHOHV
     if (filters.rhohv?.enabled) {
@@ -471,14 +458,14 @@ export default function ProductSelectorDialog({
     const finalLayers =
       product === "colmax"
         ? [
-          {
-            id: "dbzh",
-            label: "DBZH",
-            field: "DBZH",
-            enabled: true,
-            opacity: 1,
-          },
-        ]
+            {
+              id: "dbzh",
+              label: "DBZH",
+              field: "DBZH",
+              enabled: true,
+              opacity: 1,
+            },
+          ]
         : layers;
 
     onConfirm({
@@ -530,7 +517,7 @@ export default function ProductSelectorDialog({
       PaperProps={{
         sx: {
           pointerEvents: "auto",
-          minHeight: "320px",
+          minHeight: "280px",
           maxWidth: "none",
           m: 0,
         },
@@ -540,33 +527,58 @@ export default function ProductSelectorDialog({
     >
       <DialogTitle
         className="draggable-dialog-title"
-        sx={{ cursor: "move", userSelect: "none", flexShrink: 0 }}
+        sx={{
+          cursor: "move",
+          userSelect: "none",
+          flexShrink: 0,
+          px: 2,
+          py: 1.5,
+          fontSize: "1.1rem",
+          lineHeight: 1.2,
+        }}
       >
         Opciones de Visualización
       </DialogTitle>
 
-      <DialogContent dividers sx={{ flex: 1, overflow: "auto" }}>
+      <DialogContent
+        dividers
+        sx={{
+          flex: 1,
+          overflow: "auto",
+          px: 2,
+          py: 1.25,
+          "& .MuiTypography-subtitle1": { fontSize: "0.95rem" },
+          "& .MuiFormControlLabel-label": { fontSize: "0.86rem" },
+          "& .MuiTypography-caption": { fontSize: "0.72rem" },
+        }}
+      >
         {/* Grid layout: Vista a la izquierda, Volúmenes y Radares a la derecha */}
-        <Box display="grid" gridTemplateColumns="1fr 1fr" gap={3}>
+        <Box display="grid" gridTemplateColumns="1fr 1fr" gap={2}>
           {/* Columna izquierda: Seleccionar Vista */}
           <Box>
             <Typography variant="subtitle1" gutterBottom>
               Seleccionar Vista
             </Typography>
-            <FormControl component="fieldset" fullWidth>
+            <FormControl component="fieldset" fullWidth sx={{ pl: 1 }}>
               <RadioGroup
                 value={product}
                 onChange={(e) => setProduct(e.target.value)}
               >
-                <FormControlLabel value="ppi" control={<Radio />} label="PPI" />
+                <FormControlLabel
+                  value="ppi"
+                  control={<Radio size="small" />}
+                  label="PPI"
+                  sx={{ mb: 0.25 }}
+                />
                 <FormControlLabel
                   value="colmax"
-                  control={<Radio />}
+                  control={<Radio size="small" />}
                   label="COLMAX"
+                  sx={{ mb: 0.25 }}
                 />
                 <FormControlLabel
                   value="cappi"
-                  control={<Radio />}
+                  control={<Radio size="small" />}
                   label="CAPPI"
                 />
               </RadioGroup>
@@ -574,14 +586,14 @@ export default function ProductSelectorDialog({
           </Box>
 
           {/* Columna derecha: Volúmenes y Radares apilados */}
-          <Box display="flex" flexDirection="column" gap={2}>
+          <Box display="flex" flexDirection="column" gap={1.5}>
             {/* Selección de volúmenes */}
             {Array.isArray(volumes) && volumes.length > 0 && (
               <Box>
-                <Typography variant="subtitle1" mb={2} gutterBottom>
+                <Typography variant="subtitle1" mb={1} gutterBottom>
                   Seleccionar volúmenes
                 </Typography>
-                <Box display="flex" flexWrap="wrap" gap={1}>
+                <Box display="flex" flexWrap="wrap" gap={0.75} sx={{ pl: 1 }}>
                   {volumes.map((vol, idx) => {
                     const isSelected = selectedVolumes.includes(vol);
                     return (
@@ -617,9 +629,10 @@ export default function ProductSelectorDialog({
                                 ? 3
                                 : "0 3px 6px rgba(0,0,0,0.15)",
                             },
-                            minWidth: 90,
-                            px: 2,
-                            py: 1,
+                            minWidth: 78,
+                            fontSize: "0.78rem",
+                            px: 1.25,
+                            py: 0.64,
                           }}
                         >
                           {`Volumen ${vol}`}
@@ -634,10 +647,10 @@ export default function ProductSelectorDialog({
             {/* Selección de radares */}
             {Array.isArray(radars) && radars.length > 0 && (
               <Box>
-                <Typography variant="subtitle1" mb={2} gutterBottom>
+                <Typography variant="subtitle1" mb={1} gutterBottom>
                   Seleccionar radares
                 </Typography>
-                <Box display="flex" flexWrap="wrap" gap={1}>
+                <Box display="flex" flexWrap="wrap" gap={0.75} sx={{ pl: 1 }}>
                   {radars.map((site) => {
                     const isSelected = selectedRadars.includes(site);
                     const atMax =
@@ -687,9 +700,10 @@ export default function ProductSelectorDialog({
                                   ? 3
                                   : "0 3px 6px rgba(0,0,0,0.15)",
                               },
-                              minWidth: 90,
-                              px: 2,
-                              py: 1,
+                              minWidth: 78,
+                              fontSize: "0.78rem",
+                              px: 1.25,
+                              py: 0.6,
                             }}
                           >
                             {String(site)}
@@ -701,7 +715,7 @@ export default function ProductSelectorDialog({
                 </Box>
                 <Typography
                   variant="caption"
-                  sx={{ opacity: 0.7, display: "block", mt: 0.5 }}
+                  sx={{ opacity: 0.7, display: "block", mt: 1 }}
                 >
                   Máximo {MAX_RADARS} radares a la vez.
                 </Typography>
@@ -710,10 +724,10 @@ export default function ProductSelectorDialog({
           </Box>
         </Box>
 
-        <Divider sx={{ my: 2 }} />
+        <Divider sx={{ my: 1.5 }} />
 
         {/* Variables reales del archivo */}
-        <Box mt={2}>
+        <Box mt={1.25}>
           {/* Para COLMAX, solo mostrar DBZH bloqueado */}
           {product === "colmax" ? (
             <LayerControlList
@@ -728,10 +742,11 @@ export default function ProductSelectorDialog({
                   sources: [],
                 },
               ]}
-              onChange={() => { }} // No-op para COLMAX
+              onChange={() => {}} // No-op para COLMAX
               showOpacity={false}
               disableToggle={true}
               hideChips={true}
+              compact={true}
             />
           ) : (
             <LayerControlList
@@ -740,16 +755,17 @@ export default function ProductSelectorDialog({
               showOpacity={false}
               disableToggle={false}
               hideChips={false}
+              compact={true}
             />
           )}
         </Box>
 
         {isPPI && (
-          <Box mt={2}>
+          <Box mt={1.5}>
             <Typography variant="subtitle1" gutterBottom>
               Seleccionar elevación (°)
             </Typography>
-            <Box px={1}>
+            <Box px={2}>
               <Slider
                 value={elevationIdx}
                 onChange={(_, v) => setElevationIdx(v)}
@@ -768,13 +784,14 @@ export default function ProductSelectorDialog({
         )}
 
         {isCAPPI && (
-          <Box mt={2}>
+          <Box mt={1.5}>
             <Typography variant="subtitle1" gutterBottom>
               Seleccionar altura (m)
             </Typography>
-            <Box px={1}>
+            <Box px={0.5}>
               <TextField
                 fullWidth
+                size="small"
                 type="number"
                 variant="outlined"
                 value={height}
@@ -789,10 +806,10 @@ export default function ProductSelectorDialog({
           </Box>
         )}
 
-        {(isPPI || isCAPPI) && <Divider sx={{ my: 2 }} />}
+        {(isPPI || isCAPPI) && <Divider sx={{ my: 1.5 }} />}
 
         {/* ---- Filtros por rango ---- */}
-        <Box mt={2}>
+        <Box mt={1.5}>
           <Box display="flex" alignItems="center" gap={1}>
             <IconButton
               size="small"
@@ -807,10 +824,11 @@ export default function ProductSelectorDialog({
           </Box>
           <Collapse in={showFilters} timeout="auto" unmountOnExit>
             {/* RHOHV */}
-            <Box mt={1} px={1}>
+            <Box mt={0.75} px={0.5}>
               <FormControlLabel
                 control={
                   <Checkbox
+                    size="small"
                     checked={!!filters.rhohv?.enabled}
                     onChange={(e) => setRhohv({ enabled: e.target.checked })}
                   />
@@ -820,8 +838,8 @@ export default function ProductSelectorDialog({
               <Box
                 display="flex"
                 alignItems="center"
-                gap={2}
-                pl={5}
+                gap={1.25}
+                pl={4}
                 sx={{ flexWrap: "wrap" }}
               >
                 <Slider
@@ -839,7 +857,7 @@ export default function ProductSelectorDialog({
                   marks={MARKS_01}
                   valueLabelDisplay="auto"
                   disabled={!filters.rhohv?.enabled}
-                  sx={{ flex: 1, minWidth: 220 }}
+                  sx={{ flex: 1, minWidth: 190 }}
                 />
                 <TextField
                   type="number"
@@ -849,6 +867,7 @@ export default function ProductSelectorDialog({
                   onChange={(e) => setRhohv({ min: clamp01(e.target.value) })}
                   inputProps={{ step: 0.01, min: 0, max: 1 }}
                   disabled={!filters.rhohv?.enabled}
+                  sx={{ width: 74 }}
                 />
                 <TextField
                   type="number"
@@ -858,53 +877,7 @@ export default function ProductSelectorDialog({
                   onChange={(e) => setRhohv({ max: clamp01(e.target.value) })}
                   inputProps={{ step: 0.01, min: 0, max: 1 }}
                   disabled={!filters.rhohv?.enabled}
-                />
-              </Box>
-            </Box>
-
-            {/* Filtros de variable seleccionada */}
-            <Box mt={2} mb={2}>
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={!!filters.other?.enabled}
-                    onChange={(e) => setOther({ enabled: e.target.checked })}
-                  />
-                }
-                label={`Rango de ${activeField}`}
-              />
-              <Box display="flex" alignItems="center" gap={1} pl={5}>
-                <Slider
-                  value={activeRange}
-                  onChange={(_, v) => setActiveRange(v)}
-                  step={0.1}
-                  min={limits.min}
-                  max={limits.max}
-                  valueLabelDisplay="auto"
-                  disabled={!filters.other?.enabled}
-                  sx={{ flex: 1, minWidth: 180 }}
-                />
-                <TextField
-                  size="small"
-                  type="number"
-                  label="Min"
-                  value={activeRange[0]}
-                  onChange={(e) =>
-                    setActiveRange(([_, b]) => [Number(e.target.value), b])
-                  }
-                  disabled={!filters.other?.enabled}
-                  sx={{ width: 80 }}
-                />
-                <TextField
-                  size="small"
-                  type="number"
-                  label="Max"
-                  value={activeRange[1]}
-                  onChange={(e) =>
-                    setActiveRange(([a, _]) => [a, Number(e.target.value)])
-                  }
-                  disabled={!filters.other?.enabled}
-                  sx={{ width: 80 }}
+                  sx={{ width: 74 }}
                 />
               </Box>
             </Box>
@@ -912,11 +885,11 @@ export default function ProductSelectorDialog({
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ flexShrink: 0 }}>
-        <Button onClick={handleClose} color="secondary">
+      <DialogActions sx={{ flexShrink: 0, px: 2, py: 1, gap: 0.5 }}>
+        <Button onClick={handleClose} color="secondary" size="small">
           Cancelar
         </Button>
-        <Button onClick={handleAccept} variant="contained">
+        <Button onClick={handleAccept} variant="contained" size="small">
           Aceptar
         </Button>
       </DialogActions>

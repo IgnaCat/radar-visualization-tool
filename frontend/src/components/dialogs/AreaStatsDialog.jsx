@@ -173,21 +173,25 @@ export default function AreaStatsDialog({
           height: "100%",
         }}
       >
-        <CardContent sx={{ p: 2, "&:last-child": { pb: 2 } }}>
-          <Box sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-            <IconComponent sx={{ fontSize: 20, color, mr: 1 }} />
+        <CardContent sx={{ p: 1.25, "&:last-child": { pb: 1.25 } }}>
+          <Box sx={{ display: "flex", alignItems: "center", mb: 0.5 }}>
+            <IconComponent sx={{ fontSize: 18, color, mr: 0.75 }} />
             <Typography variant="caption" color="text.secondary">
               {label}
             </Typography>
           </Box>
-          <Typography variant="h7" component="div" fontWeight="bold">
+          <Typography
+            component="div"
+            fontWeight="bold"
+            sx={{ fontSize: "0.96rem" }}
+          >
             {value}
             {currentUnit && (
               <Typography
                 component="span"
                 variant="body2"
                 color="text.secondary"
-                sx={{ ml: 0.5 }}
+                sx={{ ml: 0.35, fontSize: "0.8rem" }}
               >
                 {currentUnit}
               </Typography>
@@ -199,10 +203,10 @@ export default function AreaStatsDialog({
   };
 
   const { PaperComponent: PaperWithState } = useDraggableDialogPaper({
-    defaultWidth: 760,
-    defaultHeight: 600,
-    minWidth: 480,
-    minHeight: 400,
+    defaultWidth: 700,
+    defaultHeight: 560,
+    minWidth: 440,
+    minHeight: 360,
   });
 
   return (
@@ -234,20 +238,34 @@ export default function AreaStatsDialog({
           cursor: "move",
           borderBottom: "1px solid",
           borderColor: "divider",
-          pb: 2,
+          px: 2,
+          py: 1.5,
         }}
       >
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <BarChartIcon />
-          <Typography variant="h6" component="span">
+          <BarChartIcon sx={{ fontSize: 20 }} />
+          <Typography
+            component="span"
+            sx={{ fontSize: "1.1rem", lineHeight: 1.2 }}
+          >
             Estadísticas del Área
           </Typography>
         </Box>
       </DialogTitle>
 
-      <DialogContent sx={{ p: 3, overflow: "auto", flex: 1 }}>
+      <DialogContent
+        sx={{
+          px: 2,
+          py: 1.25,
+          overflow: "auto",
+          flex: 1,
+          "& .MuiTypography-subtitle1": { fontSize: "0.95rem" },
+          "& .MuiFormControlLabel-label": { fontSize: "0.86rem" },
+          "& .MuiTypography-caption": { fontSize: "0.72rem" },
+        }}
+      >
         {loading && (
-          <Box sx={{ textAlign: "center", py: 4 }}>
+          <Box sx={{ textAlign: "center", py: 3 }}>
             <Typography color="text.secondary">
               Calculando estadísticas...
             </Typography>
@@ -288,8 +306,8 @@ export default function AreaStatsDialog({
             {/* Header con variable actual */}
             <Box
               sx={{
-                mt: 2,
-                mb: 2,
+                mt: 1.5,
+                mb: 1.5,
                 p: 1,
                 bgcolor: "primary.main",
                 color: "primary.contrastText",
@@ -317,7 +335,7 @@ export default function AreaStatsDialog({
             </Box>
 
             {/* Grid de estadísticas principales */}
-            <Grid container spacing={3} sx={{ mb: 3 }}>
+            <Grid container spacing={2} sx={{ mb: 2 }}>
               <Grid item xs={6} sm={4}>
                 <StatCard
                   icon={TrendingDown}
@@ -368,7 +386,7 @@ export default function AreaStatsDialog({
               </Grid> */}
             </Grid>
 
-            <Divider sx={{ my: 3 }} />
+            <Divider sx={{ my: 2 }} />
 
             {/* Sección para agregar más variables (placeholder visual) */}
             <Box>
@@ -381,11 +399,11 @@ export default function AreaStatsDialog({
                     size="small"
                     onClick={handleOpenFieldSelector}
                     sx={{
-                      border: "2px solid",
+                      border: "1px solid",
                       borderColor: "divider",
                     }}
                   >
-                    <AddIcon />
+                    <AddIcon sx={{ fontSize: 18 }} />
                   </IconButton>
                 </Tooltip>
               </Box>
@@ -396,13 +414,13 @@ export default function AreaStatsDialog({
                 open={Boolean(anchorEl)}
                 onClose={handleCloseFieldSelector}
                 PaperProps={{
-                  sx: { maxHeight: 400, minWidth: 250 },
+                  sx: { maxHeight: 360, minWidth: 230 },
                 }}
               >
                 <Box
                   sx={{
-                    px: 2,
-                    py: 1,
+                    px: 1.5,
+                    py: 0.75,
                     borderBottom: "1px solid",
                     borderColor: "divider",
                   }}
@@ -460,9 +478,9 @@ export default function AreaStatsDialog({
                 <Box
                   sx={{
                     display: "flex",
-                    gap: 1,
+                    gap: 0.75,
                     flexWrap: "wrap",
-                    mb: 2,
+                    mb: 1.5,
                   }}
                 >
                   {selectedFields.map((field) => (
@@ -487,7 +505,7 @@ export default function AreaStatsDialog({
                     sx={{
                       width: "100%",
                       borderCollapse: "separate",
-                      borderSpacing: "8px 4px",
+                      borderSpacing: "6px 3px",
                     }}
                   >
                     <thead>
@@ -606,7 +624,7 @@ export default function AreaStatsDialog({
                     borderRadius: 1,
                     border: "2px solid",
                     borderColor: "divider",
-                    mt: 2,
+                    mt: 1.5,
                   }}
                 >
                   {/* Mockup de tabla comparativa */}
@@ -616,7 +634,7 @@ export default function AreaStatsDialog({
                       sx={{
                         width: "100%",
                         borderCollapse: "separate",
-                        borderSpacing: "8px 4px",
+                        borderSpacing: "6px 3px",
                         opacity: 0.6,
                       }}
                     >
@@ -692,7 +710,7 @@ export default function AreaStatsDialog({
                   <Typography
                     variant="caption"
                     color="text.secondary"
-                    sx={{ mt: 1.5, display: "block", fontStyle: "italic" }}
+                    sx={{ mt: 1, display: "block", fontStyle: "italic" }}
                   >
                     Agrega variables, las estadísticas se mostrarían en columnas
                     para fácil comparación
@@ -705,9 +723,9 @@ export default function AreaStatsDialog({
       </DialogContent>
 
       <DialogActions
-        sx={{ p: 2, borderTop: "1px solid", borderColor: "divider" }}
+        sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}
       >
-        <Button onClick={onClose} variant="contained">
+        <Button onClick={onClose} variant="contained" size="small">
           Cerrar
         </Button>
       </DialogActions>

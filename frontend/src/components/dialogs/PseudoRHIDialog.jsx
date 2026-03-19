@@ -54,10 +54,10 @@ export default function PseudoRHIDialog({
   onAutoReopen,
 }) {
   const { PaperComponent: PaperWithState } = useDraggableDialogPaper({
-    defaultWidth: 600,
-    defaultHeight: 600,
-    minWidth: 500,
-    minHeight: 400,
+    defaultWidth: 540,
+    defaultHeight: 420,
+    minWidth: 440,
+    minHeight: 360,
   });
 
   const [selectedFields, setSelectedFields] = useState(() => {
@@ -436,12 +436,31 @@ export default function PseudoRHIDialog({
         <DialogTitle
           id="draggable-dialog-title"
           className="draggable-dialog-title"
-          sx={{ cursor: "move", userSelect: "none", flexShrink: 0 }}
+          sx={{
+            cursor: "move",
+            userSelect: "none",
+            flexShrink: 0,
+            px: 2,
+            py: 1.5,
+            fontSize: "1.1rem",
+            lineHeight: 1.2,
+          }}
         >
           Pseudo-RHI (corte vertical)
         </DialogTitle>
-        <DialogContent dividers sx={{ flex: 1, overflow: "auto" }}>
-          <Box display="grid" gridTemplateColumns="1fr" gap={2} mt={2}>
+        <DialogContent
+          dividers
+          sx={{
+            flex: 1,
+            overflow: "auto",
+            px: 2,
+            py: 1.25,
+            "& .MuiTypography-subtitle2": { fontSize: "0.9rem" },
+            "& .MuiFormControlLabel-label": { fontSize: "0.86rem" },
+            "& .MuiTypography-caption": { fontSize: "0.72rem" },
+          }}
+        >
+          <Box display="grid" gridTemplateColumns="1fr" gap={1.5} mt={0.5}>
             <Box display="grid" gridTemplateColumns="1fr" gap={1}>
               <Autocomplete
                 multiple
@@ -478,7 +497,11 @@ export default function PseudoRHIDialog({
             </Box>
 
             <Typography variant="subtitle2">Punto de inicio</Typography>
-            <Box display="grid" gridTemplateColumns="1fr 1fr auto auto" gap={2}>
+            <Box
+              display="grid"
+              gridTemplateColumns="1fr 1fr auto auto"
+              gap={1.25}
+            >
               <TextField
                 size="small"
                 label="Latitud inicio"
@@ -497,6 +520,7 @@ export default function PseudoRHIDialog({
                 variant="outlined"
                 onClick={handlePickStart}
                 disabled={pickTarget === "end"}
+                size="small"
               >
                 Elegir en mapa
               </Button>
@@ -516,7 +540,7 @@ export default function PseudoRHIDialog({
             )}
 
             <Typography variant="subtitle2">Punto de fin</Typography>
-            <Box display="grid" gridTemplateColumns="1fr 1fr auto" gap={2}>
+            <Box display="grid" gridTemplateColumns="1fr 1fr auto" gap={1.25}>
               <TextField
                 size="small"
                 label="Latitud fin"
@@ -535,6 +559,7 @@ export default function PseudoRHIDialog({
                 variant="outlined"
                 onClick={handlePickEnd}
                 disabled={pickTarget === "start"}
+                size="small"
               >
                 Elegir en mapa
               </Button>
@@ -549,7 +574,7 @@ export default function PseudoRHIDialog({
             </Typography>
           )}
 
-          <Box mt={3}>
+          <Box mt={1.5}>
             <Box display="flex" alignItems="center" gap={1}>
               <IconButton
                 size="small"
@@ -571,10 +596,10 @@ export default function PseudoRHIDialog({
                   showVariableFilterDefault={true}
                 />
                 <Box
-                  mt={2}
+                  mt={1.5}
                   display="grid"
                   gridTemplateColumns="1fr 1fr"
-                  gap={2}
+                  gap={1.25}
                 >
                   <TextField
                     size="small"
@@ -610,13 +635,14 @@ export default function PseudoRHIDialog({
                   />
                 </Box>
 
-                <Divider sx={{ my: 2 }} />
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                <Divider sx={{ my: 1.5 }} />
+                <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
                   Suavizado del corte
                 </Typography>
                 <FormControlLabel
                   control={
                     <Checkbox
+                      size="small"
                       checked={smoothingEnabled}
                       onChange={(e) => setSmoothingEnabled(e.target.checked)}
                     />
@@ -630,13 +656,18 @@ export default function PseudoRHIDialog({
                   value={smoothingMethod}
                   onChange={(e) => setSmoothingMethod(e.target.value)}
                   disabled={!smoothingEnabled}
-                  sx={{ mt: 1, maxWidth: 220 }}
+                  sx={{ mt: 0.75, maxWidth: 220 }}
                 >
                   <MenuItem value="gaussian">Gaussiano</MenuItem>
                   <MenuItem value="median">Mediana</MenuItem>
                 </TextField>
                 <Box
-                  sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1.25,
+                    mt: 0.75,
+                  }}
                 >
                   {smoothingMethod === "gaussian" ? (
                     <>
@@ -662,7 +693,7 @@ export default function PseudoRHIDialog({
                         }}
                         disabled={!smoothingEnabled}
                         inputProps={{ min: 0, max: 5, step: 0.1 }}
-                        sx={{ width: 100 }}
+                        sx={{ width: 90 }}
                       />
                     </>
                   ) : (
@@ -679,7 +710,7 @@ export default function PseudoRHIDialog({
                       }}
                       disabled={!smoothingEnabled}
                       inputProps={{ min: 1, max: 15, step: 1 }}
-                      sx={{ width: 180 }}
+                      sx={{ width: 160 }}
                     />
                   )}
                 </Box>
@@ -688,18 +719,22 @@ export default function PseudoRHIDialog({
           </Box>
           {resultImgs.length > 0 && (
             <>
-              <Divider sx={{ my: 2 }} />
+              <Divider sx={{ my: 1.5 }} />
               <Box>
-                <Typography variant="subtitle2" color="text.secondary" mb={2}>
+                <Typography
+                  variant="subtitle2"
+                  color="text.secondary"
+                  mb={1.25}
+                >
                   Resultados de los cortes verticales
                 </Typography>
                 {resultImgs.map((result, idx) => (
-                  <Box key={idx} mb={3}>
+                  <Box key={idx} mb={2}>
                     <Box
                       display="flex"
                       justifyContent="space-between"
                       alignItems="center"
-                      mb={1}
+                      mb={0.75}
                     >
                       <Typography variant="body2" fontWeight="medium">
                         Campo: {result.field}
@@ -746,12 +781,12 @@ export default function PseudoRHIDialog({
               {elevationProfile?.profile &&
                 elevationProfile.profile.length > 0 && (
                   <>
-                    <Divider sx={{ my: 2 }} />
+                    <Divider sx={{ my: 1.5 }} />
                     <Box>
                       <Typography
                         variant="subtitle2"
                         color="text.secondary"
-                        mb={2}
+                        mb={1.25}
                       >
                         Perfil de elevación del terreno
                       </Typography>
@@ -781,14 +816,15 @@ export default function PseudoRHIDialog({
           )}
         </DialogContent>
 
-        <DialogActions sx={{ flexShrink: 0 }}>
-          <Button onClick={handleClose} color="secondary">
+        <DialogActions sx={{ flexShrink: 0, px: 2, py: 1, gap: 0.5 }}>
+          <Button onClick={handleClose} color="secondary" size="small">
             Cerrar
           </Button>
           <Button
             onClick={handleGenerate}
             variant="contained"
             disabled={loading}
+            size="small"
           >
             {loading ? "Generando..." : "Generar corte"}
           </Button>
