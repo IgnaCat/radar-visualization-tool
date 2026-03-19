@@ -33,6 +33,7 @@ function LayerControlList({
   showOpacity = true,
   disableToggle = false,
   hideChips = false,
+  compact = false,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -118,20 +119,25 @@ function LayerControlList({
       <Typography
         variant="subtitle1"
         sx={{
-          mb: 1,
-          p: 1,
+          mb: compact ? 0.5 : 1,
+          p: compact ? 0.5 : 1,
+          fontSize: compact ? "0.95rem" : undefined,
         }}
       >
         {title}
       </Typography>
 
       {items.length === 0 && (
-        <Typography variant="body2" sx={{ p: 1 }}>
+        <Typography variant="body2" sx={{ p: compact ? 0.5 : 1 }}>
           No hay productos disponibles
         </Typography>
       )}
 
-      <Box display="grid" gridTemplateColumns="1fr 1fr" gap={0.5}>
+      <Box
+        display="grid"
+        gridTemplateColumns="1fr 1fr"
+        gap={compact ? 0.25 : 0.5}
+      >
         {sortedItems.length > 0 &&
           visibleItems.map((it, displayIdx) => {
             // El índice real en el array completo
@@ -147,15 +153,16 @@ function LayerControlList({
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, actualIdx)}
                 sx={{
-                  px: 1,
-                  py: 0.5,
+                  px: compact ? 0.5 : 1,
+                  py: compact ? 0.25 : 0.5,
                   width: "100%",
                   bgcolor: "background.paper",
                 }}
               >
                 {/* Checkbox + Nombre + Slider + Manija en una sola línea */}
-                <Box display="flex" alignItems="center" gap={1}>
+                <Box display="flex" alignItems="center" gap={compact ? 0.5 : 1}>
                   <Checkbox
+                    size={compact ? "small" : "medium"}
                     checked={!!it.enabled}
                     onChange={() => toggleEnabled(actualIdx)}
                     disabled={
@@ -169,10 +176,16 @@ function LayerControlList({
                   <Box
                     display="flex"
                     flexDirection="column"
-                    gap={0.5}
-                    sx={{ minWidth: 80 }}
+                    gap={compact ? 0.25 : 0.5}
+                    sx={{ minWidth: compact ? 64 : 80 }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontWeight: 500,
+                        fontSize: compact ? "0.78rem" : undefined,
+                      }}
+                    >
                       {it.label}
                     </Typography>
 
@@ -186,17 +199,21 @@ function LayerControlList({
                             color="success"
                             variant="outlined"
                             sx={{
-                              height: 18,
-                              fontSize: "0.65rem",
+                              height: compact ? 16 : 18,
+                              fontSize: compact ? "0.58rem" : "0.65rem",
                               fontWeight: 400,
-                              px: 0.5,
+                              px: compact ? 0.25 : 0.5,
                               "& .MuiChip-label": {
-                                px: 0.5,
+                                px: compact ? 0.35 : 0.5,
                               },
                             }}
                           />
                         ) : it.sources && it.sources.length > 0 ? (
-                          <Box display="flex" flexWrap="wrap" gap={0.5}>
+                          <Box
+                            display="flex"
+                            flexWrap="wrap"
+                            gap={compact ? 0.25 : 0.5}
+                          >
                             {it.sources.map((source, idx) => (
                               <Chip
                                 key={idx}
@@ -208,12 +225,12 @@ function LayerControlList({
                                 color="info"
                                 variant="outlined"
                                 sx={{
-                                  height: 18,
-                                  fontSize: "0.6rem",
+                                  height: compact ? 16 : 18,
+                                  fontSize: compact ? "0.56rem" : "0.6rem",
                                   fontWeight: 400,
-                                  px: 0.5,
+                                  px: compact ? 0.25 : 0.5,
                                   "& .MuiChip-label": {
-                                    px: 0.5,
+                                    px: compact ? 0.35 : 0.5,
                                   },
                                 }}
                               />
@@ -239,9 +256,13 @@ function LayerControlList({
                   <Tooltip title="Arrastrar para cambiar el orden">
                     <IconButton
                       size="small"
-                      sx={{ cursor: "grab", px: 1, mx: 3 }}
+                      sx={{
+                        cursor: "grab",
+                        px: compact ? 0.5 : 1,
+                        mx: compact ? 0.5 : 3,
+                      }}
                     >
-                      <DragIndicatorIcon />
+                      <DragIndicatorIcon sx={{ fontSize: compact ? 18 : 20 }} />
                     </IconButton>
                   </Tooltip>
                 </Box>
@@ -252,12 +273,15 @@ function LayerControlList({
 
       {/* Botón para expandir/colapsar */}
       {hasMoreItems && (
-        <Box display="flex" justifyContent="center" mt={1}>
+        <Box display="flex" justifyContent="center" mt={compact ? 0.5 : 1}>
           <Button
             size="small"
             onClick={() => setIsExpanded(!isExpanded)}
             startIcon={isExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-            sx={{ textTransform: "none" }}
+            sx={{
+              textTransform: "none",
+              fontSize: compact ? "0.75rem" : undefined,
+            }}
           >
             {isExpanded
               ? "Mostrar menos"
@@ -266,7 +290,7 @@ function LayerControlList({
         </Box>
       )}
 
-      <Divider sx={{ mt: 1 }} />
+      <Divider sx={{ mt: 2 }} />
     </Box>
   );
 }
@@ -288,6 +312,7 @@ LayerControlList.propTypes = {
   showOpacity: PropTypes.bool, // Mostrar slider de opacidad
   disableToggle: PropTypes.bool, // Deshabilitar la selección/deselección de campos
   hideChips: PropTypes.bool, // Ocultar chips de origen (Común, Vol, etc.)
+  compact: PropTypes.bool, // Modo compacto para diálogos con UI más densa
 };
 
 export default LayerControlList;

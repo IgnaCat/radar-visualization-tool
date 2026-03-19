@@ -33,7 +33,11 @@ from .filter_application import (
     apply_visual_filters,
     build_gatefilter_for_visual,
 )
-from .smoothing import apply_gaussian_smoothing_masked
+from .smoothing import (
+    apply_gaussian_smoothing_masked,
+    apply_median_smoothing_masked,
+    apply_smoothing_masked,
+)
 
 __all__ = [
     "get_or_build_grid3d_with_operator",
@@ -57,4 +61,6 @@ __all__ = [
     "apply_visual_filters",
     "build_gatefilter_for_visual",
     "apply_gaussian_smoothing_masked",
+    "apply_median_smoothing_masked",
+    "apply_smoothing_masked",
 ]

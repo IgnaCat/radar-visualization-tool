@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -84,9 +84,17 @@ export default function PseudoRHIDialog({
   const [elevationProfile, setElevationProfile] = useState(null);
   const [expandedElevation, setExpandedElevation] = useState(false);
   const [smoothingEnabled, setSmoothingEnabled] = useState(false);
+  const [smoothingMethod, setSmoothingMethod] = useState("median");
   const [smoothingSigma, setSmoothingSigma] = useState(0.8);
-  const [smoothingOnlyWhenNearest, setSmoothingOnlyWhenNearest] =
-    useState(true);
+  const [smoothingMedianSize, setSmoothingMedianSize] = useState(3);
+  const lastLinePreviewRef = useRef({ start: null, end: null });
+
+  const radarSiteLat = Number.isFinite(radarSite?.lat)
+    ? Number(radarSite.lat)
+    : null;
+  const radarSiteLon = Number.isFinite(radarSite?.lon)
+    ? Number(radarSite.lon)
+    : null;
 
   const { downloadImage, generateFilename } = useDownloads();
   const { enqueueSnackbar } = useSnackbar();
@@ -163,8 +171,8 @@ export default function PseudoRHIDialog({
         ? parsedStartLat != null && parsedStartLon != null
           ? { lat: parsedStartLat, lon: parsedStartLon }
           : null
-        : radarSite
-          ? { lat: radarSite.lat, lon: radarSite.lon }
+        : radarSiteLat != null && radarSiteLon != null
+          ? { lat: radarSiteLat, lon: radarSiteLon }
           : null;
 
       if (!start) {
@@ -193,7 +201,7 @@ export default function PseudoRHIDialog({
     };
 
     fetchElevationProfile();
-  }, [startLat, startLon, endLat, endLon, radarSite]);
+  }, [startLat, startLon, endLat, endLon, radarSiteLat, radarSiteLon]);
 
   // Map click handling: automatic chaining start -> end
   useEffect(() => {
@@ -253,25 +261,50 @@ export default function PseudoRHIDialog({
         parsedStartLat != null && parsedStartLon != null
           ? { lat: parsedStartLat, lon: parsedStartLon }
           : null;
-    } else if (hasEnd && radarSite && !pickTarget) {
+    } else if (
+      hasEnd &&
+      radarSiteLat != null &&
+      radarSiteLon != null &&
+      !pickTarget
+    ) {
       // Si ya se eligió el fin pero no hay inicio explícito y no estamos en medio de elegir puntos,
       // usar el origen del radar como inicio implícito
-      startPoint = { lat: radarSite.lat, lon: radarSite.lon };
+      startPoint = { lat: radarSiteLat, lon: radarSiteLon };
     }
 
-    onLinePreviewChange?.({
+    const nextPreview = {
       start: startPoint,
       end:
         hasEnd && parsedEndLat != null && parsedEndLon != null
           ? { lat: parsedEndLat, lon: parsedEndLon }
           : null,
-    });
+    };
+
+    const prevPreview = lastLinePreviewRef.current;
+    const sameStart =
+      (prevPreview.start == null && nextPreview.start == null) ||
+      (prevPreview.start != null &&
+        nextPreview.start != null &&
+        prevPreview.start.lat === nextPreview.start.lat &&
+        prevPreview.start.lon === nextPreview.start.lon);
+    const sameEnd =
+      (prevPreview.end == null && nextPreview.end == null) ||
+      (prevPreview.end != null &&
+        nextPreview.end != null &&
+        prevPreview.end.lat === nextPreview.end.lat &&
+        prevPreview.end.lon === nextPreview.end.lon);
+
+    if (!sameStart || !sameEnd) {
+      lastLinePreviewRef.current = nextPreview;
+      onLinePreviewChange?.(nextPreview);
+    }
   }, [
     startLat,
     startLon,
     endLat,
     endLon,
-    radarSite,
+    radarSiteLat,
+    radarSiteLon,
     pickTarget,
     onLinePreviewChange,
   ]);
@@ -334,8 +367,10 @@ export default function PseudoRHIDialog({
             ),
             smoothing: {
               enabled: Boolean(smoothingEnabled),
+              method: smoothingMethod,
               sigma: Number(smoothingSigma),
-              only_when_nearest: Boolean(smoothingOnlyWhenNearest),
+              median_size: Number(smoothingMedianSize),
+              only_when_nearest: false,
             },
           });
           if (resp?.[0]?.image_url) {
@@ -588,44 +623,65 @@ export default function PseudoRHIDialog({
                   }
                   label="Aplicar suavizado"
                 />
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={smoothingOnlyWhenNearest}
-                      onChange={(e) =>
-                        setSmoothingOnlyWhenNearest(e.target.checked)
-                      }
-                    />
-                  }
-                  label="Aplicar solo con nearest"
-                />
+                <TextField
+                  size="small"
+                  label="Método"
+                  select
+                  value={smoothingMethod}
+                  onChange={(e) => setSmoothingMethod(e.target.value)}
+                  disabled={!smoothingEnabled}
+                  sx={{ mt: 1, maxWidth: 220 }}
+                >
+                  <MenuItem value="gaussian">Gaussiano</MenuItem>
+                  <MenuItem value="median">Mediana</MenuItem>
+                </TextField>
                 <Box
                   sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}
                 >
-                  <Slider
-                    value={Number(smoothingSigma)}
-                    onChange={(_, val) => setSmoothingSigma(Number(val))}
-                    min={0}
-                    max={3}
-                    step={0.1}
-                    disabled={!smoothingEnabled}
-                    sx={{ flex: 1 }}
-                  />
-                  <TextField
-                    size="small"
-                    label="Sigma"
-                    type="number"
-                    value={smoothingSigma}
-                    onChange={(e) => {
-                      const v = parseFloat(e.target.value);
-                      if (!Number.isNaN(v) && v >= 0 && v <= 5) {
-                        setSmoothingSigma(v);
-                      }
-                    }}
-                    disabled={!smoothingEnabled}
-                    inputProps={{ min: 0, max: 5, step: 0.1 }}
-                    sx={{ width: 100 }}
-                  />
+                  {smoothingMethod === "gaussian" ? (
+                    <>
+                      <Slider
+                        value={Number(smoothingSigma)}
+                        onChange={(_, val) => setSmoothingSigma(Number(val))}
+                        min={0}
+                        max={3}
+                        step={0.1}
+                        disabled={!smoothingEnabled}
+                        sx={{ flex: 1 }}
+                      />
+                      <TextField
+                        size="small"
+                        label="Sigma"
+                        type="number"
+                        value={smoothingSigma}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value);
+                          if (!Number.isNaN(v) && v >= 0 && v <= 5) {
+                            setSmoothingSigma(v);
+                          }
+                        }}
+                        disabled={!smoothingEnabled}
+                        inputProps={{ min: 0, max: 5, step: 0.1 }}
+                        sx={{ width: 100 }}
+                      />
+                    </>
+                  ) : (
+                    <TextField
+                      size="small"
+                      label="Ventana (px)"
+                      type="number"
+                      value={smoothingMedianSize}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(v) && v >= 1 && v <= 15) {
+                          setSmoothingMedianSize(v);
+                        }
+                      }}
+                      disabled={!smoothingEnabled}
+                      inputProps={{ min: 1, max: 15, step: 1 }}
+                      sx={{ width: 180 }}
+                    />
+                  )}
                 </Box>
               </Box>
             </Collapse>

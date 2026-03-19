@@ -35,7 +35,7 @@ from .radar_processing import (
     calculate_grid_points,
     fill_dbzh_if_needed,
     separate_filters,
-    apply_gaussian_smoothing_masked,
+    apply_smoothing_masked,
 )
 
 
@@ -50,7 +50,9 @@ def _generate_cog_filename(
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors=DEFAULT_MAX_NEIGHBORS,
     smoothing_enabled: bool = False,
+    smoothing_method: str = "median",
     smoothing_sigma: float = 0.8,
+    smoothing_median_size: int = 3,
     smoothing_only_when_nearest: bool = True,
 ) -> str:
     """
@@ -67,7 +69,9 @@ def _generate_cog_filename(
         weight_func: Función de ponderación usada en interpolación
         max_neighbors: Máximo número de vecinos
         smoothing_enabled: Si se aplica suavizado opcional
+        smoothing_method: Método de suavizado ('gaussian' o 'median')
         smoothing_sigma: Intensidad de suavizado gaussiano
+        smoothing_median_size: Tamaño de ventana para mediana
         smoothing_only_when_nearest: Si el suavizado aplica solo para nearest
 
     Returns:
@@ -98,10 +102,14 @@ def _generate_cog_filename(
         and ((weight_func == "nearest") or (not smoothing_only_when_nearest))
     )
     if effective_smoothing:
-        sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
-        sigma_tag = sigma_tag.replace(".", "p")
+        method = (smoothing_method or "median").lower()
         mode_tag = "nearestonly" if smoothing_only_when_nearest else "allinterp"
-        smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
+        if method == "median":
+            smooth_suffix = f"_smooth_m{int(smoothing_median_size)}_{mode_tag}"
+        else:
+            sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
+            sigma_tag = sigma_tag.replace(".", "p")
+            smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
     else:
         smooth_suffix = "_nosmooth"
 
@@ -163,7 +171,9 @@ def process_radar_to_cog(
     weight_func=DEFAULT_WEIGHT_FUNC,
     max_neighbors=DEFAULT_MAX_NEIGHBORS,
     smoothing_enabled=False,
+    smoothing_method="median",
     smoothing_sigma=0.8,
+    smoothing_median_size=3,
     smoothing_only_when_nearest=True,
 ):
     """
@@ -197,7 +207,9 @@ def process_radar_to_cog(
         weight_func=weight_func,
         max_neighbors=max_neighbors,
         smoothing_enabled=smoothing_enabled,
+        smoothing_method=smoothing_method,
         smoothing_sigma=smoothing_sigma,
+        smoothing_median_size=smoothing_median_size,
         smoothing_only_when_nearest=smoothing_only_when_nearest,
     )
     cog_path = Path(output_dir) / unique_cog_name
@@ -511,8 +523,11 @@ def process_radar_to_cog(
     # Mantener cache base intacto: aplicar suavizado sobre copia para salida final.
     arr_to_render = arr_warped
     if should_apply_smoothing:
-        arr_to_render = apply_gaussian_smoothing_masked(
-            arr_warped, float(smoothing_sigma)
+        arr_to_render = apply_smoothing_masked(
+            arr=arr_warped,
+            method=smoothing_method,
+            sigma=float(smoothing_sigma),
+            median_size=int(smoothing_median_size),
         )
 
     # Crear COG RGB desde el array warped (suavizado opcional) usando la función optimizada

@@ -141,8 +141,10 @@ export default function App() {
     maxNeighbors: 1,
     smoothing: {
       enabled: false,
+      method: "median",
       sigma: 0.8,
-      only_when_nearest: true,
+      median_size: 3,
+      only_when_nearest: false,
     },
   });
   const [settingsApplyVersion, setSettingsApplyVersion] = useState(0);

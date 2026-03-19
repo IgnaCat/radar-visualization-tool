@@ -3,6 +3,7 @@ Modelos para el procesamiento de archivos de radar.
 """
 
 from pydantic import BaseModel, Field, field_serializer
+from typing import Literal
 from typing import List, Optional, Dict
 from datetime import datetime
 from pathlib import Path
@@ -18,11 +19,21 @@ class ImageSmoothing(BaseModel):
         default=False,
         description="Activa/desactiva suavizado en la imagen final",
     )
+    method: Literal["gaussian", "median"] = Field(
+        default="median",
+        description="Método de suavizado: 'gaussian' o 'median'",
+    )
     sigma: float = Field(
         default=0.8,
         ge=0.0,
         le=5.0,
         description="Intensidad de suavizado Gaussiano (desvío estándar en píxeles)",
+    )
+    median_size: int = Field(
+        default=3,
+        ge=1,
+        le=15,
+        description="Tamaño de ventana para suavizado de mediana (impar recomendado)",
     )
     only_when_nearest: bool = Field(
         default=True,

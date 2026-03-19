@@ -212,7 +212,9 @@ class ProcessingOrchestrator:
         weight_func: str = DEFAULT_WEIGHT_FUNC,
         max_neighbors: int = DEFAULT_MAX_NEIGHBORS,
         smoothing_enabled: bool = False,
+        smoothing_method: str = "median",
         smoothing_sigma: float = 0.8,
+        smoothing_median_size: int = 3,
         smoothing_only_when_nearest: bool = True,
         max_workers: int = 4,
     ) -> Tuple[Dict, Dict, Dict, Dict]:
@@ -228,7 +230,9 @@ class ProcessingOrchestrator:
             weight_func: Función de ponderación para interpolación ('nearest', 'Barnes2', 'Cressman')
             max_neighbors: Máximo número de vecinos por punto de grilla
             smoothing_enabled: Activa/desactiva suavizado visual opcional
+            smoothing_method: Método de suavizado ('gaussian' o 'median')
             smoothing_sigma: Intensidad del suavizado gaussiano
+            smoothing_median_size: Tamaño de ventana del suavizado de mediana
             smoothing_only_when_nearest: Si suavizar solo cuando interp='nearest'
             max_workers: Número máximo de threads (default 4, conservador porque cada
                         archivo puede usar threads internos para niveles Z)
@@ -266,7 +270,9 @@ class ProcessingOrchestrator:
                         weight_func=weight_func,
                         max_neighbors=max_neighbors,
                         smoothing_enabled=smoothing_enabled,
+                        smoothing_method=smoothing_method,
                         smoothing_sigma=smoothing_sigma,
+                        smoothing_median_size=smoothing_median_size,
                         smoothing_only_when_nearest=smoothing_only_when_nearest,
                     )
                     result_dict["timestamp"] = ts
@@ -445,7 +451,9 @@ class ProcessingOrchestrator:
                 payload.weight_func or DEFAULT_WEIGHT_FUNC,
                 payload.max_neighbors or DEFAULT_MAX_NEIGHBORS,
                 bool(getattr(payload.smoothing, "enabled", False)),
+                str(getattr(payload.smoothing, "method", "median")),
                 float(getattr(payload.smoothing, "sigma", 0.8)),
+                int(getattr(payload.smoothing, "median_size", 3)),
                 bool(getattr(payload.smoothing, "only_when_nearest", True)),
             )
         )

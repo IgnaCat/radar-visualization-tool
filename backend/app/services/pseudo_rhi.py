@@ -30,7 +30,7 @@ from .radar_processing import (
     apply_operator,
     separate_filters,
     apply_visual_filters,
-    apply_gaussian_smoothing_masked,
+    apply_smoothing_masked,
 )
 from .radar_common import (
     resolve_field,
@@ -312,7 +312,9 @@ def generate_pseudo_rhi_png(
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors: int = DEFAULT_MAX_NEIGHBORS,
     smoothing_enabled: bool = False,
+    smoothing_method: str = "median",
     smoothing_sigma: float = 0.8,
+    smoothing_median_size: int = 3,
     smoothing_only_when_nearest: bool = True,
     session_id: Optional[str] = None,
 ):
@@ -342,10 +344,14 @@ def generate_pseudo_rhi_png(
         and (weight_func == "nearest" or not smoothing_only_when_nearest)
     )
     if effective_smoothing:
-        sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
-        sigma_tag = sigma_tag.replace(".", "p")
+        method = (smoothing_method or "median").lower()
         mode_tag = "nearestonly" if smoothing_only_when_nearest else "allinterp"
-        smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
+        if method == "median":
+            smooth_suffix = f"_smooth_m{int(smoothing_median_size)}_{mode_tag}"
+        else:
+            sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
+            sigma_tag = sigma_tag.replace(".", "p")
+            smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
     else:
         smooth_suffix = "_nosmooth"
 
@@ -431,7 +437,9 @@ def generate_pseudo_rhi_png(
                 weight_func=weight_func,
                 max_neighbors=max_neighbors,
                 smoothing_enabled=smoothing_enabled,
+                smoothing_method=smoothing_method,
                 smoothing_sigma=smoothing_sigma,
+                smoothing_median_size=smoothing_median_size,
                 smoothing_only_when_nearest=smoothing_only_when_nearest,
                 session_id=session_id,
             )
@@ -511,7 +519,9 @@ def _generate_segment_transect_png(
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors: int = DEFAULT_MAX_NEIGHBORS,
     smoothing_enabled: bool = False,
+    smoothing_method: str = "median",
     smoothing_sigma: float = 0.8,
+    smoothing_median_size: int = 3,
     smoothing_only_when_nearest: bool = True,
     session_id: Optional[str] = None,
 ):
@@ -735,7 +745,12 @@ def _generate_segment_transect_png(
     )
     if should_apply_smoothing:
         image_ma = np.ma.masked_invalid(image)
-        image_smooth = apply_gaussian_smoothing_masked(image_ma, float(smoothing_sigma))
+        image_smooth = apply_smoothing_masked(
+            arr=image_ma,
+            method=smoothing_method,
+            sigma=float(smoothing_sigma),
+            median_size=int(smoothing_median_size),
+        )
         image = np.ma.filled(image_smooth, np.nan)
 
     # ── Elevación del punto final (para marcador) ──

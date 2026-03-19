@@ -41,7 +41,9 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
         else DEFAULT_MAX_NEIGHBORS
     )
     smoothing_enabled: bool = bool(getattr(payload.smoothing, "enabled", False))
+    smoothing_method: str = str(getattr(payload.smoothing, "method", "median"))
     smoothing_sigma: float = float(getattr(payload.smoothing, "sigma", 0.8))
+    smoothing_median_size: int = int(getattr(payload.smoothing, "median_size", 3))
     smoothing_only_when_nearest: bool = bool(
         getattr(payload.smoothing, "only_when_nearest", True)
     )
@@ -127,7 +129,9 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 weight_func=weight_func,
                 max_neighbors=max_neighbors,
                 smoothing_enabled=smoothing_enabled,
+                smoothing_method=smoothing_method,
                 smoothing_sigma=smoothing_sigma,
+                smoothing_median_size=smoothing_median_size,
                 smoothing_only_when_nearest=smoothing_only_when_nearest,
                 session_id=payload.session_id,
             )

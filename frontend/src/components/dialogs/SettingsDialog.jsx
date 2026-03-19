@@ -51,11 +51,14 @@ export default function SettingsDialog({
   const [smoothingEnabled, setSmoothingEnabled] = useState(
     initialSettings.smoothing?.enabled ?? false,
   );
+  const [smoothingMethod, setSmoothingMethod] = useState(
+    initialSettings.smoothing?.method ?? "median",
+  );
   const [smoothingSigma, setSmoothingSigma] = useState(
     initialSettings.smoothing?.sigma ?? 0.8,
   );
-  const [smoothingOnlyWhenNearest, setSmoothingOnlyWhenNearest] = useState(
-    initialSettings.smoothing?.only_when_nearest ?? true,
+  const [smoothingMedianSize, setSmoothingMedianSize] = useState(
+    initialSettings.smoothing?.median_size ?? 3,
   );
 
   // Sincronizar con initialSettings cada vez que el diálogo se abre
@@ -65,10 +68,9 @@ export default function SettingsDialog({
       setWeightFunc(initialSettings.weightFunc ?? "nearest");
       setMaxNeighbors(initialSettings.maxNeighbors ?? 1);
       setSmoothingEnabled(initialSettings.smoothing?.enabled ?? false);
+      setSmoothingMethod(initialSettings.smoothing?.method ?? "median");
       setSmoothingSigma(initialSettings.smoothing?.sigma ?? 0.8);
-      setSmoothingOnlyWhenNearest(
-        initialSettings.smoothing?.only_when_nearest ?? true,
-      );
+      setSmoothingMedianSize(initialSettings.smoothing?.median_size ?? 3);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -101,15 +103,16 @@ export default function SettingsDialog({
       maxNeighbors: effectiveMaxNeighbors,
       smoothing: {
         enabled: Boolean(smoothingEnabled),
+        method: smoothingMethod,
         sigma: Number(smoothingSigma),
-        only_when_nearest: Boolean(smoothingOnlyWhenNearest),
+        median_size: Number(smoothingMedianSize),
+        only_when_nearest: false,
       },
     });
     onClose();
   };
 
-  const shouldSmoothBeDisabled =
-    !smoothingEnabled || (smoothingOnlyWhenNearest && !isNearest);
+  const shouldSmoothBeDisabled = !smoothingEnabled;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
@@ -241,7 +244,7 @@ export default function SettingsDialog({
             >
               <Typography variant="subtitle2">Suavizado visual</Typography>
               <Tooltip
-                title="Aplica un suavizado gaussiano sobre la imagen final para reducir aspecto pixelado. No cambia la interpolación científica base."
+                title="Aplica un suavizado sobre la imagen final para reducir aspecto pixelado. No cambia la interpolación científica base."
                 placement="right"
               >
                 <InfoOutlinedIcon
@@ -260,47 +263,72 @@ export default function SettingsDialog({
               label="Habilitar suavizado"
             />
 
-            <FormControlLabel
-              control={
-                <Checkbox
-                  checked={smoothingOnlyWhenNearest}
-                  onChange={(e) =>
-                    setSmoothingOnlyWhenNearest(e.target.checked)
-                  }
-                />
-              }
-              label="Aplicar solo con nearest"
-            />
+            <FormControl fullWidth size="small" sx={{ mt: 1 }}>
+              <InputLabel>Método</InputLabel>
+              <Select
+                value={smoothingMethod}
+                label="Método"
+                onChange={(e) => setSmoothingMethod(e.target.value)}
+                disabled={shouldSmoothBeDisabled}
+              >
+                <MenuItem value="gaussian">Gaussiano</MenuItem>
+                <MenuItem value="median">Mediana</MenuItem>
+              </Select>
+            </FormControl>
 
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}>
-              <Slider
-                value={Number(smoothingSigma)}
-                onChange={(_, val) => setSmoothingSigma(Number(val))}
-                min={0}
-                max={3}
-                step={0.1}
-                disabled={shouldSmoothBeDisabled}
-                sx={{ flex: 1 }}
-              />
-              <TextField
-                value={smoothingSigma}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value);
-                  if (!isNaN(v) && v >= 0 && v <= 5) setSmoothingSigma(v);
-                }}
-                inputProps={{ min: 0, max: 5, step: 0.1, type: "number" }}
-                size="small"
-                disabled={shouldSmoothBeDisabled}
-                sx={{ width: 90 }}
-                InputProps={{
-                  endAdornment: (
-                    <Typography variant="caption" sx={{ whiteSpace: "nowrap" }}>
-                      σ
-                    </Typography>
-                  ),
-                }}
-              />
-            </Box>
+            {smoothingMethod === "gaussian" ? (
+              <Box
+                sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}
+              >
+                <Slider
+                  value={Number(smoothingSigma)}
+                  onChange={(_, val) => setSmoothingSigma(Number(val))}
+                  min={0}
+                  max={3}
+                  step={0.1}
+                  disabled={shouldSmoothBeDisabled}
+                  sx={{ flex: 1 }}
+                />
+                <TextField
+                  value={smoothingSigma}
+                  onChange={(e) => {
+                    const v = parseFloat(e.target.value);
+                    if (!isNaN(v) && v >= 0 && v <= 5) setSmoothingSigma(v);
+                  }}
+                  inputProps={{ min: 0, max: 5, step: 0.1, type: "number" }}
+                  size="small"
+                  disabled={shouldSmoothBeDisabled}
+                  sx={{ width: 90 }}
+                  InputProps={{
+                    endAdornment: (
+                      <Typography
+                        variant="caption"
+                        sx={{ whiteSpace: "nowrap" }}
+                      >
+                        σ
+                      </Typography>
+                    ),
+                  }}
+                />
+              </Box>
+            ) : (
+              <Box sx={{ mt: 1 }}>
+                <TextField
+                  value={smoothingMedianSize}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v >= 1 && v <= 15) {
+                      setSmoothingMedianSize(v);
+                    }
+                  }}
+                  inputProps={{ min: 1, max: 15, step: 1, type: "number" }}
+                  size="small"
+                  label="Ventana (px)"
+                  disabled={shouldSmoothBeDisabled}
+                  sx={{ width: 140 }}
+                />
+              </Box>
+            )}
           </Box>
         </Box>
       </DialogContent>
