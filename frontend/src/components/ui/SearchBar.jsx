@@ -38,7 +38,7 @@ export default function SearchBar({ map, onSearch }) {
     }
 
     const filtered = locations.filter((loc) =>
-      loc.name.toLowerCase().includes(searchQuery.toLowerCase())
+      loc.name.toLowerCase().includes(searchQuery.toLowerCase()),
     );
     setResults(filtered);
     setExpanded(filtered.length > 0);
@@ -99,7 +99,7 @@ export default function SearchBar({ map, onSearch }) {
           onChange={handleInputChange}
           sx={{
             flex: 1,
-            fontSize: "14px",
+            fontSize: "12px",
             color: "#212121",
             "& input::placeholder": {
               color: "#999",
@@ -133,14 +133,14 @@ export default function SearchBar({ map, onSearch }) {
               <ListItemText
                 primary={location.name}
                 primaryTypographyProps={{
-                  fontSize: "14px",
+                  fontSize: "12px",
                   fontWeight: 500,
                 }}
                 secondary={`${location.lat.toFixed(4)}, ${location.lon.toFixed(
-                  4
+                  4,
                 )}`}
                 secondaryTypographyProps={{
-                  fontSize: "12px",
+                  fontSize: "11px",
                   color: "#666",
                 }}
               />

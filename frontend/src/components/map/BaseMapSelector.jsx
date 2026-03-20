@@ -136,7 +136,7 @@ export default function BaseMapSelector({
             variant="subtitle1"
             sx={{
               fontWeight: 600,
-              fontSize: "14px",
+              fontSize: "12px",
               color: "#212121",
             }}
           >
@@ -196,7 +196,7 @@ export default function BaseMapSelector({
                   <ListItemText
                     primary={map.name}
                     primaryTypographyProps={{
-                      fontSize: "13px",
+                      fontSize: "12px",
                       fontWeight: isSelected ? 600 : 400,
                       color: isSelected ? "#4A90E2" : "#212121",
                     }}

@@ -154,7 +154,7 @@ export default function ElevationProfileDialog({
                 title="Dibujar nueva línea"
                 sx={{
                   "& .MuiSvgIcon-root": {
-                    fontSize: "1.25rem",
+                    fontSize: "1.1rem",
                   },
                 }}
               >
@@ -168,7 +168,7 @@ export default function ElevationProfileDialog({
               title="Cerrar"
               sx={{
                 "& .MuiSvgIcon-root": {
-                  fontSize: "1.25rem",
+                  fontSize: "1.1rem",
                 },
               }}
             >

@@ -181,7 +181,7 @@ export default function FileManagerDialog({
             <InsertDriveFileIcon sx={{ fontSize: 18, color: "primary.main" }} />
             <Typography
               variant="subtitle1"
-              sx={{ fontWeight: 600, fontSize: "14px", color: "#212121" }}
+              sx={{ fontWeight: 600, fontSize: "12px", color: "#212121" }}
             >
               Archivos Cargados
             </Typography>
@@ -190,7 +190,7 @@ export default function FileManagerDialog({
               size="small"
               color="primary"
               variant="outlined"
-              sx={{ height: 20, fontSize: "0.7rem" }}
+              sx={{ height: 20, fontSize: "0.6rem" }}
             />
           </Box>
           <Box display="flex" alignItems="center" gap={1}>
@@ -202,7 +202,7 @@ export default function FileManagerDialog({
                   onClick={handleConfirmDeleteAll}
                   sx={{
                     minWidth: "auto",
-                    fontSize: "0.65rem",
+                    fontSize: "0.57rem",
                     textTransform: "none",
                     padding: "2px 6px",
                   }}
@@ -214,7 +214,7 @@ export default function FileManagerDialog({
                   onClick={handleCancelDeleteAll}
                   sx={{
                     minWidth: "auto",
-                    fontSize: "0.65rem",
+                    fontSize: "0.57rem",
                     textTransform: "none",
                     padding: "2px 6px",
                   }}
@@ -231,7 +231,7 @@ export default function FileManagerDialog({
                 disabled={filesInfo.length === 0 || Boolean(confirmDelete)}
                 sx={{
                   minWidth: "auto",
-                  fontSize: "0.68rem",
+                  fontSize: "0.6rem",
                   textTransform: "none",
                   padding: "2px 4px",
                   lineHeight: 1.2,
@@ -300,7 +300,7 @@ export default function FileManagerDialog({
                               fontWeight={500}
                               noWrap
                               title={filename}
-                              sx={{ fontSize: "0.8rem" }}
+                              sx={{ fontSize: "0.7rem" }}
                             >
                               {filename}
                             </Typography>
@@ -318,7 +318,7 @@ export default function FileManagerDialog({
                                   label={timestamp}
                                   size="small"
                                   variant="outlined"
-                                  sx={{ height: 18, fontSize: "0.65rem" }}
+                                  sx={{ height: 18, fontSize: "0.57rem" }}
                                 />
                               )}
                               {volume && (
@@ -326,7 +326,7 @@ export default function FileManagerDialog({
                                   label={`Vol. ${volume}`}
                                   size="small"
                                   variant="outlined"
-                                  sx={{ height: 18, fontSize: "0.65rem" }}
+                                  sx={{ height: 18, fontSize: "0.57rem" }}
                                 />
                               )}
                               {strategy && (
@@ -334,7 +334,7 @@ export default function FileManagerDialog({
                                   label={`Estr. ${strategy}`}
                                   size="small"
                                   variant="outlined"
-                                  sx={{ height: 18, fontSize: "0.65rem" }}
+                                  sx={{ height: 18, fontSize: "0.57rem" }}
                                 />
                               )}
                             </Box>
@@ -353,7 +353,7 @@ export default function FileManagerDialog({
                                   onClick={handleConfirmDelete}
                                   sx={{
                                     minWidth: "auto",
-                                    fontSize: "0.65rem",
+                                    fontSize: "0.57rem",
                                     textTransform: "none",
                                     padding: "2px 6px",
                                   }}
@@ -367,7 +367,7 @@ export default function FileManagerDialog({
                                 onClick={handleCancelDelete}
                                 sx={{
                                   minWidth: "auto",
-                                  fontSize: "0.65rem",
+                                  fontSize: "0.57rem",
                                   textTransform: "none",
                                   padding: "2px 6px",
                                 }}

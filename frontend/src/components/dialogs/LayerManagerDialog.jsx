@@ -314,7 +314,7 @@ export default function LayerManagerDialog({
             variant="subtitle1"
             sx={{
               fontWeight: 600,
-              fontSize: "14px",
+              fontSize: "12px",
               color: "#212121",
             }}
           >

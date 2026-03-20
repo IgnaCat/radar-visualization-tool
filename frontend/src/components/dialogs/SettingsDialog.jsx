@@ -116,7 +116,9 @@ export default function SettingsDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ px: 2, py: 1.5, fontSize: "1.1rem", lineHeight: 1.2 }}>
+      <DialogTitle
+        sx={{ px: 2, py: 1.5, fontSize: "0.95rem", lineHeight: 1.2 }}
+      >
         Configuración
       </DialogTitle>
 
@@ -125,9 +127,9 @@ export default function SettingsDialog({
         sx={{
           px: 2,
           py: 1.25,
-          "& .MuiTypography-subtitle2": { fontSize: "0.9rem" },
-          "& .MuiFormControlLabel-label": { fontSize: "0.86rem" },
-          "& .MuiTypography-caption": { fontSize: "0.72rem" },
+          "& .MuiTypography-subtitle2": { fontSize: "0.8rem" },
+          "& .MuiFormControlLabel-label": { fontSize: "0.75rem" },
+          "& .MuiTypography-caption": { fontSize: "0.65rem" },
         }}
       >
         {/* ── Delta T ─────────────────────────────────────────── */}

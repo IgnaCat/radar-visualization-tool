@@ -533,7 +533,7 @@ export default function ProductSelectorDialog({
           flexShrink: 0,
           px: 2,
           py: 1.5,
-          fontSize: "1.1rem",
+          fontSize: "0.95rem",
           lineHeight: 1.2,
         }}
       >
@@ -547,9 +547,9 @@ export default function ProductSelectorDialog({
           overflow: "auto",
           px: 2,
           py: 1.25,
-          "& .MuiTypography-subtitle1": { fontSize: "0.95rem" },
-          "& .MuiFormControlLabel-label": { fontSize: "0.86rem" },
-          "& .MuiTypography-caption": { fontSize: "0.72rem" },
+          "& .MuiTypography-subtitle1": { fontSize: "0.85rem" },
+          "& .MuiFormControlLabel-label": { fontSize: "0.75rem" },
+          "& .MuiTypography-caption": { fontSize: "0.65rem" },
         }}
       >
         {/* Grid layout: Vista a la izquierda, Volúmenes y Radares a la derecha */}
@@ -630,7 +630,7 @@ export default function ProductSelectorDialog({
                                 : "0 3px 6px rgba(0,0,0,0.15)",
                             },
                             minWidth: 78,
-                            fontSize: "0.78rem",
+                            fontSize: "0.7rem",
                             px: 1.25,
                             py: 0.64,
                           }}
@@ -701,7 +701,7 @@ export default function ProductSelectorDialog({
                                   : "0 3px 6px rgba(0,0,0,0.15)",
                               },
                               minWidth: 78,
-                              fontSize: "0.78rem",
+                              fontSize: "0.7rem",
                               px: 1.25,
                               py: 0.6,
                             }}

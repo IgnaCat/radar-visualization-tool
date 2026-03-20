@@ -183,7 +183,7 @@ export default function AreaStatsDialog({
           <Typography
             component="div"
             fontWeight="bold"
-            sx={{ fontSize: "0.96rem" }}
+            sx={{ fontSize: "0.85rem" }}
           >
             {value}
             {currentUnit && (
@@ -191,7 +191,7 @@ export default function AreaStatsDialog({
                 component="span"
                 variant="body2"
                 color="text.secondary"
-                sx={{ ml: 0.35, fontSize: "0.8rem" }}
+                sx={{ ml: 0.35, fontSize: "0.72rem" }}
               >
                 {currentUnit}
               </Typography>
@@ -259,9 +259,9 @@ export default function AreaStatsDialog({
           py: 1.25,
           overflow: "auto",
           flex: 1,
-          "& .MuiTypography-subtitle1": { fontSize: "0.95rem" },
-          "& .MuiFormControlLabel-label": { fontSize: "0.86rem" },
-          "& .MuiTypography-caption": { fontSize: "0.72rem" },
+          "& .MuiTypography-subtitle1": { fontSize: "0.85rem" },
+          "& .MuiFormControlLabel-label": { fontSize: "0.75rem" },
+          "& .MuiTypography-caption": { fontSize: "0.65rem" },
         }}
       >
         {loading && (
@@ -512,7 +512,7 @@ export default function AreaStatsDialog({
                       <tr>
                         <Box
                           component="th"
-                          sx={{ textAlign: "left", fontSize: "0.75rem", pb: 1 }}
+                          sx={{ textAlign: "left", fontSize: "0.68rem", pb: 1 }}
                         >
                           Estadística
                         </Box>
@@ -520,7 +520,7 @@ export default function AreaStatsDialog({
                           component="th"
                           sx={{
                             textAlign: "center",
-                            fontSize: "0.75rem",
+                            fontSize: "0.68rem",
                             pb: 1,
                             px: 1,
                           }}
@@ -529,7 +529,7 @@ export default function AreaStatsDialog({
                             label={currentField}
                             size="small"
                             color="primary"
-                            sx={{ fontSize: "0.7rem", height: "20px" }}
+                            sx={{ fontSize: "0.63rem", height: "20px" }}
                           />
                         </Box>
                         {selectedFields.map((field) => (
@@ -538,7 +538,7 @@ export default function AreaStatsDialog({
                             component="th"
                             sx={{
                               textAlign: "center",
-                              fontSize: "0.75rem",
+                              fontSize: "0.68rem",
                               pb: 1,
                               px: 1,
                             }}
@@ -547,7 +547,7 @@ export default function AreaStatsDialog({
                               label={field}
                               size="small"
                               variant="outlined"
-                              sx={{ fontSize: "0.7rem", height: "20px" }}
+                              sx={{ fontSize: "0.63rem", height: "20px" }}
                             />
                           </Box>
                         ))}
@@ -564,7 +564,7 @@ export default function AreaStatsDialog({
                         <tr key={idx}>
                           <Box
                             component="td"
-                            sx={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                            sx={{ fontSize: "0.63rem", fontWeight: "bold" }}
                           >
                             {row.label}
                           </Box>
@@ -572,7 +572,7 @@ export default function AreaStatsDialog({
                             component="td"
                             sx={{
                               textAlign: "center",
-                              fontSize: "0.75rem",
+                              fontSize: "0.68rem",
                               bgcolor: "primary.light",
                               color: "primary.contrastText",
                               borderRadius: 0.5,
@@ -593,7 +593,7 @@ export default function AreaStatsDialog({
                                 component="td"
                                 sx={{
                                   textAlign: "center",
-                                  fontSize: "0.75rem",
+                                  fontSize: "0.68rem",
                                   bgcolor: "background.paper",
                                   borderRadius: 0.5,
                                   px: 1,
@@ -644,7 +644,7 @@ export default function AreaStatsDialog({
                             component="th"
                             sx={{
                               textAlign: "left",
-                              fontSize: "0.75rem",
+                              fontSize: "0.68rem",
                               pb: 1,
                             }}
                           >
@@ -656,7 +656,7 @@ export default function AreaStatsDialog({
                               component="th"
                               sx={{
                                 textAlign: "center",
-                                fontSize: "0.75rem",
+                                fontSize: "0.68rem",
                                 pb: 1,
                                 px: 1,
                               }}
@@ -665,7 +665,7 @@ export default function AreaStatsDialog({
                                 label={field}
                                 size="small"
                                 variant="outlined"
-                                sx={{ fontSize: "0.7rem", height: "20px" }}
+                                sx={{ fontSize: "0.63rem", height: "20px" }}
                               />
                             </Box>
                           ))}
@@ -681,7 +681,7 @@ export default function AreaStatsDialog({
                           <tr key={idx}>
                             <Box
                               component="td"
-                              sx={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                              sx={{ fontSize: "0.63rem", fontWeight: "bold" }}
                             >
                               {row.label}
                             </Box>
@@ -691,7 +691,7 @@ export default function AreaStatsDialog({
                                 component="td"
                                 sx={{
                                   textAlign: "center",
-                                  fontSize: "0.75rem",
+                                  fontSize: "0.68rem",
                                   bgcolor: "background.paper",
                                   borderRadius: 0.5,
                                   px: 1,

@@ -126,10 +126,10 @@ export default function DownloadLayersDialog({
           }}
         >
           <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-            <LayersIcon sx={{ color: "primary.main", fontSize: "1.15rem" }} />
+            <LayersIcon sx={{ color: "primary.main", fontSize: "1rem" }} />
             <Typography
               variant="subtitle1"
-              sx={{ fontWeight: 600, fontSize: "15px", lineHeight: 1.3 }}
+              sx={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3 }}
             >
               Descargar capas GeoTIFF
             </Typography>
@@ -232,7 +232,7 @@ export default function DownloadLayersDialog({
                         >
                           <Typography
                             variant="body2"
-                            sx={{ fontWeight: 500, fontSize: "13px" }}
+                            sx={{ fontWeight: 500, fontSize: "12px" }}
                           >
                             {layer.field || "Campo desconocido"}
                           </Typography>
@@ -241,7 +241,7 @@ export default function DownloadLayersDialog({
                               label={layer.radar}
                               size="small"
                               sx={{
-                                fontSize: "10px",
+                                fontSize: "9px",
                                 height: 18,
                                 px: 0.25,
                                 backgroundColor: radarColor.bg,
@@ -259,7 +259,7 @@ export default function DownloadLayersDialog({
                           variant="caption"
                           sx={{
                             fontFamily: "monospace",
-                            fontSize: "10px",
+                            fontSize: "9px",
                             color: "text.disabled",
                             display: "block",
                             whiteSpace: "nowrap",
@@ -289,7 +289,7 @@ export default function DownloadLayersDialog({
           onClick={onClose}
           size="small"
           color="inherit"
-          sx={{ fontSize: "13px", textTransform: "none" }}
+          sx={{ fontSize: "12px", textTransform: "none" }}
         >
           Cancelar
         </Button>
@@ -300,7 +300,7 @@ export default function DownloadLayersDialog({
           size="small"
           startIcon={<DownloadIcon />}
           sx={{
-            fontSize: "13px",
+            fontSize: "12px",
             borderRadius: "8px",
             textTransform: "none",
             boxShadow: "none",
