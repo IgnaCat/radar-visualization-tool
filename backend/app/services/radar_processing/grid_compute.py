@@ -121,6 +121,7 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         dtype_idx,
         min_beam_h,
         blind_range_m,
+        last_gate_range_m,
     ) = args
 
     n_points = grid_y_2d.shape[0]
@@ -154,13 +155,26 @@ def _process_single_level(args) -> Tuple[int, int, str]:
         radar_offset=(0, 0, 0),
     )
 
-    # Máscara de radio ciego: si el voxel está más cerca que el primer gate,
-    # se salta para mantener "sin dato" en la zona no observada por el radar.
-    if blind_range_m is not None and blind_range_m > 0.0:
+    # Máscaras de cobertura radial: dejan sin dato voxels antes del primer gate
+    # y también más allá del último gate válido del radar.
+    needs_slant_range = (
+        (blind_range_m is not None and blind_range_m > 0.0)
+        or (last_gate_range_m is not None and last_gate_range_m > 0.0)
+    )
+    if needs_slant_range:
         slant_dist = np.sqrt(grid_x_2d**2 + grid_y_2d**2 + grid_z_level**2)
+    else:
+        slant_dist = None
+
+    if blind_range_m is not None and blind_range_m > 0.0:
         in_blind_zone = slant_dist <= float(blind_range_m)
     else:
         in_blind_zone = None
+
+    if last_gate_range_m is not None and last_gate_range_m > 0.0:
+        beyond_last_gate = slant_dist > float(last_gate_range_m)
+    else:
+        beyond_last_gate = None
 
     # Máscara below-beam: si este nivel Z está debajo del haz más bajo,
     # se salta el voxel directamente (fila vacía en W → NaN al interpolar)
@@ -176,6 +190,10 @@ def _process_single_level(args) -> Tuple[int, int, str]:
 
     for i in range(n_points):
         if in_blind_zone is not None and in_blind_zone[i]:
+            level_indptr.append(level_indptr[-1])
+            continue
+
+        if beyond_last_gate is not None and beyond_last_gate[i]:
             level_indptr.append(level_indptr[-1])
             continue
 
@@ -262,6 +280,7 @@ def build_W_operator(
     weight_func=DEFAULT_WEIGHT_FUNC,
     max_neighbors: int | None = DEFAULT_MAX_NEIGHBORS,
     blind_range_m: float = 0.0,
+    last_gate_range_m: float | None = None,
     lowest_elev_deg=None,  # Elevación mínima para máscara below-beam
     n_workers=None,
     temp_dir=None,
@@ -292,6 +311,8 @@ def build_W_operator(
         - None: usa TODOS los gates dentro del ROI
         - int > 0: limita a los k gates más cercanos (por distancia euclidiana 3D)
                    Usa np.argpartition para selección eficiente O(n)
+    blind_range_m: Rango mínimo observable del radar en metros
+    last_gate_range_m: Alcance del último gate observable en metros
     n_workers: int o None
         - None: cpu_count() - 1
         - 1: procesamiento secuencial
@@ -364,6 +385,8 @@ def build_W_operator(
         f"  ROI dist_beam: h_factor={h_factor}, nb={nb}°, bsp={bsp}, min_radius={min_radius}m"
     )
     logger.info(f"  Blind range: {float(blind_range_m):.1f} m")
+    if last_gate_range_m is not None:
+        logger.info(f"  Last gate range: {float(last_gate_range_m):.1f} m")
     logger.info(f"  Volumen: {volume} (ajustes de ROI específicos por volumen)")
     logger.info(
         f"  Workers: {n_workers} (procesamiento {'paralelo' if n_workers > 1 else 'secuencial'})"
@@ -450,6 +473,11 @@ def build_W_operator(
                 dtype_idx,
                 min_beam_h,
                 float(blind_range_m),
+                (
+                    float(last_gate_range_m)
+                    if last_gate_range_m is not None
+                    else None
+                ),
             )
         )
 

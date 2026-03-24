@@ -32,7 +32,7 @@ def beam_height_max_km(
 
 def infer_blind_range_m(
     radar: pyart.core.Radar,
-    default: float = 0.0,
+    default: float = 2000.0,
     extra_margin_m: float = 0.0,
 ) -> float:
     """
@@ -76,6 +76,45 @@ def infer_blind_range_m(
 
     blind_range_m = max(0.0, float(first_gate_m) + float(extra_margin_m))
     return blind_range_m
+
+
+def infer_last_gate_range_m(
+    radar: pyart.core.Radar,
+    default: float = 240000.0,
+    extra_margin_m: float = 0.0,
+) -> float:
+    """
+    Infiere el alcance del ultimo gate del radar en metros.
+
+    Estrategia de inferencia (en orden):
+    1) ultimo valor finito de ``radar.range['data']``
+    2) ``default``
+
+    Args:
+        radar: Objeto radar de PyART
+        default: Valor de fallback en metros si no se puede inferir
+        extra_margin_m: Margen adicional para ampliar el rango maximo util
+
+    Returns:
+        Alcance del ultimo gate en metros (>= 0)
+    """
+    last_gate_m = None
+
+    try:
+        r = radar.range.get("data", None)
+        if r is not None:
+            arr = np.asarray(getattr(r, "filled", lambda v: r)(np.nan), dtype=float)
+            finite = arr[np.isfinite(arr)]
+            if finite.size > 0:
+                last_gate_m = float(finite[-1])
+    except Exception:
+        last_gate_m = None
+
+    if last_gate_m is None:
+        last_gate_m = float(default)
+
+    last_gate_range_m = max(0.0, float(last_gate_m) + float(extra_margin_m))
+    return last_gate_range_m
 
 
 def compute_beam_height(

@@ -295,6 +295,8 @@ def w_operator_cache_key(
     grid_limits: tuple,
     weight_func: str = DEFAULT_WEIGHT_FUNC,
     max_neighbors: int | None = DEFAULT_MAX_NEIGHBORS,
+    blind_range_m: float | None = None,
+    last_gate_range_m: float | None = None,
 ) -> str:
     """
     Genera cache key para operador W basado en:
@@ -314,12 +316,14 @@ def w_operator_cache_key(
         grid_limits: ((z_min, z_max), (y_min, y_max), (x_min, x_max))
         weight_func: Función de ponderación ('Barnes', 'Barnes2', 'Cressman', 'nearest')
         max_neighbors: Máximo número de vecinos (None = todos)
+        blind_range_m: Radio ciego cercano al radar incluido en W
+        last_gate_range_m: Alcance máximo del último gate incluido en W
     """
     # Seleccionar parámetros ROI específicos del volumen (constantes, no adaptativos)
     roi_params = ROI_PARAMS_BY_VOLUME.get(volumen, ROI_PARAMS_VOL01)
     
     payload = {
-        "v": 6,  # versión 6: radio ciego (blind range) integrado en W
+        "v": 7,  # versión 7: máscaras radial interna y externa integradas en W
         "radar": str(radar),
         "strat": str(estrategia),
         "vol": str(volumen),
