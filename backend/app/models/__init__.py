@@ -3,7 +3,14 @@ Modelos de dominio de la aplicación.
 Divididos por responsabilidad funcional.
 """
 from .common import RangeFilter
-from .process import ProcessRequest, ProcessResponse, LayerResult, RadarProcessResult
+from .process import (
+    ProcessRequest,
+    ProcessResponse,
+    LayerResult,
+    RadarProcessResult,
+    GifAnimationRequest,
+    GifAnimationResponse,
+)
 from .cleanup import CleanupRequest, FileCleanupRequest
 from .pseudo_rhi import PseudoRHIRequest, PseudoRHIResponse
 from .stats import RadarStatsRequest, RadarStatsResponse, StatsResult
@@ -18,6 +25,8 @@ __all__ = [
     'ProcessResponse',
     'LayerResult',
     'RadarProcessResult',
+    'GifAnimationRequest',
+    'GifAnimationResponse',
     # Cleanup
     'CleanupRequest',
     'FileCleanupRequest',

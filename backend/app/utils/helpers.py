@@ -2,8 +2,6 @@ import time
 import os
 import re
 from datetime import datetime
-import imageio.v2 as imageio
-import uuid
 
 
 def cleanup_tmp(directory="app/storage/tmp", max_age_seconds=20000):
@@ -76,28 +74,4 @@ def should_animate(results, max_minutes_diff=30):
             return False
 
     return True
-
-
-def create_animation(image_paths):
-    """
-    Crea un GIF animado a partir de las imágenes procesadas.
-    Retorna la URL o path del archivo generado.
-    """
-    static_dir = os.path.join(os.getcwd(), "static", "tmp")
-    paths = [os.path.join(static_dir, os.path.basename(p)) for p in image_paths]
-
-    images = [imageio.imread(p) for p in paths if os.path.exists(p)]
-
-    if not images:
-        raise ValueError("No se pudieron abrir las imágenes para la animación")
-
-    output_dir = "static/tmp"
-    os.makedirs(output_dir, exist_ok=True)
-
-    gif_name = f"anim_{uuid.uuid4().hex[:8]}.gif"
-    gif_path = os.path.join(output_dir, gif_name)
-
-    imageio.mimsave(gif_path, images, fps=1)
-
-    return f"/static/tmp/{gif_name}"
 

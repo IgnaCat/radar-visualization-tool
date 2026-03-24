@@ -10,6 +10,8 @@ from .models import (
     ProcessResponse,
     LayerResult,
     RadarProcessResult,
+    GifAnimationRequest,
+    GifAnimationResponse,
     # Cleanup
     CleanupRequest,
     # Pseudo RHI
@@ -35,6 +37,8 @@ __all__ = [
     'ProcessResponse',
     'LayerResult',
     'RadarProcessResult',
+    'GifAnimationRequest',
+    'GifAnimationResponse',
     'CleanupRequest',
     'PseudoRHIRequest',
     'PseudoRHIResponse',

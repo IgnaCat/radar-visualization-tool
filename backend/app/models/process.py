@@ -134,3 +134,29 @@ class ProcessResponse(BaseModel):
     results: List[RadarProcessResult]
     product: str
     warnings: Optional[List[str]] = []
+
+
+class GifAnimationRequest(BaseModel):
+    """Request para generar un GIF a partir de imágenes raster ya procesadas."""
+
+    frames: List[List[str]] = Field(
+        ...,
+        min_items=1,
+        description="Lista de frames; cada frame contiene las URLs/rutas de las capas visibles",
+    )
+    fps: int = Field(
+        default=1,
+        ge=1,
+        le=24,
+        description="Frames por segundo para la animación",
+    )
+    session_id: Optional[str] = Field(
+        default=None,
+        description="ID de sesión para guardar el GIF en un subdirectorio temporal",
+    )
+
+
+class GifAnimationResponse(BaseModel):
+    """Respuesta con la URL del GIF generado."""
+
+    gif_url: str

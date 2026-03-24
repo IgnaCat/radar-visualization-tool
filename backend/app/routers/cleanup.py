@@ -35,6 +35,8 @@ def _first_safe_under(path_str: str, roots: Iterable[Path], session_id: str | No
         session_id: ID de sesión opcional para buscar en subdirectorios de sesión
     """
     s = str(path_str).replace("\\", "/").strip()
+    if not Path(s).is_absolute():
+        s = s.lstrip("/")
     candidates: list[Path] = []
 
     p = Path(s)
@@ -178,9 +180,16 @@ def cleanup_close(req: CleanupRequest):
             if _delete_path(rp):
                 deleted["uploads"] += 1
 
+    # archivos temporales explícitos enviados por el frontend (ej. GIFs exportados)
+    for s in req.cogs:
+        rp = _first_safe_under(s, [TMP_DIR, BASE_DIR], session_id=req.session_id)
+        if rp and rp.exists():
+            if _delete_path(rp):
+                deleted["cogs"] += 1
+
     # Borrar COGs relacionados con los uploads eliminados (por file_hash matching)
     if req.delete_cache and file_hashes:
-        deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=req.session_id)
+        deleted["cogs"] += _delete_related_cogs(file_hashes, session_id=req.session_id)
 
     # Limpiar entradas de cache en memoria relacionadas con archivos borrados
     if file_hashes:

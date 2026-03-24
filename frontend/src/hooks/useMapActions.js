@@ -47,6 +47,53 @@ export function useMapActions() {
     });
   }, []);
 
+  const captureMapImage = useCallback(
+    async (containerId = "map-container") => {
+      try {
+        const container = document.getElementById(containerId);
+        if (!container) {
+          throw new Error(`Contenedor "${containerId}" no encontrado`);
+        }
+
+        await waitForTiles(container);
+
+        const elementsToHide = container.querySelectorAll(
+          ".no-print, .leaflet-control-zoom",
+        );
+        elementsToHide.forEach((el) => {
+          el.dataset.originalDisplay = el.style.display;
+          el.style.display = "none";
+        });
+
+        try {
+          return await domtoimage.toPng(container, {
+            quality: 1.0,
+            bgcolor: "#ffffff",
+            cacheBust: true,
+            filter: (node) => {
+              if (node.classList) {
+                return (
+                  !node.classList.contains("no-print") &&
+                  !node.classList.contains("leaflet-control-zoom")
+                );
+              }
+              return true;
+            },
+          });
+        } finally {
+          elementsToHide.forEach((el) => {
+            el.style.display = el.dataset.originalDisplay || "";
+            delete el.dataset.originalDisplay;
+          });
+        }
+      } catch (error) {
+        console.error("Error capturando imagen del mapa:", error);
+        throw error;
+      }
+    },
+    [waitForTiles],
+  );
+
   /**
    * Captura una pantalla del mapa usando dom-to-image-more
    * Mejor manejo de CORS y tiles dinámicos que leaflet-image
@@ -56,55 +103,14 @@ export function useMapActions() {
   const handleScreenshot = useCallback(
     async (mapRef, containerId = "map-container") => {
       try {
-        const container = document.getElementById(containerId);
-        if (!container) {
-          console.error(`Contenedor "${containerId}" no encontrado`);
-          return;
-        }
+        const dataUrl = await captureMapImage(containerId);
 
-        // Esperar a que los tiles se carguen
-        await waitForTiles(container);
-
-        // Ocultar temporalmente elementos no deseados
-        const elementsToHide = container.querySelectorAll(
-          ".no-print, .leaflet-control-zoom"
-        );
-        elementsToHide.forEach((el) => {
-          el.dataset.originalDisplay = el.style.display;
-          el.style.display = "none";
-        });
-
-        // Capturar con dom-to-image-more
-        const dataUrl = await domtoimage.toPng(container, {
-          quality: 1.0,
-          bgcolor: "#ffffff",
-          cacheBust: true,
-          // Configuración CORS permisiva
-          filter: (node) => {
-            // Excluir controles y elementos no deseados
-            if (node.classList) {
-              return (
-                !node.classList.contains("no-print") &&
-                !node.classList.contains("leaflet-control-zoom")
-              );
-            }
-            return true;
-          },
-        });
-
-        // Restaurar elementos ocultos
-        elementsToHide.forEach((el) => {
-          el.style.display = el.dataset.originalDisplay || "";
-          delete el.dataset.originalDisplay;
-        });
-
-        // Crear enlace de descarga
         const link = document.createElement("a");
         const timestamp = new Date()
           .toISOString()
           .replace(/[:.]/g, "-")
           .replace("T", "_")
-          .substring(0, 19); // YYYY-MM-DD_HH-MM-SS
+          .substring(0, 19);
         link.download = `radar-map_${timestamp}.png`;
         link.href = dataUrl;
         document.body.appendChild(link);
@@ -115,7 +121,7 @@ export function useMapActions() {
         throw error;
       }
     },
-    [waitForTiles]
+    [captureMapImage],
   );
 
   /**
@@ -136,11 +142,9 @@ export function useMapActions() {
   const handleFullscreen = useCallback(async () => {
     try {
       if (!document.fullscreenElement) {
-        // Entrar en pantalla completa
         await document.documentElement.requestFullscreen();
         setIsFullscreen(true);
       } else {
-        // Salir de pantalla completa
         await document.exitFullscreen();
         setIsFullscreen(false);
       }
@@ -152,6 +156,7 @@ export function useMapActions() {
 
   return {
     isFullscreen,
+    captureMapImage,
     handleScreenshot,
     handlePrint,
     handleFullscreen,

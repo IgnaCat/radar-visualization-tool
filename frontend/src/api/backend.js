@@ -52,6 +52,18 @@ export const processFile = async ({
   return api.post("/process", payload);
 };
 
+export async function generateAnimationGif({
+  frames,
+  fps = 1,
+  session_id,
+}) {
+  return api.post("/process/animation/gif", {
+    frames,
+    fps,
+    ...(session_id && { session_id }),
+  });
+}
+
 export function cleanupClose(payload) {
   // payload: { uploads: string[], cogs: string[], delete_cache: boolean, session_id?: string }
   return api.post("/cleanup/close", payload, {

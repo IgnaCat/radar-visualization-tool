@@ -27,13 +27,17 @@ import LayersIcon from "@mui/icons-material/Layers";
  * - open: boolean
  * - onClose: () => void
  * - layers: LayerResult[] (con anotación `.radar` añadida en App.jsx)
+ * - frames: { frameIndex: number, layers: LayerResult[] }[]
  * - onDownload: (selectedLayers: LayerResult[]) => void
+ * - onDownloadGif: () => void
  */
 export default function DownloadLayersDialog({
   open,
   onClose,
   layers = [],
+  frames = [],
   onDownload,
+  onDownloadGif,
 }) {
   const [selected, setSelected] = useState(new Set());
 
@@ -77,6 +81,11 @@ export default function DownloadLayersDialog({
     onClose();
   };
 
+  const handleDownloadGif = () => {
+    onDownloadGif?.();
+    onClose();
+  };
+
   const uniqueRadars = [
     ...new Set(downloadableLayers.map((l) => l.radar).filter(Boolean)),
   ];
@@ -99,6 +108,13 @@ export default function DownloadLayersDialog({
     if (!layer.image_url) return "";
     return layer.image_url.split("/").pop() || "";
   };
+
+  const gifFrameCount = frames.length;
+  const gifLayerCount = frames.reduce(
+    (total, frame) => total + (frame?.layers?.length || 0),
+    0,
+  );
+  const canDownloadGif = gifFrameCount > 1;
 
   return (
     <Dialog
@@ -131,7 +147,7 @@ export default function DownloadLayersDialog({
               variant="subtitle1"
               sx={{ fontWeight: 600, fontSize: "13px", lineHeight: 1.3 }}
             >
-              Descargar capas GeoTIFF
+              Descargas
             </Typography>
           </Box>
           <IconButton
@@ -156,6 +172,34 @@ export default function DownloadLayersDialog({
           </Box>
         ) : (
           <>
+            <Box
+              sx={{
+                mx: 2,
+                mt: 1.5,
+                mb: 1,
+                px: 1.5,
+                py: 1.25,
+                borderRadius: "10px",
+                backgroundColor: "rgba(25, 118, 210, 0.05)",
+                border: "1px solid rgba(25, 118, 210, 0.14)",
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{ fontWeight: 600, fontSize: "12px", mb: 0.35 }}
+              >
+                Descargar GIF
+              </Typography>
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", lineHeight: 1.45 }}
+              >
+                Se exportará la animación con los {gifFrameCount} frames
+                visibles y {gifLayerCount} capa(s) visibles en total.
+              </Typography>
+            </Box>
+
             {/* Toggle seleccionar todo */}
             <Box
               sx={{
@@ -179,7 +223,8 @@ export default function DownloadLayersDialog({
                 sx={{ cursor: "pointer", userSelect: "none" }}
                 onClick={toggleAll}
               >
-                {allSelected ? "Deseleccionar todo" : "Seleccionar todo"}
+                {allSelected ? "Deseleccionar todo " : "Seleccionar todo "}{" "}
+                {"(solo para descarga GeoTIFFs)"}
               </Typography>
             </Box>
 
@@ -294,6 +339,23 @@ export default function DownloadLayersDialog({
           Cancelar
         </Button>
         <Button
+          onClick={handleDownloadGif}
+          disabled={!canDownloadGif}
+          variant="outlined"
+          size="small"
+          startIcon={<DownloadIcon />}
+          sx={{
+            fontSize: "12px",
+            borderRadius: "8px",
+            textTransform: "none",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {canDownloadGif
+            ? `Descargar GIF (${gifFrameCount})`
+            : "Descargar GIF"}
+        </Button>
+        <Button
           onClick={handleDownload}
           disabled={!someSelected}
           variant="contained"
@@ -305,9 +367,12 @@ export default function DownloadLayersDialog({
             textTransform: "none",
             boxShadow: "none",
             "&:hover": { boxShadow: "none" },
+            whiteSpace: "nowrap",
           }}
         >
-          {someSelected ? `Descargar (${selected.size})` : "Descargar"}
+          {someSelected
+            ? `Descargar GeoTIFF (${selected.size})`
+            : "Descargar GeoTIFF"}
         </Button>
       </DialogActions>
     </Dialog>

@@ -1,8 +1,16 @@
 import logging
+from pathlib import Path
 from fastapi import APIRouter, HTTPException, status
 from fastapi.concurrency import run_in_threadpool
 
-from ..models import ProcessRequest, ProcessResponse
+from ..core.config import settings
+from ..models import (
+    ProcessRequest,
+    ProcessResponse,
+    GifAnimationRequest,
+    GifAnimationResponse,
+)
+from ..services.animation import create_animation_from_layer_urls
 from ..services.orchestrators import ProcessingOrchestrator
 
 logger = logging.getLogger(__name__)
@@ -45,4 +53,42 @@ async def process_file(payload: ProcessRequest):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error procesando archivos: {e}"
+        )
+
+
+@router.post("/animation/gif", response_model=GifAnimationResponse)
+async def create_gif_animation(payload: GifAnimationRequest):
+    """Genera un GIF animado a partir de rasters procesados ya existentes."""
+    try:
+        images_dir = Path(settings.IMAGES_DIR)
+        output_dir = (
+            images_dir / payload.session_id
+            if payload.session_id
+            else images_dir
+        )
+
+        gif_name = await run_in_threadpool(
+            create_animation_from_layer_urls,
+            payload.frames,
+            str(output_dir),
+            payload.fps,
+            payload.session_id,
+        )
+
+        gif_url = (
+            f"/static/tmp/{payload.session_id}/{gif_name}"
+            if payload.session_id
+            else f"/static/tmp/{gif_name}"
+        )
+        return GifAnimationResponse(gif_url=gif_url)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.exception("Error generando GIF")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generando GIF: {e}"
         )

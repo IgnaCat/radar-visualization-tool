@@ -7,6 +7,7 @@ import {
   generateAreaStats,
   generatePixelStat,
   generateElevationProfile,
+  generateAnimationGif,
   removeFiles,
 } from "./api/backend";
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
@@ -221,11 +222,15 @@ export default function App() {
   const [splitScreenActive, setSplitScreenActive] = useState(false);
 
   // Hook para acciones del mapa (screenshot, print, fullscreen)
-  const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } =
-    useMapActions();
+  const {
+    isFullscreen,
+    handleScreenshot,
+    handlePrint,
+    handleFullscreen,
+  } = useMapActions();
 
   // Hook para gestión de descargas
-  const { generateFilename } = useDownloads();
+  const { downloadFile, generateFilename } = useDownloads();
 
   // Registrar cleanup en cierre de pestaña/ventana
   useEffect(() => {
@@ -262,6 +267,27 @@ export default function App() {
     );
     return filtered.length > 0 ? filtered : [];
   }, [currentOverlay, hiddenLayers]);
+
+  const visibleFramesForGif = useMemo(
+    () =>
+      (mergedOutputs || [])
+        .map((frame, index) => {
+          if (!Array.isArray(frame)) return null;
+
+          const visibleLayers = frame.filter(
+            (layer) => !hiddenLayers.has(`${layer.field}::${layer.source_file}`),
+          );
+
+          if (visibleLayers.length === 0) return null;
+
+          return {
+            frameIndex: index,
+            layers: visibleLayers,
+          };
+        })
+        .filter(Boolean),
+    [mergedOutputs, hiddenLayers],
+  );
 
   // Derivar sitio del radar a partir de la capa visible de mayor prioridad.
   const radarSite = useMemo(() => {
@@ -371,6 +397,62 @@ export default function App() {
     },
     [currentOverlay, generateFilename, enqueueSnackbar],
   );
+
+  const handleDownloadGif = useCallback(async () => {
+    if (visibleFramesForGif.length < 2) {
+      enqueueSnackbar("Se necesitan al menos 2 frames visibles para generar un GIF", {
+        variant: "warning",
+      });
+      return;
+    }
+
+    try {
+      enqueueSnackbar("Generando GIF animado...", {
+        variant: "info",
+      });
+
+      const gifFrames = visibleFramesForGif.map((frame) =>
+        frame.layers
+          .map((layer) => layer.image_url)
+          .filter(Boolean),
+      );
+
+      const response = await generateAnimationGif({
+        frames: gifFrames,
+        fps: 1,
+        session_id: sessionId,
+      });
+
+      const gifPath = response.data?.gif_url;
+      if (!gifPath) {
+        throw new Error("El backend no devolvió la URL del GIF");
+      }
+
+      allCogsRef.current.add(gifPath);
+
+      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const gifUrl = gifPath.startsWith("http") ? gifPath : `${baseUrl}${gifPath}`;
+      const filename =
+        gifPath.split("/").pop() || generateFilename("animacion", ".gif");
+
+      await downloadFile(gifUrl, filename);
+
+      enqueueSnackbar(`GIF descargado (${gifFrames.length} frames)`, {
+        variant: "success",
+      });
+    } catch (error) {
+      console.error("Error generando GIF:", error);
+      enqueueSnackbar("Error al generar el GIF", {
+        variant: "error",
+      });
+    }
+  }, [
+    downloadFile,
+    enqueueSnackbar,
+    generateFilename,
+    sessionId,
+    visibleFramesForGif,
+  ]);
 
   // Configurar descargas disponibles para el toolbar
   const availableDownloads = useMemo(() => {
@@ -1329,7 +1411,9 @@ export default function App() {
         open={downloadLayersDialogOpen}
         onClose={() => setDownloadLayersDialogOpen(false)}
         layers={currentOverlay || []}
+        frames={visibleFramesForGif}
         onDownload={handleDownloadCOGs}
+        onDownloadGif={handleDownloadGif}
       />
 
       <SettingsDialog
