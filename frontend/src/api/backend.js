@@ -161,6 +161,8 @@ export async function generatePixelStat(payload) {
     session_id,
     weight_func,
     max_neighbors,
+    render_zoom,
+    render_native_zoom,
   } = payload;
 
   return api.post("/stats/pixel", {
@@ -177,6 +179,10 @@ export async function generatePixelStat(payload) {
     ...(session_id && { session_id }),
     ...(weight_func && { weight_func }),
     ...(max_neighbors != null && { max_neighbors }),
+    ...(render_zoom != null && { render_zoom: parseInt(render_zoom) }),
+    ...(render_native_zoom != null && {
+      render_native_zoom: parseInt(render_native_zoom),
+    }),
   });
 }
 

@@ -15,6 +15,7 @@ import MarkersOverlay from "../overlays/MarkersOverlay";
 import UsePixelStatClick from "../overlays/UsePixelStatClick";
 import TextOverlay from "../overlays/TextOverlay";
 import ShapeAnnotationsOverlay from "../overlays/ShapeAnnotationsOverlay";
+import { setTileNativeZoomMetadata } from "./tileZoomCache";
 
 function COGTile({
   tilejsonUrl,
@@ -74,6 +75,10 @@ function COGTile({
         const minN = Number.isFinite(tj.minzoom) ? tj.minzoom : 0;
         const maxN = Number.isFinite(tj.maxzoom) ? tj.maxzoom : 22;
         setNativeZooms({ min: minN, max: maxN });
+        setTileNativeZoomMetadata(tilejsonUrl, {
+          minNativeZoom: minN,
+          maxNativeZoom: maxN,
+        });
 
         // bounds / center
         if (Array.isArray(tj.bounds) && tj.bounds.length === 4) {

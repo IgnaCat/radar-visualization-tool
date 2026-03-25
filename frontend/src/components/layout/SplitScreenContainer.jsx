@@ -3,6 +3,7 @@ import { Box } from "@mui/material";
 import MapPanel from "./MapPanel";
 import { useSplitScreenSync } from "../../hooks/useSplitScreenSync";
 import SettingsDialog from "../dialogs/SettingsDialog";
+import { getTileNativeZoomMetadata } from "../map/tileZoomCache";
 
 /**
  * SplitScreenContainer - Gestiona la visualización de uno o dos mapas
@@ -296,6 +297,9 @@ export default function SplitScreenContainer({
         Array.isArray(visibleFrame2) && visibleFrame2.length > 0
           ? visibleFrame2[0]
           : null;
+      const tileZoomMeta2 = getTileNativeZoomMetadata(
+        topVisibleLayer2?.tilejson_url,
+      );
       const payload = {
         // Usar la capa visible de mayor prioridad del mapa 2.
         filepath:
@@ -311,6 +315,8 @@ export default function SplitScreenContainer({
         session_id: sharedProps.sessionId,
         weight_func: interpSettings2.weightFunc,
         max_neighbors: interpSettings2.maxNeighbors,
+        render_zoom: latlng.zoom,
+        render_native_zoom: tileZoomMeta2?.maxNativeZoom,
       };
       const resp = await sharedProps.generatePixelStat(payload);
       const v = resp.data?.value.toFixed(2);

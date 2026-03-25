@@ -24,6 +24,7 @@ import Loader from "./components/ui/Loader";
 import SplitScreenContainer from "./components/layout/SplitScreenContainer";
 import SettingsDialog from "./components/dialogs/SettingsDialog";
 import DownloadLayersDialog from "./components/dialogs/DownloadLayersDialog";
+import { getTileNativeZoomMetadata } from "./components/map/tileZoomCache";
 
 // Utilidad para combinar frames de múltiples radares por timestamp
 function mergeRadarFrames(results, toleranceSec = 0) {
@@ -1238,6 +1239,9 @@ export default function App() {
         Array.isArray(visibleOverlay) && visibleOverlay.length > 0
           ? visibleOverlay[0]
           : null;
+      const tileZoomMeta = getTileNativeZoomMetadata(
+        topVisibleLayer?.tilejson_url,
+      );
       const payload = {
         // Usar la capa visible de mayor prioridad.
         filepath: topVisibleLayer?.source_file || uploadedFiles[currentIndex],
@@ -1250,6 +1254,8 @@ export default function App() {
         lon: latlng.lng,
         weight_func: interpSettings.weightFunc,
         max_neighbors: interpSettings.maxNeighbors,
+        render_zoom: latlng.zoom,
+        render_native_zoom: tileZoomMeta?.maxNativeZoom,
         session_id: sessionId,
       };
       const resp = await generatePixelStat(payload);

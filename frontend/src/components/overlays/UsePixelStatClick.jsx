@@ -6,7 +6,15 @@ export default function UsePixelStatClick({ enabled, onPixelStatClick }) {
     useEffect(() => {
         if (!enabled) return;
 
-        const handler = (e) => onPixelStatClick?.(e.latlng);
+        const handler = (e) => {
+            const clickPayload = {
+                lat: e.latlng.lat,
+                lng: e.latlng.lng,
+                zoom: Math.round(map.getZoom()),
+            };
+            console.log("[pixel_debug_front] click_mapa", clickPayload);
+            onPixelStatClick?.(clickPayload);
+        };
         map.getContainer().style.cursor = "crosshair";
         map.on("click", handler);
         return () => {
