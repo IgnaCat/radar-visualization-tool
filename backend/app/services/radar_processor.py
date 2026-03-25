@@ -154,7 +154,6 @@ def _build_output_summary(
         "colormap": cmap_key,
     }
 
-
 def process_radar_to_cog(
     filepath,
     product="PPI",
@@ -373,6 +372,15 @@ def process_radar_to_cog(
             field_to_use=field_to_use,
             session_id=session_id,
         )
+
+        grid_metadata = dict(getattr(grid, "metadata", {}) or {})
+        if grid_metadata:
+            summary_metadata = dict(summary.get("metadata") or {})
+            for key in ("last_gate_range_m", "blind_range_m"):
+                if key in grid_metadata:
+                    summary_metadata[key] = grid_metadata[key]
+            if summary_metadata:
+                summary["metadata"] = summary_metadata
 
         # Verificar que el campo solicitado existe en la grilla
         if field_to_use not in grid.fields:

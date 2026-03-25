@@ -190,6 +190,7 @@ export default function MapView({
   onTextRemove,
   onTextModeDeactivate,
   shapeAnnotations = [],
+  rangeCircleShapes = [],
   onShapeAdd,
   onShapeUpdate,
   onShapeRemove,
@@ -308,6 +309,7 @@ export default function MapView({
             : null
         }
         shapes={shapeAnnotations}
+        externalShapes={rangeCircleShapes}
         onAdd={onShapeAdd}
         onUpdate={onShapeUpdate}
         onRemove={onShapeRemove}

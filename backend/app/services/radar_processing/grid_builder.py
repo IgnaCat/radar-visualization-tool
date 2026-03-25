@@ -188,7 +188,7 @@ def get_or_build_W_operator(
         max_neighbors: Máximo número de vecinos
 
     Returns:
-        scipy.sparse.csr_matrix: Operador W
+        tuple[scipy.sparse.csr_matrix, dict]: Operador W y su metadata
     """
 
     if blind_range_m is None:
@@ -215,7 +215,7 @@ def get_or_build_W_operator(
     cached_pkg = W_OPERATOR_CACHE.get(cache_key)
     if cached_pkg is not None:
         logger.info(f"Operador W recuperado de cache RAM: {cache_key[:16]}...")
-        return cached_pkg["W"]
+        return cached_pkg["W"], dict(cached_pkg.get("metadata", {}) or {})
 
     # 2. Adquirir lock para esta cache_key (evita construcción duplicada en concurrencia)
     lock = get_w_operator_lock(cache_key)
@@ -226,7 +226,7 @@ def get_or_build_W_operator(
             logger.info(
                 f"Operador W recuperado de cache RAM (post-lock): {cache_key[:16]}..."
             )
-            return cached_pkg["W"]
+            return cached_pkg["W"], dict(cached_pkg.get("metadata", {}) or {})
 
         # 3. Verificar cache disco
         try:
@@ -238,7 +238,7 @@ def get_or_build_W_operator(
                 # Intentar guardar en cache RAM
                 try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
 
-                return W
+                return W, metadata
         except Exception as e:
             logger.warning(
                 f"Error cargando operador W desde disco, construyendo nuevo: {e}"
@@ -300,7 +300,7 @@ def get_or_build_W_operator(
         # Intentar guardar en cache RAM si no es muy grande
         try_cache_w_operator_in_ram(cache_key, W, metadata, session_id)
 
-        return W
+        return W, metadata
 
 
 def get_or_build_grid3d_with_operator(
@@ -352,7 +352,7 @@ def get_or_build_grid3d_with_operator(
     min_radius = None
 
     # Obtener operador W (con caché completo: RAM -> Disco -> Build)
-    W = get_or_build_W_operator(
+    W, w_metadata = get_or_build_W_operator(
         radar_to_use=radar_to_use,
         radar=radar,
         estrategia=estrategia,
@@ -416,6 +416,13 @@ def get_or_build_grid3d_with_operator(
     )
     metadata = dict(getattr(radar_to_use, "metadata", {}) or {})
     metadata.setdefault("instrument_name", metadata.get("instrument_name", "RADAR"))
+    metadata.update(
+        {
+            key: value
+            for key, value in (w_metadata or {}).items()
+            if key in {"blind_range_m", "last_gate_range_m"}
+        }
+    )
 
     grid = pyart.core.Grid(
         time={

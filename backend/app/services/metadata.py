@@ -81,6 +81,8 @@ def extract_radar_metadata(path: str) -> Dict[str, Any]:
         "nsweeps": nsweeps,
         "elevations": elevations,               # lista de grados (puede traer NaN)
         "range_max_m": range_max_m,
+        "last_gate_range_m": range_max_m,
+        "radar_site": {"lat": lat, "lon": lon, "alt_m": alt},
         "site": {"lat": lat, "lon": lon, "alt_m": alt},
         "instrument": instrument,
         "time_units": time_units,

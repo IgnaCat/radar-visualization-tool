@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import MapView from "../map/MapView";
 import VerticalToolbar from "../controls/VerticalToolbar";
 import MapToolbar from "../controls/MapToolbar";
@@ -17,6 +17,10 @@ import ElevationProfileDialog from "../dialogs/ElevationProfileDialog";
 import WarningPanel from "../ui/WarningPanel";
 import Loader from "../ui/Loader";
 import { analyzeFieldsAcrossFiles } from "../../utils/fieldAnalysis";
+
+function getRangeCircleKey(layer) {
+  return `${layer?.field || ""}::${layer?.source_file || ""}`;
+}
 
 /**
  * MapPanel - Encapsula un mapa completo con todas sus herramientas
@@ -161,6 +165,95 @@ export default function MapPanel({
   const [annotationMode, setAnnotationModeState] = useState(null);
   const [textAnnotations, setTextAnnotations] = useState([]);
   const [shapeAnnotations, setShapeAnnotations] = useState([]);
+  const [rangeCircleLayers, setRangeCircleLayers] = useState(new Set());
+
+  const availableRangeCircleKeys = useMemo(() => {
+    if (!Array.isArray(mergedOutputs)) return new Set();
+
+    return new Set(
+      mergedOutputs
+        .flatMap((frame) => (Array.isArray(frame) ? frame : []))
+        .map((layer) => getRangeCircleKey(layer))
+        .filter((key) => key !== "::"),
+    );
+  }, [mergedOutputs]);
+
+  useEffect(() => {
+    setRangeCircleLayers((prev) => {
+      const next = new Set(
+        [...prev].filter((key) => availableRangeCircleKeys.has(key)),
+      );
+      return next.size === prev.size ? prev : next;
+    });
+  }, [availableRangeCircleKeys]);
+
+  const filesMetadataByPath = useMemo(
+    () =>
+      new Map(
+        (filesInfo || []).map((fileInfo) => [
+          fileInfo.filepath,
+          fileInfo.metadata || {},
+        ]),
+      ),
+    [filesInfo],
+  );
+
+  const rangeCircleShapes = useMemo(() => {
+    if (!Array.isArray(allLayersOverlay) || allLayersOverlay.length === 0) {
+      return [];
+    }
+
+    return allLayersOverlay
+      .filter((layer) => {
+        const key = getRangeCircleKey(layer);
+        return rangeCircleLayers.has(key) && !hiddenLayers?.has(key);
+      })
+      .map((layer) => {
+        const layerMetadata = layer?.metadata || {};
+        const fallbackMetadata = filesMetadataByPath.get(layer?.source_file) || {};
+        const radarSite =
+          layerMetadata.radar_site ||
+          layerMetadata.site ||
+          fallbackMetadata.radar_site ||
+          fallbackMetadata.site;
+        const lastGateRangeM = Number(
+          layerMetadata.last_gate_range_m ??
+            layerMetadata.range_max_m ??
+            fallbackMetadata.last_gate_range_m ??
+            fallbackMetadata.range_max_m,
+        );
+
+        if (
+          !radarSite ||
+          !Number.isFinite(Number(radarSite.lat)) ||
+          !Number.isFinite(Number(radarSite.lon)) ||
+          !Number.isFinite(lastGateRangeM) ||
+          lastGateRangeM <= 0
+        ) {
+          return null;
+        }
+
+        return {
+          id: `range-circle:${getRangeCircleKey(layer)}`,
+          type: "circle",
+          center: {
+            lat: Number(radarSite.lat),
+            lon: Number(radarSite.lon),
+          },
+          radius: lastGateRangeM,
+          interactive: false,
+          style: {
+            color: "#0f766e",
+            fillColor: "#0f766e",
+            fillOpacity: 0,
+            weight: 2,
+            opacity: 0.9,
+            dashArray: "10,6",
+          },
+        };
+      })
+      .filter(Boolean);
+  }, [allLayersOverlay, filesMetadataByPath, hiddenLayers, rangeCircleLayers]);
 
   const handleSetAnnotationMode = (mode) => {
     setAnnotationModeState((prev) => {
@@ -202,6 +295,16 @@ export default function MapPanel({
     );
   const handleShapeRemove = (id) =>
     setShapeAnnotations((prev) => prev.filter((s) => s.id !== id));
+  const handleToggleRangeCircle = (layer) => {
+    const key = getRangeCircleKey(layer);
+
+    setRangeCircleLayers((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
   // ────────────────────────────────────────────────────────────────────────────
 
   // Wrapper para onMapReady que actualiza tanto el estado local como el externo
@@ -386,6 +489,7 @@ export default function MapPanel({
         onTextRemove={handleTextRemove}
         onTextModeDeactivate={handleDeactivateAnnotationMode}
         shapeAnnotations={shapeAnnotations}
+        rangeCircleShapes={rangeCircleShapes}
         onShapeAdd={handleShapeAdd}
         onShapeUpdate={handleShapeUpdate}
         onShapeRemove={handleShapeRemove}
@@ -465,6 +569,8 @@ export default function MapPanel({
         hiddenLayers={hiddenLayers}
         opacityByLayer={opacityByLayer}
         onLayerOpacityChange={onLayerOpacityChange}
+        rangeCirclesVisible={rangeCircleLayers}
+        onToggleLayerRangeCircle={handleToggleRangeCircle}
         filtersPerField={filtersPerField}
         onApplyFilters={onApplyFilters}
       />

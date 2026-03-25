@@ -334,21 +334,24 @@ function ArrowHead({ points, color, opacity }) {
 // ─── Single completed shape renderer ──────────────────────────────────────────
 
 function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
-  const interactive = !isDrawing;
-  const popupNode =
-    shape.type === "line" || shape.type === "arrow" ? (
-      <LineStylePopup
-        shape={shape}
-        onChange={(p) => onUpdate(shape.id, p)}
-        onDelete={() => onRemove(shape.id)}
-      />
-    ) : (
-      <FillStylePopup
-        shape={shape}
-        onChange={(p) => onUpdate(shape.id, p)}
-        onDelete={() => onRemove(shape.id)}
-      />
-    );
+  const interactive = !isDrawing && shape.interactive !== false;
+  const popupNode = interactive
+    ? shape.type === "line" || shape.type === "arrow"
+      ? (
+          <LineStylePopup
+            shape={shape}
+            onChange={(p) => onUpdate(shape.id, p)}
+            onDelete={() => onRemove(shape.id)}
+          />
+        )
+      : (
+          <FillStylePopup
+            shape={shape}
+            onChange={(p) => onUpdate(shape.id, p)}
+            onDelete={() => onRemove(shape.id)}
+          />
+        )
+    : null;
 
   if (shape.type === "line") {
     return (
@@ -362,9 +365,11 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
           interactive,
         }}
       >
-        <Popup closeButton={false} maxWidth={240}>
-          {popupNode}
-        </Popup>
+        {popupNode && (
+          <Popup closeButton={false} maxWidth={240}>
+            {popupNode}
+          </Popup>
+        )}
       </Polyline>
     );
   }
@@ -381,9 +386,11 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
             interactive,
           }}
         >
-          <Popup closeButton={false} maxWidth={240}>
-            {popupNode}
-          </Popup>
+          {popupNode && (
+            <Popup closeButton={false} maxWidth={240}>
+              {popupNode}
+            </Popup>
+          )}
         </Polyline>
         <ArrowHead
           points={shape.points}
@@ -410,12 +417,15 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
           fillOpacity: shape.style.fillOpacity,
           weight: shape.style.weight,
           opacity: shape.style.opacity,
+          dashArray: shape.style.dashArray || null,
           interactive,
         }}
       >
-        <Popup closeButton={false} maxWidth={240}>
-          {popupNode}
-        </Popup>
+        {popupNode && (
+          <Popup closeButton={false} maxWidth={240}>
+            {popupNode}
+          </Popup>
+        )}
       </Rectangle>
     );
   }
@@ -431,12 +441,15 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
           fillOpacity: shape.style.fillOpacity,
           weight: shape.style.weight,
           opacity: shape.style.opacity,
+          dashArray: shape.style.dashArray || null,
           interactive,
         }}
       >
-        <Popup closeButton={false} maxWidth={240}>
-          {popupNode}
-        </Popup>
+        {popupNode && (
+          <Popup closeButton={false} maxWidth={240}>
+            {popupNode}
+          </Popup>
+        )}
       </Circle>
     );
   }
@@ -451,12 +464,15 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
           fillOpacity: shape.style.fillOpacity,
           weight: shape.style.weight,
           opacity: shape.style.opacity,
+          dashArray: shape.style.dashArray || null,
           interactive,
         }}
       >
-        <Popup closeButton={false} maxWidth={240}>
-          {popupNode}
-        </Popup>
+        {popupNode && (
+          <Popup closeButton={false} maxWidth={240}>
+            {popupNode}
+          </Popup>
+        )}
       </Polygon>
     );
   }
@@ -472,6 +488,7 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
  * Props:
  * - drawingMode: 'line' | 'arrow' | 'rect' | 'circle' | 'polygon' | null
  * - shapes: array - Array de formas completadas
+ * - externalShapes: array - Formas externas de solo lectura
  * - onAdd: function(shape) - Callback al completar una forma
  * - onUpdate: function(id, patch) - Callback al editar estilos
  * - onRemove: function(id) - Callback al eliminar una forma
@@ -480,6 +497,7 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
 export default function ShapeAnnotationsOverlay({
   drawingMode,
   shapes = [],
+  externalShapes = [],
   onAdd,
   onUpdate,
   onRemove,
@@ -631,7 +649,7 @@ export default function ShapeAnnotationsOverlay({
   return (
     <>
       {/* Completed shapes */}
-      {shapes.map((shape) => (
+      {[...externalShapes, ...shapes].map((shape) => (
         <RenderedShape
           key={shape.id}
           shape={shape}

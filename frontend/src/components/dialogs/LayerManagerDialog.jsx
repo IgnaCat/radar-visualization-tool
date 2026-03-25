@@ -21,6 +21,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import OpacityIcon from "@mui/icons-material/Opacity";
 import CloseIcon from "@mui/icons-material/Close";
+import TrackChangesIcon from "@mui/icons-material/TrackChanges";
 import {
   FIELD_LIMITS,
   initFilterForField,
@@ -42,6 +43,8 @@ export default function LayerManagerDialog({
   hiddenLayers = new Set(), // Set de "field::source_file" keys ocultas
   opacityByLayer = {}, // { "FIELD::source_file": number } opacidades por capa
   onLayerOpacityChange, // (field, source_file, opacity) => void
+  rangeCirclesVisible = new Set(), // Set de "field::source_file" con círculos visibles
+  onToggleLayerRangeCircle, // (layer) => void - toggle círculo de alcance
   filtersPerField = {}, // { FIELD: [{field, min, max}] } filtros iniciales por campo
   onApplyFilters, // (filtersPerField) => void - callback al aplicar filtros
 }) {
@@ -253,11 +256,17 @@ export default function LayerManagerDialog({
   const getLayerKey = (layer) =>
     `${String(layer.field || "").toUpperCase()}::${layer.source_file || ""}`;
 
+  const getOverlayLayerKey = (layer) =>
+    `${layer?.field || ""}::${layer?.source_file || ""}`;
+
   /** Opacidad actual de una capa (default 1) */
   const getLayerOpacity = (layer) => {
     const key = getLayerKey(layer);
     return typeof opacityByLayer[key] === "number" ? opacityByLayer[key] : 1;
   };
+
+  const isRangeCircleVisible = (layer) =>
+    rangeCirclesVisible.has(getOverlayLayerKey(layer));
 
   const handleOpacityChange = useCallback(
     (layer, value) => {
@@ -283,7 +292,7 @@ export default function LayerManagerDialog({
           top: position.y,
           left: position.x,
           zIndex: 999,
-          width: hasOpenFilters ? 600 : 370,
+          width: hasOpenFilters ? 600 : 392,
           maxHeight: "calc(100vh - 100px)",
           overflowY: "auto",
           backgroundColor: "rgba(255, 255, 255, 0.98)",
@@ -457,6 +466,34 @@ export default function LayerManagerDialog({
                       >
                         {Math.round(getLayerOpacity(layer) * 100)}%
                       </Typography>
+
+                      <Tooltip
+                        title={
+                          isRangeCircleVisible(layer)
+                            ? "Ocultar alcance del radar"
+                            : "Mostrar alcance del radar"
+                        }
+                      >
+                        <IconButton
+                          size="small"
+                          onClick={() => onToggleLayerRangeCircle?.(layer)}
+                          sx={{
+                            padding: "4px",
+                            color: isRangeCircleVisible(layer)
+                              ? "#0f766e"
+                              : "text.secondary",
+                            backgroundColor: isRangeCircleVisible(layer)
+                              ? "rgba(15, 118, 110, 0.10)"
+                              : "transparent",
+                            "&:hover": {
+                              color: "#0f766e",
+                              backgroundColor: "rgba(15, 118, 110, 0.12)",
+                            },
+                          }}
+                        >
+                          <TrackChangesIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
 
                       <Tooltip
                         title={
