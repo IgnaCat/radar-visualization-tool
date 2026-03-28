@@ -166,6 +166,7 @@ export default function MapPanel({
   const [textAnnotations, setTextAnnotations] = useState([]);
   const [shapeAnnotations, setShapeAnnotations] = useState([]);
   const [rangeCircleLayers, setRangeCircleLayers] = useState(new Set());
+  const [elevationProfilePoints, setElevationProfilePoints] = useState([]);
 
   const availableRangeCircleKeys = useMemo(() => {
     if (!Array.isArray(mergedOutputs)) return new Set();
@@ -400,6 +401,8 @@ export default function MapPanel({
   const handleRequestLineDrawing = () => {
     setDrawnLineCoords([]);
     setLineDrawingFinished(false);
+    setElevationProfilePoints([]);
+    setHighlightedPoint(null);
     setLineDrawMode(true);
   };
 
@@ -412,15 +415,28 @@ export default function MapPanel({
     setDrawnLineCoords([]);
     setLineDrawMode(false);
     setLineDrawingFinished(false);
+    setElevationProfilePoints([]);
     setHighlightedPoint(null);
   };
 
-  const handleHighlightPoint = (point) => {
-    setHighlightedPoint(point);
+  const handleHighlightPoint = (lat, lon) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setHighlightedPoint(null);
+      return;
+    }
+
+    const matchingPoint = elevationProfilePoints.find(
+      (point) => point.lat === lat && point.lon === lon,
+    );
+
+    setHighlightedPoint(matchingPoint || { lat, lon });
   };
 
-  const handleProfileGenerated = () => {
+  const handleProfileGenerated = (profilePoints = []) => {
     setLineDrawingFinished(false);
+    setElevationProfilePoints(
+      Array.isArray(profilePoints) ? profilePoints : [],
+    );
   };
 
   const handleOpenElevationProfile = () => {
@@ -474,6 +490,8 @@ export default function MapPanel({
         drawnLineCoords={drawnLineCoords}
         onLineComplete={handleLineComplete}
         onLinePointsChange={setDrawnLineCoords}
+        elevationProfilePoints={elevationProfilePoints}
+        onLineHoverPoint={setHighlightedPoint}
         highlightedPoint={highlightedPoint}
         markerMode={markerMode}
         markers={markers}
@@ -674,6 +692,7 @@ export default function MapPanel({
         onClearDrawing={handleClearLineDrawing}
         onHighlightPoint={handleHighlightPoint}
         onProfileGenerated={handleProfileGenerated}
+        highlightedPoint={highlightedPoint}
       />
 
       <WarningPanel warnings={warnings} />

@@ -178,6 +178,8 @@ export default function MapView({
   drawnLineCoords = [],
   onLineComplete,
   onLinePointsChange,
+  elevationProfilePoints = [],
+  onLineHoverPoint,
   highlightedPoint = null,
   // Props para marcadores
   markerMode = false,
@@ -287,6 +289,8 @@ export default function MapView({
         points={drawnLineCoords}
         onComplete={onLineComplete}
         onPointsChange={onLinePointsChange}
+        profilePoints={elevationProfilePoints}
+        onHoverPoint={onLineHoverPoint}
       />
       <MarkersOverlay
         enabled={markerMode}
@@ -407,16 +411,12 @@ export default function MapView({
             center={[highlightedPoint.lat, highlightedPoint.lon]}
             radius={8}
             pathOptions={{
-              color: "#ff0000",
+              color: "#ff8c00",
               weight: 3,
-              fillOpacity: 0.9,
-              fillColor: "#ff0000",
+              fillOpacity: 0.95,
+              fillColor: "#ff8c00",
             }}
-          >
-            <Tooltip direction="top" offset={[0, -8]} permanent>
-              Punto actual
-            </Tooltip>
-          </CircleMarker>
+          />
         )}
     </MapContainer>
   );

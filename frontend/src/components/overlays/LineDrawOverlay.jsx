@@ -2,6 +2,27 @@ import { useEffect, useRef, useState } from "react";
 import { useMap, Polyline, CircleMarker, Marker } from "react-leaflet";
 import L from "leaflet";
 
+function distanceToSegment(point, start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+
+  if (dx === 0 && dy === 0) {
+    return Math.hypot(point.x - start.x, point.y - start.y);
+  }
+
+  const t = Math.max(
+    0,
+    Math.min(
+      1,
+      ((point.x - start.x) * dx + (point.y - start.y) * dy) / (dx * dx + dy * dy),
+    ),
+  );
+
+  const projectedX = start.x + t * dx;
+  const projectedY = start.y + t * dy;
+  return Math.hypot(point.x - projectedX, point.y - projectedY);
+}
+
 // Crear icono personalizado para el marcador final (cuadrado blanco)
 const finishMarkerIcon = L.divIcon({
   className: "finish-marker",
@@ -26,11 +47,15 @@ export default function LineDrawOverlay({
   points: externalPoints,
   onComplete,
   onPointsChange,
+  profilePoints = [],
+  onHoverPoint,
 }) {
   const map = useMap();
   const [points, setPoints] = useState([]);
   const onCompleteRef = useRef(onComplete);
   const onPointsChangeRef = useRef(onPointsChange);
+  const hoverFrameRef = useRef(null);
+  const lastHoveredRef = useRef(undefined);
 
   // Sincronizar con puntos externos (reseteo desde padre)
   useEffect(() => {
@@ -113,6 +138,108 @@ export default function LineDrawOverlay({
     };
   }, [map, enabled]);
 
+  useEffect(() => {
+    if (
+      !map ||
+      enabled ||
+      points.length < 2 ||
+      !Array.isArray(profilePoints) ||
+      profilePoints.length === 0
+    ) {
+      return;
+    }
+
+    const hoverTolerancePx = 18;
+
+    const handleMapMouseMove = (e) => {
+      if (hoverFrameRef.current != null) {
+        cancelAnimationFrame(hoverFrameRef.current);
+      }
+
+      hoverFrameRef.current = requestAnimationFrame(() => {
+        const mousePoint = map.latLngToContainerPoint(e.latlng);
+        const linePixels = points.map((point) =>
+          map.latLngToContainerPoint([point.lat, point.lon]),
+        );
+
+        let nearLine = false;
+        for (let i = 0; i < linePixels.length - 1; i += 1) {
+          if (
+            distanceToSegment(mousePoint, linePixels[i], linePixels[i + 1]) <=
+            hoverTolerancePx
+          ) {
+            nearLine = true;
+            break;
+          }
+        }
+
+        if (!nearLine) {
+          map.getContainer().style.cursor = "";
+          if (lastHoveredRef.current !== null) {
+            lastHoveredRef.current = null;
+            onHoverPoint?.(null);
+          }
+          hoverFrameRef.current = null;
+          return;
+        }
+
+        let nearestPoint = null;
+        let nearestDistance = Infinity;
+
+        profilePoints.forEach((point) => {
+          if (!Number.isFinite(point?.lat) || !Number.isFinite(point?.lon)) {
+            return;
+          }
+
+          const pointPx = map.latLngToContainerPoint([point.lat, point.lon]);
+          const distance = Math.hypot(
+            mousePoint.x - pointPx.x,
+            mousePoint.y - pointPx.y,
+          );
+          if (distance < nearestDistance) {
+            nearestDistance = distance;
+            nearestPoint = point;
+          }
+        });
+
+        map.getContainer().style.cursor = "pointer";
+        if (
+          lastHoveredRef.current?.lat !== nearestPoint?.lat ||
+          lastHoveredRef.current?.lon !== nearestPoint?.lon
+        ) {
+          lastHoveredRef.current = nearestPoint;
+          onHoverPoint?.(nearestPoint);
+        }
+        hoverFrameRef.current = null;
+      });
+    };
+
+    const handleMapMouseOut = () => {
+      if (hoverFrameRef.current != null) {
+        cancelAnimationFrame(hoverFrameRef.current);
+        hoverFrameRef.current = null;
+      }
+      map.getContainer().style.cursor = "";
+      if (lastHoveredRef.current !== null) {
+        lastHoveredRef.current = null;
+        onHoverPoint?.(null);
+      }
+    };
+
+    map.on("mousemove", handleMapMouseMove);
+    map.on("mouseout", handleMapMouseOut);
+
+    return () => {
+      if (hoverFrameRef.current != null) {
+        cancelAnimationFrame(hoverFrameRef.current);
+        hoverFrameRef.current = null;
+      }
+      map.off("mousemove", handleMapMouseMove);
+      map.off("mouseout", handleMapMouseOut);
+      map.getContainer().style.cursor = "";
+    };
+  }, [map, enabled, points, profilePoints, onHoverPoint]);
+
   // Función para finalizar el dibujo al hacer click en el marcador final
   const handleFinishClick = () => {
     if (points.length >= 2) {
@@ -121,7 +248,7 @@ export default function LineDrawOverlay({
     }
   };
 
-  if (!enabled || points.length === 0) return null;
+  if (points.length === 0) return null;
 
   // Convertir puntos para Leaflet (formato [lat, lon])
   const positions = points.map((p) => [p.lat, p.lon]);
@@ -136,6 +263,7 @@ export default function LineDrawOverlay({
           weight={3}
           opacity={0.8}
           dashArray="5, 10"
+          interactive={false}
         />
       )}
 
@@ -152,8 +280,23 @@ export default function LineDrawOverlay({
         />
       ))}
 
-      {/* Marcador final (cuadrado blanco clickeable) - solo si hay al menos 2 puntos */}
-      {points.length >= 1 && (
+      {/* Punto final visible cuando el dibujo ya terminó */}
+      {!enabled && points.length >= 1 && (
+        <CircleMarker
+          center={[
+            points[points.length - 1].lat,
+            points[points.length - 1].lon,
+          ]}
+          radius={6}
+          fillColor="#ff6b35"
+          fillOpacity={0.9}
+          color="#fff"
+          weight={2}
+        />
+      )}
+
+      {/* Marcador final clickeable solo mientras el modo dibujo está activo */}
+      {enabled && points.length >= 1 && (
         <Marker
           position={[
             points[points.length - 1].lat,
@@ -165,6 +308,7 @@ export default function LineDrawOverlay({
           }}
         />
       )}
+
     </>
   );
 }

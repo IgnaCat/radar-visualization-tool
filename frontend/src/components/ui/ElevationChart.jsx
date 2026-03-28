@@ -57,8 +57,10 @@ export default function ElevationChart({
     onHover,
     onClick,
     clickable = false,
+    highlightedPoint = null,
 }) {
     const [hoveredPoint, setHoveredPoint] = useState(null);
+    const activePoint = hoveredPoint || highlightedPoint;
 
     const handleMouseMove = (e) => {
         if (e && e.activePayload && e.activePayload.length > 0) {
@@ -165,12 +167,12 @@ export default function ElevationChart({
                         dot={false}
                         activeDot={{ r: 6 }}
                     />
-                    {hoveredPoint && (
+                    {activePoint && (
                         <ReferenceDot
-                            x={hoveredPoint.distance}
-                            y={hoveredPoint.elevation}
+                            x={activePoint.distance}
+                            y={activePoint.elevation}
                             r={8}
-                            fill="#ff0000"
+                            fill="#ff8c00"
                             stroke="#fff"
                             strokeWidth={2}
                         />

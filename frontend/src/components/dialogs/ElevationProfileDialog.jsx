@@ -35,6 +35,7 @@ export default function ElevationProfileDialog({
   onClearDrawing,
   onHighlightPoint,
   onProfileGenerated,
+  highlightedPoint = null,
 }) {
   const [loading, setLoading] = useState(false);
   const [profileData, setProfileData] = useState(null);
@@ -84,10 +85,10 @@ export default function ElevationProfileDialog({
       try {
         const response = await onGenerate(drawnCoordinates);
         setProfileData(response.data);
-        onProfileGenerated?.(); // Notificar que se generó el perfil
+        onProfileGenerated?.(response.data?.profile || []); // Notificar que se generó el perfil
       } catch (err) {
         setError(err?.response?.data?.detail || String(err));
-        onProfileGenerated?.(); // Notificar incluso si hay error
+        onProfileGenerated?.([]); // Notificar incluso si hay error
       } finally {
         setLoading(false);
       }
@@ -98,7 +99,7 @@ export default function ElevationProfileDialog({
 
   // Manejar hover en el gráfico
   const handleHover = (point) => {
-    onHighlightPoint?.(point?.lat || null, point?.lon || null);
+    onHighlightPoint?.(point?.lat ?? null, point?.lon ?? null);
   };
 
   return (
@@ -250,6 +251,7 @@ export default function ElevationProfileDialog({
                   onHover={handleHover}
                   clickable={true}
                   onClick={() => setExpandedChart(true)}
+                  highlightedPoint={highlightedPoint}
                 />
                 <Typography
                   variant="caption"
@@ -296,6 +298,7 @@ export default function ElevationProfileDialog({
                 height={500}
                 onHover={handleHover}
                 clickable={false}
+                highlightedPoint={highlightedPoint}
               />
             )}
           </Box>
