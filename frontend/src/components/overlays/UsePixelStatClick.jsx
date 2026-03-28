@@ -12,7 +12,6 @@ export default function UsePixelStatClick({ enabled, onPixelStatClick }) {
                 lng: e.latlng.lng,
                 zoom: Math.round(map.getZoom()),
             };
-            console.log("[pixel_debug_front] click_mapa", clickPayload);
             onPixelStatClick?.(clickPayload);
         };
         map.getContainer().style.cursor = "crosshair";

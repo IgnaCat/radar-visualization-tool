@@ -23,9 +23,16 @@ def _nbytes_pkg(pkg) -> int:
     pkg = {"arr": MaskedArray, "crs": str, "transform": Affine}
     """
     n = 0
-    a = pkg.get("arr")
-    if a is not None:
-        n += _nbytes_arr(a)
+    for key in ("arr", "arr_warped"):
+        arr = pkg.get(key)
+        if arr is not None:
+            n += _nbytes_arr(arr)
+
+    display_grids = pkg.get("display_grids") or {}
+    for display_grid in display_grids.values():
+        arr = (display_grid or {}).get("arr")
+        if arr is not None:
+            n += _nbytes_arr(arr)
     # crs/transform pesan poco, los ignoramos
     return n
 

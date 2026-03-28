@@ -88,7 +88,6 @@ class RadarPixelRequest(BaseModel):
         ),
     )
 
-
 class RadarPixelResponse(BaseModel):
     """Respuesta de valor en píxel."""
 

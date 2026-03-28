@@ -122,6 +122,8 @@ def _build_output_summary(
     filepath: str,
     cog_path: Path,
     cmap_key: str,
+    metadata: dict | None = None,
+    version_tag: str | None = None,
     session_id: str | None = None,
 ) -> dict:
     """
@@ -146,12 +148,17 @@ def _build_output_summary(
         else f"static/tmp/{unique_cog_name}"
     )
 
+    tilejson_url = f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}"
+    if version_tag:
+        tilejson_url += f"&v={quote(str(version_tag), safe='')}"
+
     return {
         "image_url": relative_url,
         "field": field_requested,
         "source_file": Path(filepath).name,
-        "tilejson_url": f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}",
+        "tilejson_url": tilejson_url,
         "colormap": cmap_key,
+        "metadata": metadata or None,
     }
 
 def process_radar_to_cog(
@@ -222,20 +229,21 @@ def process_radar_to_cog(
     cmap_key_for_summary = (
         cmap_override_key if cmap_override_key else spec.get("cmap", "grc_th")
     )
-
-    # Generamos el resumen de salida
-    summary = _build_output_summary(
-        unique_cog_name,
-        field_requested,
-        filepath,
-        cog_path,
-        cmap_key=cmap_key_for_summary,
-        session_id=session_id,
-    )
+    layer_metadata: dict = {}
 
     # Si ya existe el COG, devolvemos directo
     if cog_path.exists():
-        return summary
+        version_tag = str(cog_path.stat().st_mtime_ns)
+        return _build_output_summary(
+            unique_cog_name,
+            field_requested,
+            filepath,
+            cog_path,
+            cmap_key=cmap_key_for_summary,
+            metadata=layer_metadata,
+            version_tag=version_tag,
+            session_id=session_id,
+        )
 
     # Si no existe, lo procesamos...
     if not Path(filepath).exists():
@@ -375,12 +383,9 @@ def process_radar_to_cog(
 
         grid_metadata = dict(getattr(grid, "metadata", {}) or {})
         if grid_metadata:
-            summary_metadata = dict(summary.get("metadata") or {})
             for key in ("last_gate_range_m", "blind_range_m"):
                 if key in grid_metadata:
-                    summary_metadata[key] = grid_metadata[key]
-            if summary_metadata:
-                summary["metadata"] = summary_metadata
+                    layer_metadata[key] = grid_metadata[key]
 
         # Verificar que el campo solicitado existe en la grilla
         if field_to_use not in grid.fields:
@@ -549,4 +554,14 @@ def process_radar_to_cog(
         vmax=vmax,
     )
 
-    return summary
+    version_tag = str(cog_path.stat().st_mtime_ns)
+    return _build_output_summary(
+        unique_cog_name,
+        field_requested,
+        filepath,
+        cog_path,
+        cmap_key=cmap_key_for_summary,
+        metadata=layer_metadata,
+        version_tag=version_tag,
+        session_id=session_id,
+    )

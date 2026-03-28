@@ -7,7 +7,10 @@ import numpy as np
 import pyproj
 from pathlib import Path
 from typing import Optional, List, Dict
+from affine import Affine
 from pyproj import Transformer
+from rasterio.transform import array_bounds
+from rasterio.warp import reproject, Resampling
 
 from ...models import RadarPixelRequest, RadarPixelResponse
 from ...core.cache import GRID2D_CACHE
@@ -17,7 +20,6 @@ from ...utils.helpers import extract_volume_from_filename
 from ..radar_common import (
     grid2d_cache_key,
     md5_file,
-    colormap_for,
 )
 from ..radar_processing import (
     separate_filters,
@@ -34,21 +36,6 @@ class PixelOrchestrator:
 
     WEB_MERCATOR_ORIGIN_SHIFT = 20037508.342789244
     WEB_MERCATOR_TILE_SIZE = 256
-
-    @staticmethod
-    def debug_print(message: str, **kwargs) -> None:
-        """
-        Imprime trazas simples para debugging del flujo de consulta de pixel.
-
-        Args:
-            message: Mensaje corto del evento
-            **kwargs: Pares clave/valor para inspeccionar el estado interno
-        """
-        if kwargs:
-            details = ", ".join(f"{key}={value}" for key, value in kwargs.items())
-            print(f"[pixel_debug] {message} | {details}")
-        else:
-            print(f"[pixel_debug] {message}")
 
     @staticmethod
     def validate_request(payload: RadarPixelRequest) -> None:
@@ -243,6 +230,149 @@ class PixelOrchestrator:
         return max(0, int(np.floor(native_zoom_float)))
 
     @staticmethod
+    def resolve_effective_tile_zoom(
+        render_zoom: Optional[int],
+        transform=None,
+        crs: Optional[pyproj.CRS] = None,
+        render_native_zoom: Optional[int] = None,
+    ) -> tuple[Optional[int], Optional[int]]:
+        """
+        Resuelve el zoom efectivo de la malla visible WebMercatorQuad.
+
+        Returns:
+            Tupla (zoom_efectivo, zoom_nativo). Si no hay render_zoom, el
+            zoom efectivo queda en None.
+        """
+        native_zoom = (
+            int(render_native_zoom)
+            if render_native_zoom is not None
+            else PixelOrchestrator.estimate_web_mercator_native_zoom(
+                transform=transform,
+                crs=crs,
+            )
+        )
+
+        if render_zoom is None:
+            return None, native_zoom
+
+        zoom = int(render_zoom)
+        effective_zoom = min(zoom, native_zoom) if native_zoom is not None else zoom
+        return effective_zoom, native_zoom
+
+    @staticmethod
+    def build_display_aligned_grid(
+        arr: np.ma.MaskedArray,
+        transform,
+        effective_zoom: int,
+    ) -> Dict:
+        """
+        Remuestrea un raster ya warped en EPSG:3857 a la malla exacta de
+        pixeles WebMercatorQuad del zoom solicitado.
+        """
+        ny, nx = arr.shape
+        left, bottom, right, top = array_bounds(ny, nx, transform)
+
+        world_span = 2.0 * PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT
+        resolution = world_span / (
+            PixelOrchestrator.WEB_MERCATOR_TILE_SIZE * (2**int(effective_zoom))
+        )
+
+        left_px = int(
+            np.floor(
+                (left + PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT) / resolution
+            )
+        )
+        right_px = int(
+            np.ceil(
+                (right + PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT) / resolution
+            )
+        )
+        top_px = int(
+            np.floor(
+                (PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT - top) / resolution
+            )
+        )
+        bottom_px = int(
+            np.ceil(
+                (PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT - bottom) / resolution
+            )
+        )
+
+        dst_width = max(1, right_px - left_px)
+        dst_height = max(1, bottom_px - top_px)
+        dst_left = (left_px * resolution) - PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT
+        dst_top = PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT - (
+            top_px * resolution
+        )
+        dst_transform = Affine.translation(dst_left, dst_top) * Affine.scale(
+            resolution,
+            -resolution,
+        )
+
+        src_data = np.ma.filled(arr, fill_value=np.nan).astype(np.float32)
+        dst_data = np.full((dst_height, dst_width), np.nan, dtype=np.float32)
+
+        reproject(
+            source=src_data,
+            destination=dst_data,
+            src_transform=transform,
+            src_crs="EPSG:3857",
+            dst_transform=dst_transform,
+            dst_crs="EPSG:3857",
+            resampling=Resampling.nearest,
+            src_nodata=np.nan,
+            dst_nodata=np.nan,
+        )
+
+        dst_arr = np.ma.masked_invalid(dst_data)
+        return {
+            "arr": dst_arr,
+            "transform": dst_transform,
+            "crs": "EPSG:3857",
+            "zoom": int(effective_zoom),
+            "resolution": float(resolution),
+        }
+
+    @staticmethod
+    def get_or_build_display_aligned_grid(
+        pkg: Dict,
+        cache_key: str,
+        arr: np.ma.MaskedArray,
+        transform,
+        crs: pyproj.CRS,
+        effective_zoom: Optional[int],
+    ) -> Optional[Dict]:
+        """
+        Obtiene o construye una grilla numérica alineada a la malla visible
+        WebMercatorQuad del zoom efectivo.
+        """
+        if effective_zoom is None or transform is None or crs is None:
+            return None
+
+        try:
+            crs_obj = pyproj.CRS.from_user_input(crs)
+        except Exception:
+            return None
+
+        if crs_obj.to_epsg() != 3857:
+            return None
+
+        display_grids = pkg.setdefault("display_grids", {})
+        zoom_key = int(effective_zoom)
+        cached_display_grid = display_grids.get(zoom_key)
+        if cached_display_grid is not None:
+            return cached_display_grid
+
+        display_grid = PixelOrchestrator.build_display_aligned_grid(
+            arr=arr,
+            transform=transform,
+            effective_zoom=zoom_key,
+        )
+        display_grids[zoom_key] = display_grid
+        GRID2D_CACHE[cache_key] = pkg
+        return display_grid
+
+    @staticmethod
     def snap_coordinates_to_tile_pixel(
         lon: float,
         lat: float,
@@ -271,32 +401,15 @@ class PixelOrchestrator:
             Si no hay zoom válido, devuelve las coordenadas originales.
         """
         if render_zoom is None:
-            PixelOrchestrator.debug_print(
-                "snap_tile_omitido",
-                motivo="sin_zoom",
-                lon=round(lon, 8),
-                lat=round(lat, 8),
-            )
             return lon, lat
 
         zoom = int(render_zoom)
-        native_zoom = (
-            int(render_native_zoom)
-            if render_native_zoom is not None
-            else PixelOrchestrator.estimate_web_mercator_native_zoom(
-                transform=transform,
-                crs=crs,
-            )
+        effective_zoom, _native_zoom = PixelOrchestrator.resolve_effective_tile_zoom(
+            render_zoom=render_zoom,
+            transform=transform,
+            crs=crs,
+            render_native_zoom=render_native_zoom,
         )
-        effective_zoom = min(zoom, native_zoom) if native_zoom is not None else zoom
-
-        if effective_zoom != zoom:
-            PixelOrchestrator.debug_print(
-                "snap_zoom_clamp",
-                zoom_solicitado=zoom,
-                zoom_nativo=native_zoom,
-                zoom_efectivo=effective_zoom,
-            )
 
         # 4326 -> 3857 para trabajar en la misma grilla global de tiles.
         tf_to_merc = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
@@ -330,188 +443,7 @@ class PixelOrchestrator:
         tf_to_wgs84 = Transformer.from_crs("EPSG:3857", "EPSG:4326", always_xy=True)
         lon_snapped, lat_snapped = tf_to_wgs84.transform(x_snapped, y_snapped)
 
-        PixelOrchestrator.debug_print(
-            "snap_tile_aplicado",
-            zoom_solicitado=zoom,
-            zoom_nativo=native_zoom,
-            zoom_efectivo=effective_zoom,
-            lon_original=round(lon, 8),
-            lat_original=round(lat, 8),
-            lon_snapped=round(lon_snapped, 8),
-            lat_snapped=round(lat_snapped, 8),
-            pixel_global_x=round(float(pixel_x), 3),
-            pixel_global_y=round(float(pixel_y), 3),
-            pixel_global_x_center=round(float(pixel_x_center), 3),
-            pixel_global_y_center=round(float(pixel_y_center), 3),
-            resolucion_mpp=round(float(resolution), 6),
-        )
-
         return lon_snapped, lat_snapped
-
-    @staticmethod
-    def _debug_format_pixel_sample(
-        arr: np.ma.MaskedArray,
-        row: int,
-        col: int,
-        field: str,
-    ) -> str:
-        """
-        Formatea un pixel para logs de diagnóstico incluyendo RGB esperado.
-
-        Returns:
-            String corto con formato: r{row}c{col}=valor rgb=(r,g,b)
-        """
-        ny, nx = arr.shape
-        if row < 0 or row >= ny or col < 0 or col >= nx:
-            return f"r{row}c{col}=OOB"
-
-        mask = np.ma.getmaskarray(arr)
-        if mask[row, col]:
-            return f"r{row}c{col}=masked"
-
-        value = float(arr[row, col])
-
-        try:
-            cmap, vmin, vmax, _ = colormap_for(field)
-            if vmax == vmin:
-                normalized = 0.0
-            else:
-                normalized = (value - float(vmin)) / (float(vmax) - float(vmin))
-            normalized = float(np.clip(normalized, 0.0, 1.0))
-            rgba = cmap(normalized)
-            rgb = tuple(int(round(float(channel) * 255.0)) for channel in rgba[:3])
-            return f"r{row}c{col}={value:.2f} rgb={rgb}"
-        except Exception as exc:
-            return f"r{row}c{col}={value:.2f} rgb=ERR({type(exc).__name__})"
-
-    @staticmethod
-    def debug_log_pixel_diagnostics(
-        arr: np.ma.MaskedArray,
-        row_f: float,
-        col_f: float,
-        transform,
-        field: str,
-        render_zoom: Optional[int],
-        render_native_zoom: Optional[int],
-    ) -> None:
-        """
-        Emite trazas para investigar offsets de 1 pixel entre render y consulta.
-
-        Incluye:
-        - Pixel seleccionado por convención actual (floor)
-        - Pixel alternativo si se interpretara la coordenada como centro
-        - Vecindad 3x3 alrededor del pixel actual
-        - Relación entre resolución del tile visible y resolución del raster
-        """
-        row_floor = int(np.floor(row_f))
-        col_floor = int(np.floor(col_f))
-        frac_row = float(row_f - row_floor)
-        frac_col = float(col_f - col_floor)
-
-        # Candidato alternativo si existiera un corrimiento de +1 por convención
-        # center-based vs corner-based.
-        row_center_based = int(np.floor(row_f + 0.5))
-        col_center_based = int(np.floor(col_f + 0.5))
-
-        raster_res_x = abs(float(getattr(transform, "a", np.nan)))
-        raster_res_y = abs(float(getattr(transform, "e", np.nan)))
-
-        effective_zoom = None
-        if render_zoom is not None:
-            if render_native_zoom is not None:
-                effective_zoom = min(int(render_zoom), int(render_native_zoom))
-            else:
-                effective_zoom = int(render_zoom)
-
-        tile_resolution = None
-        ratio_x = None
-        ratio_y = None
-        if effective_zoom is not None:
-            world_span = 2.0 * PixelOrchestrator.WEB_MERCATOR_ORIGIN_SHIFT
-            tile_resolution = world_span / (
-                PixelOrchestrator.WEB_MERCATOR_TILE_SIZE * (2**effective_zoom)
-            )
-            if np.isfinite(raster_res_x) and raster_res_x > 0:
-                ratio_x = tile_resolution / raster_res_x
-            if np.isfinite(raster_res_y) and raster_res_y > 0:
-                ratio_y = tile_resolution / raster_res_y
-
-        PixelOrchestrator.debug_print(
-            "pixel_diagnostico",
-            frac_row=round(frac_row, 6),
-            frac_col=round(frac_col, 6),
-            pixel_actual=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor, col_floor, field
-            ),
-            pixel_alt_center_based=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_center_based, col_center_based, field
-            ),
-            raster_res_x_mpp=round(raster_res_x, 6) if np.isfinite(raster_res_x) else None,
-            raster_res_y_mpp=round(raster_res_y, 6) if np.isfinite(raster_res_y) else None,
-            tile_res_mpp=round(tile_resolution, 6) if tile_resolution is not None else None,
-            tile_vs_raster_x=round(ratio_x, 6) if ratio_x is not None else None,
-            tile_vs_raster_y=round(ratio_y, 6) if ratio_y is not None else None,
-        )
-
-        boundary_ranking = [
-            ("down", 1.0 - frac_row),
-            ("right", 1.0 - frac_col),
-            ("left", frac_col),
-            ("up", frac_row),
-        ]
-        boundary_ranking.sort(key=lambda item: item[1])
-        boundary_ranking_str = " | ".join(
-            f"{direction}:{distance:.6f}px" for direction, distance in boundary_ranking
-        )
-
-        PixelOrchestrator.debug_print(
-            "pixel_candidatos_offset",
-            actual=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor, col_floor, field
-            ),
-            down=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor + 1, col_floor, field
-            ),
-            up=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor - 1, col_floor, field
-            ),
-            right=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor, col_floor + 1, field
-            ),
-            left=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor, col_floor - 1, field
-            ),
-            diag_down_right=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor + 1, col_floor + 1, field
-            ),
-            diag_down_left=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor + 1, col_floor - 1, field
-            ),
-            diag_up_right=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor - 1, col_floor + 1, field
-            ),
-            diag_up_left=PixelOrchestrator._debug_format_pixel_sample(
-                arr, row_floor - 1, col_floor - 1, field
-            ),
-            ranking_borde=boundary_ranking_str,
-        )
-
-        neighborhood = []
-        for dr in (-1, 0, 1):
-            row_samples = []
-            for dc in (-1, 0, 1):
-                row_samples.append(
-                    f"{dr:+d},{dc:+d}:"
-                    f"{PixelOrchestrator._debug_format_pixel_sample(arr, row_floor + dr, col_floor + dc, field)}"
-                )
-            neighborhood.append(" | ".join(row_samples))
-
-        PixelOrchestrator.debug_print(
-            "pixel_vecindad_3x3",
-            fila_superior=neighborhood[0],
-            fila_central=neighborhood[1],
-            fila_inferior=neighborhood[2],
-        )
 
     @staticmethod
     def get_pixel_value_nearest(
@@ -545,15 +477,6 @@ class PixelOrchestrator:
         ny, nx = arr.shape
 
         if row_int < 0 or row_int >= ny or col_int < 0 or col_int >= nx:
-            PixelOrchestrator.debug_print(
-                "pixel_fuera_de_limites",
-                row_f=round(float(row_f), 4),
-                col_f=round(float(col_f), 4),
-                row=row_int,
-                col=col_int,
-                ny=ny,
-                nx=nx,
-            )
             return RadarPixelResponse(
                 value=None,
                 masked=True,
@@ -564,28 +487,11 @@ class PixelOrchestrator:
 
         m = np.ma.getmaskarray(arr)
         if m[row_int, col_int]:
-            PixelOrchestrator.debug_print(
-                "pixel_masked",
-                row_f=round(float(row_f), 4),
-                col_f=round(float(col_f), 4),
-                row=row_int,
-                col=col_int,
-            )
             return RadarPixelResponse(
                 value=None, masked=True, row=row_int, col=col_int, message="masked"
             )
 
         val = float(arr[row_int, col_int])
-        PixelOrchestrator.debug_print(
-            "pixel_valido",
-            row_f=round(float(row_f), 4),
-            col_f=round(float(col_f), 4),
-            row=row_int,
-            col=col_int,
-            valor=round(val, 4),
-            user_lat=round(float(user_lat), 8),
-            user_lon=round(float(user_lon), 8),
-        )
 
         # Devolver coordenadas originales del usuario (no del centro del pixel)
         return RadarPixelResponse(
@@ -712,19 +618,6 @@ class PixelOrchestrator:
         """
         # 1. Validar request
         PixelOrchestrator.validate_request(payload)
-        PixelOrchestrator.debug_print(
-            "request_recibido",
-            filepath=payload.filepath,
-            product=payload.product,
-            field=payload.field,
-            lat=round(float(payload.lat), 8),
-            lon=round(float(payload.lon), 8),
-            render_zoom=payload.render_zoom,
-            render_native_zoom=payload.render_native_zoom,
-            weight_func=payload.weight_func,
-            max_neighbors=payload.max_neighbors,
-        )
-
         # 2. Obtener filepath completo
         filepath = PixelOrchestrator.get_filepath(payload)
 
@@ -754,69 +647,71 @@ class PixelOrchestrator:
             raise ValueError("No cacheado")
 
         # 6. Usar versión warped si está disponible (optimizado desde WGS84)
-        arr = pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
-        crs_wkt = pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
-        transform = (
+        arr_base = (
+            pkg["arr_warped"] if pkg.get("arr_warped") is not None else pkg["arr"]
+        )
+        crs_wkt_base = (
+            pkg["crs_warped"] if pkg.get("crs_warped") is not None else pkg["crs"]
+        )
+        transform_base = (
             pkg["transform_warped"]
             if pkg.get("transform_warped") is not None
             else pkg["transform"]
         )
-        crs = pyproj.CRS.from_user_input(crs_wkt)
-        PixelOrchestrator.debug_print(
-            "cache_y_raster_resueltos",
+        crs_base = pyproj.CRS.from_user_input(crs_wkt_base)
+        # 7. Resolver la grilla numérica sobre la que se va a consultar.
+        effective_zoom, _native_zoom = PixelOrchestrator.resolve_effective_tile_zoom(
+            render_zoom=payload.render_zoom,
+            transform=transform_base,
+            crs=crs_base,
+            render_native_zoom=payload.render_native_zoom,
+        )
+        display_grid = PixelOrchestrator.get_or_build_display_aligned_grid(
+            pkg=pkg,
             cache_key=cache_key,
-            usa_warped=bool(pkg.get("arr_warped") is not None),
-            shape=getattr(arr, "shape", None),
-            crs=str(crs),
+            arr=arr_base,
+            transform=transform_base,
+            crs=crs_base,
+            effective_zoom=effective_zoom,
         )
+        if display_grid is not None:
+            arr_query_base = display_grid["arr"]
+            transform_query = display_grid["transform"]
+            crs_query = pyproj.CRS.from_user_input(display_grid["crs"])
+        else:
+            arr_query_base = arr_base
+            transform_query = transform_base
+            crs_query = crs_base
 
-        # 7. Aplicar filtros dinámicamente
+        # 8. Aplicar filtros dinámicamente
         arr = PixelOrchestrator.apply_filters_to_cached_data(
-            arr, pkg, payload.filters or [], field
+            arr_query_base, pkg, payload.filters or [], field
         )
 
-        # 8. Alinear el click a la grilla visible de tiles si llega el zoom.
+        # 9. Alinear el click a la grilla visible de tiles si llega el zoom.
         lon_query, lat_query = PixelOrchestrator.snap_coordinates_to_tile_pixel(
             payload.lon,
             payload.lat,
             payload.render_zoom,
-            transform=transform,
-            crs=crs,
+            transform=transform_query,
+            crs=crs_query,
             render_native_zoom=payload.render_native_zoom,
         )
-        PixelOrchestrator.debug_print(
-            "coordenadas_consulta",
-            lon_original=round(float(payload.lon), 8),
-            lat_original=round(float(payload.lat), 8),
-            lon_query=round(float(lon_query), 8),
-            lat_query=round(float(lat_query), 8),
-        )
-
-        # 9. Transformar coordenadas a grid
+        # 10. Transformar coordenadas a grid
         col_f, row_f = PixelOrchestrator.transform_coordinates_to_grid(
-            lon_query, lat_query, crs, transform
+            lon_query, lat_query, crs_query, transform_query
         )
-        PixelOrchestrator.debug_print(
-            "grid_coords_calculadas",
-            row_f=round(float(row_f), 6),
-            col_f=round(float(col_f), 6),
-        )
-        PixelOrchestrator.debug_log_pixel_diagnostics(
-            arr=arr,
-            row_f=row_f,
-            col_f=col_f,
-            transform=transform,
-            field=field,
-            render_zoom=payload.render_zoom,
-            render_native_zoom=payload.render_native_zoom,
-        )
-
-        ny, nx = arr.shape
 
         # Usar valor directo del pixel (sin interpolación bilinear)
         # Esto asegura que cualquier click dentro del mismo pixel devuelva el mismo valor
         return PixelOrchestrator.get_pixel_value_nearest(
-            arr, row_f, col_f, transform, crs, payload.lat, payload.lon
+            arr,
+            row_f,
+            col_f,
+            transform_query,
+            crs_query,
+            payload.lat,
+            payload.lon,
         )
 
         # NOTA: Interpolación bilinear comentada - producía valores diferentes
