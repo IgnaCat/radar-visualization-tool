@@ -9,6 +9,7 @@ import {
   generateElevationProfile,
   generateAnimationGif,
   removeFiles,
+  resolveApiUrl,
 } from "./api/backend";
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
@@ -337,13 +338,12 @@ export default function App() {
 
       try {
         // Crear todos los links de descarga
-        const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
         const downloadLinks = [];
 
         for (const layer of layersToDownload) {
           const filename =
             layer.image_url.split("/").pop() || generateFilename("cog", ".tif");
-          const cogUrl = `${baseUrl}/${layer.image_url}`;
+          const cogUrl = resolveApiUrl(layer.image_url);
 
           try {
             const response = await fetch(cogUrl);
@@ -431,8 +431,7 @@ export default function App() {
 
       allCogsRef.current.add(gifPath);
 
-      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      const gifUrl = gifPath.startsWith("http") ? gifPath : `${baseUrl}${gifPath}`;
+      const gifUrl = resolveApiUrl(gifPath);
       const filename =
         gifPath.split("/").pop() || generateFilename("animacion", ".gif");
 

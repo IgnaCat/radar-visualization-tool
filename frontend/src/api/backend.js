@@ -1,7 +1,66 @@
 import axios from "axios";
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+function isLoopbackHost(hostname) {
+  return LOOPBACK_HOSTS.has(String(hostname || "").toLowerCase());
+}
+
+export function getApiBaseUrl() {
+  const configured = String(import.meta.env.VITE_API_URL || "").trim();
+
+  if (typeof window === "undefined") {
+    return configured || "http://localhost:8000";
+  }
+
+  const { location } = window;
+  const pageIsLocal = isLoopbackHost(location.hostname);
+
+  if (!configured) {
+    return pageIsLocal ? "http://localhost:8000" : location.origin;
+  }
+
+  try {
+    const parsed = new URL(configured, location.origin);
+
+    if (!pageIsLocal && isLoopbackHost(parsed.hostname)) {
+      return location.origin;
+    }
+
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return configured.replace(/\/$/, "");
+  }
+}
+
+export function resolveApiUrl(pathOrUrl = "") {
+  const value = String(pathOrUrl || "").trim();
+  if (!value) return getApiBaseUrl();
+
+  if (/^https?:\/\//i.test(value)) {
+    if (typeof window === "undefined") return value;
+
+    try {
+      const parsed = new URL(value);
+      if (
+        !isLoopbackHost(window.location.hostname) &&
+        isLoopbackHost(parsed.hostname)
+      ) {
+        return `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+      }
+    } catch {
+      return value;
+    }
+
+    return value;
+  }
+
+  const baseUrl = getApiBaseUrl().replace(/\/+$/, "");
+  return `${baseUrl}/${value.replace(/^\/+/, "")}`;
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
+  baseURL: getApiBaseUrl(),
 });
 
 export const uploadFile = async (files, session_id = null) => {
