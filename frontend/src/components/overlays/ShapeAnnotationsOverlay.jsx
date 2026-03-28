@@ -11,21 +11,12 @@ import {
   Popup,
 } from "react-leaflet";
 import L from "leaflet";
-import {
-  Box,
-  Typography,
-  Slider,
-  Button,
-  Divider,
-  Switch,
-  FormControlLabel,
-} from "@mui/material";
+import { Box, Typography, Slider, Button, Divider } from "@mui/material";
 import DeleteIcon from "@mui/icons-material/Delete";
-
-// ─── Default styles ────────────────────────────────────────────────────────────
 
 const DEFAULT_STYLES = {
   line: { color: "#ff6b35", weight: 3, opacity: 1, dashArray: "" },
+  measure: { color: "#0ea5e9", weight: 3, opacity: 0.95, dashArray: "10,6" },
   arrow: { color: "#ff6b35", weight: 3, opacity: 1 },
   rect: {
     color: "#4a90e2",
@@ -50,16 +41,12 @@ const DEFAULT_STYLES = {
   },
 };
 
-// ─── Icons ─────────────────────────────────────────────────────────────────────
-
 const finishIcon = L.divIcon({
   className: "",
   html: '<div style="width:14px;height:14px;background:#fff;border:3px solid #ff6b35;border-radius:2px;cursor:pointer;box-sizing:border-box;"></div>',
   iconSize: [14, 14],
   iconAnchor: [7, 7],
 });
-
-// ─── Helpers ───────────────────────────────────────────────────────────────────
 
 function haversineMeters(a, b) {
   const R = 6371000;
@@ -76,7 +63,21 @@ function haversineMeters(a, b) {
   return R * 2 * Math.atan2(Math.sqrt(c), Math.sqrt(1 - c));
 }
 
-// ─── Color row shared between style popups ─────────────────────────────────────
+function formatDistance(distanceMeters) {
+  if (!Number.isFinite(distanceMeters)) return "";
+  if (distanceMeters >= 1000) {
+    const km = distanceMeters / 1000;
+    return `${km >= 100 ? km.toFixed(0) : km.toFixed(2)} km`;
+  }
+  return `${distanceMeters.toFixed(0)} m`;
+}
+
+function getMidpoint(a, b) {
+  return {
+    lat: (a.lat + b.lat) / 2,
+    lon: (a.lon + b.lon) / 2,
+  };
+}
 
 function ColorRow({ label, value, onChange }) {
   return (
@@ -101,8 +102,6 @@ function ColorRow({ label, value, onChange }) {
   );
 }
 
-// ─── Style popup for line / arrow ──────────────────────────────────────────────
-
 function LineStylePopup({ shape, onChange, onDelete }) {
   const [s, setS] = useState({ ...shape.style });
   const emit = (patch) => {
@@ -114,7 +113,7 @@ function LineStylePopup({ shape, onChange, onDelete }) {
   return (
     <Box sx={{ p: 1, minWidth: 205 }}>
       <Typography variant="subtitle2" fontWeight="bold" mb={1}>
-        {shape.type === "line" ? "Línea" : "Flecha"}
+        {shape.type === "line" ? "Linea" : "Flecha"}
       </Typography>
 
       <ColorRow
@@ -150,14 +149,14 @@ function LineStylePopup({ shape, onChange, onDelete }) {
       {shape.type === "line" && (
         <>
           <Typography variant="caption" sx={{ display: "block", mb: 0.5 }}>
-            Estilo de línea:
+            Estilo de linea:
           </Typography>
           <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 1 }}>
             {[
-              { v: "", label: "—" },
+              { v: "", label: "-" },
               { v: "6,4", label: "- -" },
-              { v: "2,4", label: "···" },
-              { v: "10,4,2,4", label: "—·—" },
+              { v: "2,4", label: ". . ." },
+              { v: "10,4,2,4", label: "-.-" },
             ].map(({ v, label }) => (
               <Box
                 key={v || "solid"}
@@ -199,7 +198,29 @@ function LineStylePopup({ shape, onChange, onDelete }) {
   );
 }
 
-// ─── Style popup for rect / circle / polygon ───────────────────────────────────
+function MeasurementPopup({ shape, onDelete }) {
+  return (
+    <Box sx={{ p: 1, minWidth: 205 }}>
+      <Typography variant="subtitle2" fontWeight="bold" mb={0.75}>
+        Medicion
+      </Typography>
+      <Typography variant="body2" sx={{ mb: 1.25 }}>
+        Distancia aproximada: {formatDistance(shape.distanceMeters)}
+      </Typography>
+      <Button
+        variant="outlined"
+        color="error"
+        size="small"
+        fullWidth
+        startIcon={<DeleteIcon />}
+        onClick={onDelete}
+        sx={{ textTransform: "none", fontSize: "0.82rem" }}
+      >
+        Eliminar
+      </Button>
+    </Box>
+  );
+}
 
 function FillStylePopup({ shape, onChange, onDelete }) {
   const [s, setS] = useState({ ...shape.style });
@@ -211,10 +232,10 @@ function FillStylePopup({ shape, onChange, onDelete }) {
 
   const typeLabel =
     shape.type === "rect"
-      ? "Rectángulo"
+      ? "Rectangulo"
       : shape.type === "circle"
-        ? "Círculo"
-        : "Polígono";
+        ? "Circulo"
+        : "Poligono";
 
   return (
     <Box sx={{ p: 1, minWidth: 205 }}>
@@ -285,8 +306,6 @@ function FillStylePopup({ shape, onChange, onDelete }) {
   );
 }
 
-// ─── Arrow head marker (recomputed on zoom) ────────────────────────────────────
-
 function ArrowHead({ points, color, opacity }) {
   const map = useMap();
   const [icon, setIcon] = useState(null);
@@ -331,26 +350,49 @@ function ArrowHead({ points, color, opacity }) {
   );
 }
 
-// ─── Single completed shape renderer ──────────────────────────────────────────
+function DistanceLabel({ point, label }) {
+  const icon = L.divIcon({
+    className: "",
+    html: `<div style="display:inline-flex;align-items:center;justify-content:center;min-height:26px;padding:4px 10px;background-color:rgba(0, 0, 0, 0.7);border-radius:999px;color:#fff;font-size:12px;font-weight:600;line-height:1;white-space:nowrap;text-shadow:1px 1px 1px rgba(0,0,0,0.9);box-shadow:0 2px 8px rgba(0,0,0,0.28);transform:translate(-50%, -50%);">${label}</div>`,
+    iconSize: [0, 0],
+    iconAnchor: [0, 0],
+  });
+
+  return (
+    <Marker
+      position={[point.lat, point.lon]}
+      icon={icon}
+      interactive={false}
+      zIndexOffset={900}
+    />
+  );
+}
 
 function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
   const interactive = !isDrawing && shape.interactive !== false;
   const popupNode = interactive
-    ? shape.type === "line" || shape.type === "arrow"
+    ? shape.type === "measure"
       ? (
-          <LineStylePopup
+          <MeasurementPopup
             shape={shape}
-            onChange={(p) => onUpdate(shape.id, p)}
             onDelete={() => onRemove(shape.id)}
           />
         )
-      : (
-          <FillStylePopup
-            shape={shape}
-            onChange={(p) => onUpdate(shape.id, p)}
-            onDelete={() => onRemove(shape.id)}
-          />
-        )
+      : shape.type === "line" || shape.type === "arrow"
+        ? (
+            <LineStylePopup
+              shape={shape}
+              onChange={(p) => onUpdate(shape.id, p)}
+              onDelete={() => onRemove(shape.id)}
+            />
+          )
+        : (
+            <FillStylePopup
+              shape={shape}
+              onChange={(p) => onUpdate(shape.id, p)}
+              onDelete={() => onRemove(shape.id)}
+            />
+          )
     : null;
 
   if (shape.type === "line") {
@@ -371,6 +413,34 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
           </Popup>
         )}
       </Polyline>
+    );
+  }
+
+  if (shape.type === "measure") {
+    const midpoint = getMidpoint(shape.points[0], shape.points[1]);
+    return (
+      <>
+        <Polyline
+          positions={shape.points.map((p) => [p.lat, p.lon])}
+          pathOptions={{
+            color: shape.style.color,
+            weight: shape.style.weight,
+            opacity: shape.style.opacity,
+            dashArray: shape.style.dashArray || null,
+            interactive,
+          }}
+        >
+          {popupNode && (
+            <Popup closeButton={false} maxWidth={240}>
+              {popupNode}
+            </Popup>
+          )}
+        </Polyline>
+        <DistanceLabel
+          point={midpoint}
+          label={formatDistance(shape.distanceMeters)}
+        />
+      </>
     );
   }
 
@@ -480,13 +550,11 @@ function RenderedShape({ shape, isDrawing, onUpdate, onRemove }) {
   return null;
 }
 
-// ─── Main component ────────────────────────────────────────────────────────────
-
 /**
  * ShapeAnnotationsOverlay - Herramienta de dibujo de formas sobre el mapa.
  *
  * Props:
- * - drawingMode: 'line' | 'arrow' | 'rect' | 'circle' | 'polygon' | null
+ * - drawingMode: 'line' | 'measure' | 'arrow' | 'rect' | 'circle' | 'polygon' | null
  * - shapes: array - Array de formas completadas
  * - externalShapes: array - Formas externas de solo lectura
  * - onAdd: function(shape) - Callback al completar una forma
@@ -507,20 +575,17 @@ export default function ShapeAnnotationsOverlay({
   const [pts, setPts] = useState([]);
   const [mouseLL, setMouseLL] = useState(null);
 
-  // Stable refs for use inside keyboard handler (which is set up once)
   const ptsRef = useRef([]);
   const drawingModeRef = useRef(drawingMode);
   const nextIdRef = useRef(1);
   const onAddRef = useRef(onAdd);
   const onModeDeactivateRef = useRef(onModeDeactivate);
 
-  // Sync refs at render time (safe: render runs before any event handler)
   ptsRef.current = pts;
   drawingModeRef.current = drawingMode;
   onAddRef.current = onAdd;
   onModeDeactivateRef.current = onModeDeactivate;
 
-  // Custom setPts that also keeps the ref in sync immediately
   const updatePts = useCallback((updater) => {
     setPts((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
@@ -529,13 +594,11 @@ export default function ShapeAnnotationsOverlay({
     });
   }, []);
 
-  // Reset drawing state when mode changes
   useEffect(() => {
     updatePts([]);
     setMouseLL(null);
   }, [drawingMode, updatePts]);
 
-  // Change cursor while drawing
   useEffect(() => {
     const container = map.getContainer();
     if (drawingMode) container.style.cursor = "crosshair";
@@ -544,7 +607,6 @@ export default function ShapeAnnotationsOverlay({
     };
   }, [drawingMode, map]);
 
-  // Core finish drawing logic (reads from refs — safe from any closure)
   const finishDrawing = useCallback(
     (points, mode) => {
       if (!mode) return;
@@ -557,6 +619,14 @@ export default function ShapeAnnotationsOverlay({
 
       if (mode === "line" || mode === "arrow") {
         newShape = { id, type: mode, points: [...points], style };
+      } else if (mode === "measure") {
+        newShape = {
+          id,
+          type: "measure",
+          points: [points[0], points[1]],
+          distanceMeters: haversineMeters(points[0], points[1]),
+          style,
+        };
       } else if (mode === "rect") {
         newShape = {
           id,
@@ -586,7 +656,6 @@ export default function ShapeAnnotationsOverlay({
     [updatePts],
   );
 
-  // Keyboard shortcuts (set up once, uses refs)
   useEffect(() => {
     const handleKey = (e) => {
       const mode = drawingModeRef.current;
@@ -604,19 +673,21 @@ export default function ShapeAnnotationsOverlay({
     return () => document.removeEventListener("keydown", handleKey);
   }, [finishDrawing, updatePts]);
 
-  // Map event handlers
   useMapEvents({
     click(e) {
       if (!drawingMode) return;
       const pt = { lat: e.latlng.lat, lon: e.latlng.lng };
-      if (drawingMode === "rect" || drawingMode === "circle") {
+      if (
+        drawingMode === "rect" ||
+        drawingMode === "circle" ||
+        drawingMode === "measure"
+      ) {
         if (pts.length === 0) {
           updatePts([pt]);
         } else {
           finishDrawing([pts[0], pt], drawingMode);
         }
       } else {
-        // line, arrow, polygon: accumulate points
         updatePts((prev) => [...prev, pt]);
       }
     },
@@ -625,30 +696,28 @@ export default function ShapeAnnotationsOverlay({
       setMouseLL({ lat: e.latlng.lat, lon: e.latlng.lng });
     },
     dblclick(e) {
-      // Prevent map zoom when double-clicking during drawing
       if (drawingMode) L.DomEvent.stopPropagation(e);
     },
   });
 
-  // Finish marker click handler
   const handleFinishClick = (e) => {
     L.DomEvent.stopPropagation(e);
     finishDrawing(ptsRef.current, drawingModeRef.current);
   };
 
-  // Preview point (mouse position or last placed point)
   const previewPt = mouseLL ?? (pts.length > 0 ? pts[pts.length - 1] : null);
   const previewColor = DEFAULT_STYLES[drawingMode]?.color ?? "#ff6b35";
+  const measurePreviewDistance =
+    drawingMode === "measure" && pts.length === 1 && previewPt
+      ? haversineMeters(pts[0], previewPt)
+      : null;
 
   const canFinish =
     (drawingMode === "line" || drawingMode === "arrow") && pts.length >= 2;
   const canFinishPolygon = drawingMode === "polygon" && pts.length >= 3;
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <>
-      {/* Completed shapes */}
       {[...externalShapes, ...shapes].map((shape) => (
         <RenderedShape
           key={shape.id}
@@ -659,11 +728,10 @@ export default function ShapeAnnotationsOverlay({
         />
       ))}
 
-      {/* In-progress drawing preview */}
       {drawingMode && pts.length > 0 && (
         <>
-          {/* Preview polyline for line / arrow / polygon */}
           {(drawingMode === "line" ||
+            drawingMode === "measure" ||
             drawingMode === "arrow" ||
             drawingMode === "polygon") &&
             previewPt && (
@@ -679,7 +747,6 @@ export default function ShapeAnnotationsOverlay({
               />
             )}
 
-          {/* Preview rectangle while dragging second corner */}
           {drawingMode === "rect" && pts.length === 1 && previewPt && (
             <Rectangle
               bounds={[
@@ -703,7 +770,6 @@ export default function ShapeAnnotationsOverlay({
             />
           )}
 
-          {/* Preview circle while dragging radius */}
           {drawingMode === "circle" && pts.length === 1 && previewPt && (
             <Circle
               center={[pts[0].lat, pts[0].lon]}
@@ -719,7 +785,16 @@ export default function ShapeAnnotationsOverlay({
             />
           )}
 
-          {/* First point (green dot) */}
+          {drawingMode === "measure" &&
+            pts.length === 1 &&
+            previewPt &&
+            measurePreviewDistance != null && (
+              <DistanceLabel
+                point={getMidpoint(pts[0], previewPt)}
+                label={formatDistance(measurePreviewDistance)}
+              />
+            )}
+
           <CircleMarker
             center={[pts[0].lat, pts[0].lon]}
             radius={5}
@@ -732,7 +807,6 @@ export default function ShapeAnnotationsOverlay({
             }}
           />
 
-          {/* Intermediate point dots */}
           {(drawingMode === "line" ||
             drawingMode === "arrow" ||
             drawingMode === "polygon") &&
@@ -751,7 +825,6 @@ export default function ShapeAnnotationsOverlay({
               />
             ))}
 
-          {/* Last point: finish marker (white square) or regular dot */}
           {canFinish || canFinishPolygon ? (
             <Marker
               position={[pts[pts.length - 1].lat, pts[pts.length - 1].lon]}
@@ -775,7 +848,6 @@ export default function ShapeAnnotationsOverlay({
             )
           )}
 
-          {/* Live arrow preview head */}
           {drawingMode === "arrow" && pts.length >= 1 && previewPt && (
             <ArrowHead
               points={[...pts, previewPt]}

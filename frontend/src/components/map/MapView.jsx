@@ -311,7 +311,7 @@ export default function MapView({
       />
       <ShapeAnnotationsOverlay
         drawingMode={
-          ["line", "arrow", "rect", "circle", "polygon"].includes(
+          ["line", "measure", "arrow", "rect", "circle", "polygon"].includes(
             annotationMode,
           )
             ? annotationMode

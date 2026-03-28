@@ -9,25 +9,27 @@ import TrendingFlatIcon from "@mui/icons-material/TrendingFlat";
 import CropSquareIcon from "@mui/icons-material/CropSquare";
 import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import PolylineIcon from "@mui/icons-material/Polyline";
+import StraightenIcon from "@mui/icons-material/Straighten";
 
 const ANNOTATION_LABELS = {
   text: "texto",
-  line: "línea",
+  line: "linea",
+  measure: "medicion",
   arrow: "flecha",
-  rect: "rectángulo",
-  circle: "círculo",
-  polygon: "polígono",
+  rect: "rectangulo",
+  circle: "circulo",
+  polygon: "poligono",
 };
 
 /**
  * DrawingToolbar - Barra de herramientas de anotaciones visuales sobre el mapa.
- * Expande hacia abajo al hacer clic en el botón principal (lápiz).
+ * Expande hacia abajo al hacer clic en el boton principal (lapiz).
  *
  * Props:
- * - markerMode: booleano que indica si está activo el modo de marcadores
- * - onToggleMarkerMode: función para alternar modo de marcadores
- * - annotationMode: 'text'|'line'|'arrow'|'rect'|'circle'|'polygon'|null
- * - onSetAnnotationMode: función(mode) para activar/desactivar un modo de anotación
+ * - markerMode: booleano que indica si esta activo el modo de marcadores
+ * - onToggleMarkerMode: funcion para alternar modo de marcadores
+ * - annotationMode: 'text'|'line'|'measure'|'arrow'|'rect'|'circle'|'polygon'|null
+ * - onSetAnnotationMode: funcion(mode) para activar/desactivar un modo de anotacion
  */
 export default function DrawingToolbar({
   markerMode = false,
@@ -84,10 +86,19 @@ export default function DrawingToolbar({
       icon: <TimelineIcon />,
       tooltip:
         annotationMode === "line"
-          ? "Cancelar línea"
-          : "Dibujar línea (click para puntos, cuadrado para terminar)",
+          ? "Cancelar linea"
+          : "Dibujar linea (click para puntos, cuadrado para terminar)",
       action: () => handleAnnotationTool("line"),
       active: annotationMode === "line",
+    },
+    {
+      icon: <StraightenIcon />,
+      tooltip:
+        annotationMode === "measure"
+          ? "Cancelar medicion"
+          : "Medir distancia (2 clicks: punto inicial y final)",
+      action: () => handleAnnotationTool("measure"),
+      active: annotationMode === "measure",
     },
     {
       icon: <TrendingFlatIcon />,
@@ -102,8 +113,8 @@ export default function DrawingToolbar({
       icon: <CropSquareIcon />,
       tooltip:
         annotationMode === "rect"
-          ? "Cancelar rectángulo"
-          : "Dibujar rectángulo (2 clics: esquinas opuestas)",
+          ? "Cancelar rectangulo"
+          : "Dibujar rectangulo (2 clics: esquinas opuestas)",
       action: () => handleAnnotationTool("rect"),
       active: annotationMode === "rect",
     },
@@ -111,8 +122,8 @@ export default function DrawingToolbar({
       icon: <RadioButtonUncheckedIcon />,
       tooltip:
         annotationMode === "circle"
-          ? "Cancelar círculo"
-          : "Dibujar círculo (1er clic: centro, 2do: radio)",
+          ? "Cancelar circulo"
+          : "Dibujar circulo (1er clic: centro, 2do: radio)",
       action: () => handleAnnotationTool("circle"),
       active: annotationMode === "circle",
     },
@@ -120,8 +131,8 @@ export default function DrawingToolbar({
       icon: <PolylineIcon />,
       tooltip:
         annotationMode === "polygon"
-          ? "Cancelar polígono"
-          : "Dibujar polígono (click para vértices, cuadrado para cerrar)",
+          ? "Cancelar poligono"
+          : "Dibujar poligono (click para vertices, cuadrado para cerrar)",
       action: () => handleAnnotationTool("polygon"),
       active: annotationMode === "polygon",
     },
@@ -145,7 +156,6 @@ export default function DrawingToolbar({
         gap: "4px",
       }}
     >
-      {/* Botón de lápiz (toggle) */}
       <Tooltip
         title={
           expanded ? "Ocultar herramientas" : "Mostrar herramientas de dibujo"
@@ -173,7 +183,6 @@ export default function DrawingToolbar({
         </IconButton>
       </Tooltip>
 
-      {/* Herramientas expandibles hacia abajo */}
       <Box
         sx={{
           display: "flex",
