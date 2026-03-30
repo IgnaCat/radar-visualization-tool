@@ -55,14 +55,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8000
     container_name: radar-frontend
     ports:
       - "3000:80"
     depends_on:
       - backend
-    environment:
-      # Backend API URL (accessed from browser)
-      - VITE_API_URL=http://localhost:8000
     networks:
       - radar-network
     restart: unless-stopped
