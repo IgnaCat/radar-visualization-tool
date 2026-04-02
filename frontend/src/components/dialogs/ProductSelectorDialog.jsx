@@ -26,7 +26,6 @@ import { useDraggableDialogPaper } from "./DraggableDialogPaper";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import LayerControlList from "../controls/LayerControlList";
-import { formatSourceDisplay } from "../../utils/fieldAnalysis";
 import { MARKS_01 } from "../../utils/radarFields";
 
 /**
@@ -227,7 +226,7 @@ export default function ProductSelectorDialog({
   const MAX_RADARS = 3;
 
   const { PaperComponent: PaperWithState } = useDraggableDialogPaper({
-    defaultWidth: 450,
+    defaultWidth: 465,
     defaultHeight: 550,
     minWidth: 350,
     minHeight: 360,
@@ -594,7 +593,7 @@ export default function ProductSelectorDialog({
                   Seleccionar volúmenes
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={0.75} sx={{ pl: 1 }}>
-                  {volumes.map((vol, idx) => {
+                  {volumes.map((vol) => {
                     const isSelected = selectedVolumes.includes(vol);
                     return (
                       <Tooltip
@@ -752,7 +751,7 @@ export default function ProductSelectorDialog({
             <LayerControlList
               items={layers}
               onChange={setLayers}
-              showOpacity={false}
+              showOpacity={true}
               disableToggle={false}
               hideChips={false}
               compact={true}

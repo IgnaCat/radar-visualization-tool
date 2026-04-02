@@ -93,7 +93,6 @@ export default function MapPanel({
   selectedColormaps,
   setSelectedColormaps,
   initialColormaps,
-  setInitialColormaps,
 
   // Handlers de acciones
   onProductChosen,
@@ -585,6 +584,7 @@ export default function MapPanel({
         onReorder={onLayerReorder}
         onToggleLayerVisibility={onToggleLayerVisibility}
         hiddenLayers={hiddenLayers}
+        opacityByField={opacityByField}
         opacityByLayer={opacityByLayer}
         onLayerOpacityChange={onLayerOpacityChange}
         rangeCirclesVisible={rangeCircleLayers}

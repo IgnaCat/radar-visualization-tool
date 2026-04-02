@@ -41,6 +41,7 @@ export default function LayerManagerDialog({
   onReorder, // (newOrder) => void - callback para notificar nuevo orden
   onToggleLayerVisibility, // (field, source_file) => void - toggle visibilidad
   hiddenLayers = new Set(), // Set de "field::source_file" keys ocultas
+  opacityByField = {}, // { FIELD: number } opacidad global por campo
   opacityByLayer = {}, // { "FIELD::source_file": number } opacidades por capa
   onLayerOpacityChange, // (field, source_file, opacity) => void
   rangeCirclesVisible = new Set(), // Set de "field::source_file" con círculos visibles
@@ -68,7 +69,7 @@ export default function LayerManagerDialog({
       for (const r of ruleArr || []) {
         const rField = String(r.field || "").toUpperCase();
         if (rField === "RHOHV" && key !== "RHOHV") {
-          init[key].rhohv = { enabled: true, min: r.min ?? 0.8 };
+          init[key].rhohv = { enabled: true, min: r.min ?? 0.9 };
         } else if (rField === key) {
           init[key].range = {
             enabled: true,
@@ -262,11 +263,21 @@ export default function LayerManagerDialog({
   /** Opacidad actual de una capa (default 1) */
   const getLayerOpacity = (layer) => {
     const key = getLayerKey(layer);
-    return typeof opacityByLayer[key] === "number" ? opacityByLayer[key] : 1;
+    const fieldKey = String(layer?.field || layer?.label || "").toUpperCase();
+    if (typeof opacityByLayer[key] === "number") {
+      return opacityByLayer[key];
+    }
+    if (typeof opacityByField[fieldKey] === "number") {
+      return opacityByField[fieldKey];
+    }
+    return 1;
   };
 
   const isRangeCircleVisible = (layer) =>
     rangeCirclesVisible.has(getOverlayLayerKey(layer));
+
+  const isFilterPanelOpen = (layer) =>
+    openFilterFor.has(String(layer.field).toUpperCase());
 
   const handleOpacityChange = useCallback(
     (layer, value) => {
@@ -274,6 +285,21 @@ export default function LayerManagerDialog({
     },
     [onLayerOpacityChange],
   );
+
+  const compactFilterLabelSx = { minWidth: 54, fontSize: "0.68rem" };
+  const compactFilterInputSx = {
+    width: 50,
+    "& .MuiInputBase-input": {
+      fontSize: "0.73rem",
+      padding: "7px 8px",
+    },
+    "& .MuiInputLabel-root": {
+      fontSize: "0.69rem",
+    },
+    "& .MuiInputLabel-shrink": {
+      fontSize: "0.69rem",
+    },
+  };
 
   return (
     <Collapse
@@ -292,7 +318,7 @@ export default function LayerManagerDialog({
           top: position.y,
           left: position.x,
           zIndex: 999,
-          width: hasOpenFilters ? 600 : 392,
+          width: hasOpenFilters ? 600 : 410,
           maxHeight: "calc(100vh - 100px)",
           overflowY: "auto",
           backgroundColor: "rgba(255, 255, 255, 0.98)",
@@ -435,21 +461,32 @@ export default function LayerManagerDialog({
                       alignItems="center"
                       width="100%"
                       gap={1}
-                      sx={{ pl: 1.5, pr: 1, mt: 0.5 }}
+                      sx={{
+                        pl: isFilterPanelOpen(layer) ? 2 : 1.5,
+                        pr: 1,
+                        mt: 0.5,
+                      }}
                     >
-                      <Tooltip title="Opacidad">
-                        <OpacityIcon
-                          fontSize="small"
-                          sx={{ color: "text.secondary", fontSize: 16 }}
-                        />
-                      </Tooltip>
+                      {!isFilterPanelOpen(layer) && (
+                        <Tooltip title="Opacidad">
+                          <OpacityIcon
+                            fontSize="small"
+                            sx={{ color: "text.secondary", fontSize: 16 }}
+                          />
+                        </Tooltip>
+                      )}
                       <Slider
                         size="small"
                         min={0}
                         max={1}
                         step={0.05}
                         value={getLayerOpacity(layer)}
-                        onChange={(_e, val) => handleOpacityChange(layer, val)}
+                        onChange={(_e, val) =>
+                          handleOpacityChange(
+                            layer,
+                            Array.isArray(val) ? val[0] : val,
+                          )
+                        }
                         valueLabelDisplay="auto"
                         valueLabelFormat={(v) => `${Math.round(v * 100)}%`}
                         sx={{
@@ -577,7 +614,10 @@ export default function LayerManagerDialog({
                               }
                               sx={{ p: 0 }}
                             />
-                            <Typography variant="caption" sx={{ minWidth: 60 }}>
+                            <Typography
+                              variant="caption"
+                              sx={compactFilterLabelSx}
+                            >
                               RHOHV ≥
                             </Typography>
                             <TextField
@@ -585,7 +625,7 @@ export default function LayerManagerDialog({
                               type="number"
                               value={
                                 localFilters[String(layer.field).toUpperCase()]
-                                  ?.rhohv?.min ?? 0.8
+                                  ?.rhohv?.min ?? 0.9
                               }
                               onChange={(e) =>
                                 updateFilter(layer.field, "rhohv", {
@@ -600,7 +640,7 @@ export default function LayerManagerDialog({
                                   ?.rhohv?.enabled
                               }
                               inputProps={{ step: 0.01, min: 0, max: 1 }}
-                              sx={{ width: 64 }}
+                              sx={compactFilterInputSx}
                             />
                           </Box>
                         )}
@@ -620,7 +660,10 @@ export default function LayerManagerDialog({
                             }
                             sx={{ p: 0 }}
                           />
-                          <Typography variant="caption" sx={{ minWidth: 60 }}>
+                          <Typography
+                            variant="caption"
+                            sx={compactFilterLabelSx}
+                          >
                             {String(layer.field).toUpperCase()}
                           </Typography>
                           <TextField
@@ -647,7 +690,7 @@ export default function LayerManagerDialog({
                                 ?.range?.enabled
                             }
                             inputProps={{ step: 0.1 }}
-                            sx={{ width: 68 }}
+                            sx={compactFilterInputSx}
                           />
                           <TextField
                             size="small"
@@ -673,7 +716,7 @@ export default function LayerManagerDialog({
                                 ?.range?.enabled
                             }
                             inputProps={{ step: 0.1 }}
-                            sx={{ width: 68 }}
+                            sx={compactFilterInputSx}
                           />
                         </Box>
                       </Box>

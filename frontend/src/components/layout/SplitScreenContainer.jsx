@@ -177,6 +177,7 @@ export default function SplitScreenContainer({
 
       setOpacity2(opacities);
       setOpacityByField2(opacityMap);
+      setOpacityByLayer2({});
 
       const processResp = await sharedProps.processFile({
         files: sharedProps.uploadedFiles, // Usar los archivos compartidos

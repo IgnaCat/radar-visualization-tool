@@ -12,6 +12,7 @@ import {
   Chip,
 } from "@mui/material";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import OpacityIcon from "@mui/icons-material/Opacity";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExpandLessIcon from "@mui/icons-material/ExpandLess";
 import { formatSourceDisplay } from "../../utils/fieldAnalysis";
@@ -36,6 +37,8 @@ function LayerControlList({
   compact = false,
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const formatOpacityLabel = (value) =>
+    `${Math.round(Number(value || 0) * 100)}%`;
 
   // Mantener el orden original de los items (comunes primero, luego específicos)
   // El orden ya viene correcto desde deriveLayersFromFieldAnalysis
@@ -110,7 +113,8 @@ function LayerControlList({
 
   const changeOpacity = (idx, value) => {
     const next = sortedItems.slice();
-    next[idx] = { ...next[idx], opacity: value };
+    const nextValue = Array.isArray(value) ? value[0] : value;
+    next[idx] = { ...next[idx], opacity: nextValue };
     onChange(next);
   };
 
@@ -119,8 +123,8 @@ function LayerControlList({
       <Typography
         variant="subtitle1"
         sx={{
-          mb: compact ? 0.5 : 1,
-          p: compact ? 0.5 : 1,
+          mb: compact ? 0.25 : 1,
+          p: compact ? 0.25 : 1,
           fontSize: compact ? "0.95rem" : undefined,
         }}
       >
@@ -136,10 +140,10 @@ function LayerControlList({
       <Box
         display="grid"
         gridTemplateColumns="1fr 1fr"
-        gap={compact ? 0.25 : 0.5}
+        gap={compact ? 0.15 : 0.5}
       >
         {sortedItems.length > 0 &&
-          visibleItems.map((it, displayIdx) => {
+          visibleItems.map((it) => {
             // El índice real en el array completo
             const actualIdx = sortedItems.findIndex(
               (item) => item.id === it.id,
@@ -153,14 +157,18 @@ function LayerControlList({
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, actualIdx)}
                 sx={{
-                  px: compact ? 0.5 : 1,
-                  py: compact ? 0.25 : 0.5,
+                  px: compact ? 0.35 : 1,
+                  py: compact ? 0.15 : 0.5,
                   width: "100%",
                   bgcolor: "background.paper",
                 }}
               >
                 {/* Checkbox + Nombre + Slider + Manija en una sola línea */}
-                <Box display="flex" alignItems="center" gap={compact ? 0.5 : 1}>
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  gap={compact ? 0.35 : 1}
+                >
                   <Checkbox
                     size={compact ? "small" : "medium"}
                     checked={!!it.enabled}
@@ -177,7 +185,10 @@ function LayerControlList({
                     display="flex"
                     flexDirection="column"
                     gap={compact ? 0.25 : 0.5}
-                    sx={{ minWidth: compact ? 64 : 80 }}
+                    sx={{
+                      minWidth: compact ? 56 : 80,
+                      flex: showOpacity ? "0 0 auto" : 1,
+                    }}
                   >
                     <Typography
                       variant="body2"
@@ -242,15 +253,56 @@ function LayerControlList({
                   </Box>
 
                   {showOpacity && (
-                    <Slider
-                      value={Number(it.opacity ?? 1)}
-                      onChange={(_, v) => changeOpacity(actualIdx, v)}
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      valueLabelDisplay="auto"
-                      sx={{ flex: 1 }}
-                    />
+                    <Box
+                      display="flex"
+                      alignItems="center"
+                      gap={compact ? 0.5 : 0.75}
+                      sx={{
+                        flex: compact ? "0 0 78px" : 1,
+                        minWidth: compact ? 78 : 150,
+                      }}
+                    >
+                      <OpacityIcon
+                        sx={{
+                          fontSize: compact ? 14 : 18,
+                          color: "text.secondary",
+                        }}
+                      />
+                      <Slider
+                        size="small"
+                        value={Number(it.opacity ?? 1)}
+                        onChange={(_, v) => changeOpacity(actualIdx, v)}
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        valueLabelDisplay="auto"
+                        valueLabelFormat={formatOpacityLabel}
+                        sx={{
+                          flex: 1,
+                          "& .MuiSlider-thumb": {
+                            width: compact ? 10 : 14,
+                            height: compact ? 10 : 14,
+                          },
+                          "& .MuiSlider-track": { height: compact ? 2 : 4 },
+                          "& .MuiSlider-rail": { height: compact ? 2 : 4 },
+                          "& .MuiSlider-valueLabel": {
+                            fontSize: compact ? "0.62rem" : undefined,
+                          },
+                        }}
+                      />
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        sx={{
+                          minWidth: compact ? 28 : 36,
+                          textAlign: "right",
+                          fontVariantNumeric: "tabular-nums",
+                          fontSize: compact ? "0.65rem" : undefined,
+                        }}
+                      >
+                        {formatOpacityLabel(it.opacity ?? 1)}
+                      </Typography>
+                    </Box>
                   )}
 
                   <Tooltip title="Arrastrar para cambiar el orden">
@@ -258,11 +310,11 @@ function LayerControlList({
                       size="small"
                       sx={{
                         cursor: "grab",
-                        px: compact ? 0.5 : 1,
-                        mx: compact ? 0.5 : 3,
+                        px: compact ? 0.3 : 1,
+                        mx: compact ? 0.2 : 3,
                       }}
                     >
-                      <DragIndicatorIcon sx={{ fontSize: compact ? 18 : 20 }} />
+                      <DragIndicatorIcon sx={{ fontSize: compact ? 16 : 20 }} />
                     </IconButton>
                   </Tooltip>
                 </Box>
