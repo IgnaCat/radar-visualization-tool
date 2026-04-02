@@ -1,10 +1,11 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from ..core.constants import FIELD_ALIASES
 
 import numpy as np
 import pyart
+
+EXCLUDED_FIELDS_PRESENT = {"COLMAX", "DBZHF"}
 
 # (Usado mas que nada en el upload request)
 def extract_radar_metadata(path: str) -> Dict[str, Any]:
@@ -28,7 +29,11 @@ def extract_radar_metadata(path: str) -> Dict[str, Any]:
 
     # Campos presentes
     try:
-        fields_present = list(radar.fields.keys())
+        fields_present = [
+            field
+            for field in radar.fields.keys()
+            if str(field).strip().upper() not in EXCLUDED_FIELDS_PRESENT
+        ]
     except Exception:
         fields_present = []
 
