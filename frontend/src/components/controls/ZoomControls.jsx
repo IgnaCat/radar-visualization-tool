@@ -3,7 +3,7 @@ import AddIcon from "@mui/icons-material/Add";
 import RemoveIcon from "@mui/icons-material/Remove";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 
-export default function ZoomControls({ map }) {
+export default function ZoomControls({ map, bottomOffset = 22 }) {
   const handleZoomIn = () => {
     if (map) {
       map.zoomIn();
@@ -27,7 +27,7 @@ export default function ZoomControls({ map }) {
       elevation={0}
       sx={{
         position: "absolute",
-        bottom: 22,
+        bottom: bottomOffset,
         right: 12,
         zIndex: 1000,
         display: "flex",

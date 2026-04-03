@@ -87,6 +87,26 @@ button:focus-visible {
   font-family: "Inter", "Segoe UI", system-ui, sans-serif;
 }
 
+.leaflet-control-coordinates {
+  background: rgba(255, 255, 255, 0.8);
+  color: #333;
+  font:
+    11px / 1.4 "Inter",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  margin-bottom: 0 !important;
+  padding: 0 5px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.leaflet-right .leaflet-control-coordinates {
+  clear: both;
+  float: right;
+  margin-right: 0 !important;
+}
+
 /* Tooltip badge para marcadores RHI A/B */
 .rhi-label-tooltip {
   background: rgba(255, 255, 255, 0.92) !important;
@@ -112,7 +132,8 @@ button:focus-visible {
 
 /* Ocultar atribución en móviles */
 @media (max-width: 768px) {
-  .leaflet-control-attribution {
+  .leaflet-control-attribution,
+  .leaflet-control-coordinates {
     font-size: 9px;
     opacity: 0.7;
   }

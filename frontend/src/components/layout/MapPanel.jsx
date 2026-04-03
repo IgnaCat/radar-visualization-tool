@@ -187,7 +187,9 @@ export default function MapPanel({
   const [shapeAnnotations, setShapeAnnotations] = useState([]);
   const [rangeCircleLayers, setRangeCircleLayers] = useState(new Set());
   const [elevationProfilePoints, setElevationProfilePoints] = useState([]);
-  const [rhiElevationProfilePoints, setRhiElevationProfilePoints] = useState([]);
+  const [rhiElevationProfilePoints, setRhiElevationProfilePoints] = useState(
+    [],
+  );
   const elevationProfilePointsRef = useRef([]);
   const rhiElevationProfilePointsRef = useRef([]);
 
@@ -242,7 +244,8 @@ export default function MapPanel({
       })
       .map((layer) => {
         const layerMetadata = layer?.metadata || {};
-        const fallbackMetadata = filesMetadataByPath.get(layer?.source_file) || {};
+        const fallbackMetadata =
+          filesMetadataByPath.get(layer?.source_file) || {};
         const radarSite =
           layerMetadata.radar_site ||
           layerMetadata.site ||
@@ -455,46 +458,59 @@ export default function MapPanel({
     setHighlightedPoint(null);
   };
 
-  const handleHighlightPoint = useCallback((lat, lon) => {
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
-      setHighlightedPoint(null);
-      return;
-    }
+  const handleHighlightPoint = useCallback(
+    (lat, lon) => {
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        setHighlightedPoint(null);
+        return;
+      }
 
-    // Leemos desde refs para mantener este callback estable y evitar que los
-    // efectos de los diálogos entren en loops al cambiar la identidad del handler.
-    const matchingPoint = [
-      ...elevationProfilePointsRef.current,
-      ...rhiElevationProfilePointsRef.current,
-    ].find((point) => point.lat === lat && point.lon === lon);
+      // Leemos desde refs para mantener este callback estable y evitar que los
+      // efectos de los diálogos entren en loops al cambiar la identidad del handler.
+      const matchingPoint = [
+        ...elevationProfilePointsRef.current,
+        ...rhiElevationProfilePointsRef.current,
+      ].find((point) => point.lat === lat && point.lon === lon);
 
-    setHighlightedPoint(matchingPoint || { lat, lon });
-  }, [setHighlightedPoint]);
+      setHighlightedPoint(matchingPoint || { lat, lon });
+    },
+    [setHighlightedPoint],
+  );
 
-  const handleProfileGenerated = useCallback((profilePoints = []) => {
-    setLineDrawingFinished(false);
-    const nextProfilePoints = Array.isArray(profilePoints) ? profilePoints : [];
-    setElevationProfilePoints((prevPoints) =>
-      areProfilePointsEqual(prevPoints, nextProfilePoints)
-        ? prevPoints
-        : nextProfilePoints,
-    );
-    if (nextProfilePoints.length === 0) {
-      setHighlightedPoint(null);
-    }
-  }, [setLineDrawingFinished, setHighlightedPoint]);
+  const handleProfileGenerated = useCallback(
+    (profilePoints = []) => {
+      setLineDrawingFinished(false);
+      const nextProfilePoints = Array.isArray(profilePoints)
+        ? profilePoints
+        : [];
+      setElevationProfilePoints((prevPoints) =>
+        areProfilePointsEqual(prevPoints, nextProfilePoints)
+          ? prevPoints
+          : nextProfilePoints,
+      );
+      if (nextProfilePoints.length === 0) {
+        setHighlightedPoint(null);
+      }
+    },
+    [setLineDrawingFinished, setHighlightedPoint],
+  );
 
-  const handleRhiProfileChange = useCallback((profilePoints = []) => {
-    const nextProfilePoints = Array.isArray(profilePoints) ? profilePoints : [];
-    setRhiElevationProfilePoints((prevPoints) =>
-      areProfilePointsEqual(prevPoints, nextProfilePoints)
-        ? prevPoints
-        : nextProfilePoints,
-    );
-    if (nextProfilePoints.length === 0) {
-      setHighlightedPoint(null);
-    }
-  }, [setHighlightedPoint]);
+  const handleRhiProfileChange = useCallback(
+    (profilePoints = []) => {
+      const nextProfilePoints = Array.isArray(profilePoints)
+        ? profilePoints
+        : [];
+      setRhiElevationProfilePoints((prevPoints) =>
+        areProfilePointsEqual(prevPoints, nextProfilePoints)
+          ? prevPoints
+          : nextProfilePoints,
+      );
+      if (nextProfilePoints.length === 0) {
+        setHighlightedPoint(null);
+      }
+    },
+    [setHighlightedPoint],
+  );
 
   const handleOpenElevationProfile = () => {
     setElevationProfileOpen(true);
@@ -660,7 +676,7 @@ export default function MapPanel({
         onRemoveFile={onRemoveFile}
       />
 
-      <ZoomControls map={localMapInstance} />
+      <ZoomControls map={localMapInstance} bottomOffset={46} />
 
       <ColorLegend overlayData={overlayData} />
 

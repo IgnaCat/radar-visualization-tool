@@ -17,6 +17,7 @@ import UsePixelStatClick from "../overlays/UsePixelStatClick";
 import TextOverlay from "../overlays/TextOverlay";
 import ShapeAnnotationsOverlay from "../overlays/ShapeAnnotationsOverlay";
 import { setTileNativeZoomMetadata } from "./tileZoomCache";
+import MouseCoordinatesControl from "./MouseCoordinatesControl";
 
 function COGTile({
   tilejsonUrl,
@@ -258,6 +259,7 @@ export default function MapView({
     <MapContainer
       center={center}
       zoom={6}
+      zoomControl={false}
       doubleClickZoom={false}
       style={{ height: "100vh", width: "100%" }}
       worldCopyJump={false}
@@ -267,6 +269,7 @@ export default function MapView({
       markerZoomAnimation={true}
     >
       <MapReadyHandler />
+      <MouseCoordinatesControl />
       <TileLayer
         key={baseMapUrl}
         url={baseMapUrl}
