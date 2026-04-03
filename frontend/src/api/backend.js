@@ -115,11 +115,13 @@ export async function generateAnimationGif({
   frames,
   fps = 1,
   session_id,
+  basemap_id,
 }) {
   return api.post("/process/animation/gif", {
     frames,
     fps,
     ...(session_id && { session_id }),
+    ...(basemap_id && { basemap_id }),
   });
 }
 

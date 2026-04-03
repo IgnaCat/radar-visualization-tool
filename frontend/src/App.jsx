@@ -422,6 +422,7 @@ export default function App() {
         frames: gifFrames,
         fps: 1,
         session_id: sessionId,
+        basemap_id: selectedBaseMap?.id,
       });
 
       const gifPath = response.data?.gif_url;
@@ -450,6 +451,7 @@ export default function App() {
     downloadFile,
     enqueueSnackbar,
     generateFilename,
+    selectedBaseMap,
     sessionId,
     visibleFramesForGif,
   ]);

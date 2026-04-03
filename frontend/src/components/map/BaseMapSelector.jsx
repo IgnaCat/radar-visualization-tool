@@ -69,20 +69,20 @@ const baseMaps = [
     attribution: "Esri",
     image: esriImg,
   },
-  {
-    id: "topo-esri",
-    name: "Mapa topográfico Esri",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Esri",
-    image: esritImg,
-  },
-  {
-    id: "ocean",
-    name: "Mapa Esri Fondo Oceánico",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
-    attribution: "Esri",
-    image: esritImg,
-  },
+  // {
+  //   id: "topo-esri",
+  //   name: "Mapa topográfico Esri",
+  //   url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}",
+  //   attribution: "Esri",
+  //   image: esritImg,
+  // },
+  // {
+  //   id: "ocean",
+  //   name: "Mapa Esri Fondo Oceánico",
+  //   url: "https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}",
+  //   attribution: "Esri",
+  //   image: esritImg,
+  // },
 ];
 
 export default function BaseMapSelector({

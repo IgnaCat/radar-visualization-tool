@@ -73,6 +73,7 @@ async def create_gif_animation(payload: GifAnimationRequest):
             str(output_dir),
             payload.fps,
             payload.session_id,
+            payload.basemap_id,
         )
 
         gif_url = (

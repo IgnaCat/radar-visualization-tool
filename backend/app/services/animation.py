@@ -4,6 +4,7 @@ Generación de animaciones GIF a partir de rasters procesados.
 
 import os
 import uuid
+import logging
 from math import ceil
 from pathlib import Path
 
@@ -14,6 +15,10 @@ from rasterio.transform import from_origin
 from rasterio.warp import Resampling, reproject
 
 from ..core.config import settings
+from .basemaps import get_basemap_spec, render_basemap_for_canvas
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_animation(image_paths):
@@ -131,11 +136,15 @@ def _render_frame_rgba(
     height: int,
     dst_transform,
     dst_crs,
+    background_rgba: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Reproyecta y compone todas las capas visibles de un frame en un solo RGBA.
     """
-    composed = np.zeros((4, height, width), dtype=np.uint8)
+    if background_rgba is not None:
+        composed = np.moveaxis(background_rgba.copy(), -1, 0)
+    else:
+        composed = np.zeros((4, height, width), dtype=np.uint8)
 
     # La primera capa del array tiene mayor prioridad visual en el mapa,
     # así que componemos en orden inverso: fondo -> frente.
@@ -168,13 +177,13 @@ def create_animation_from_layer_urls(
     output_dir,
     fps=1,
     session_id=None,
+    basemap_id=None,
 ):
     """
     Crea un GIF animado a partir de capas raster ya procesadas.
 
     Cada frame puede contener una o varias capas visibles. Las capas se reproyectan
-    a un canvas común en EPSG:3857 y se componen en un frame completo con fondo
-    transparente.
+    a un canvas común en EPSG:3857 y se componen en un frame completo.
     """
     resolved_frames = []
     all_paths = []
@@ -214,17 +223,45 @@ def create_animation_from_layer_urls(
     width = max(1, int(ceil((right - left) / res_x)))
     height = max(1, int(ceil((top - bottom) / res_y)))
     dst_transform = from_origin(left, top, res_x, res_y)
+    # Usamos los bounds reales del canvas para alinear bien el fondo.
+    canvas_right = left + width * res_x
+    canvas_bottom = top - height * res_y
+
+    background_rgba = None
+    if basemap_id:
+        spec = get_basemap_spec(basemap_id)
+        if spec is None:
+            raise ValueError(f"Mapa base no soportado para GIF: {basemap_id}")
+
+        background_image = render_basemap_for_canvas(
+            spec=spec,
+            left=left,
+            bottom=canvas_bottom,
+            right=canvas_right,
+            top=top,
+            width=width,
+            height=height,
+            target_resolution=min(res_x, res_y),
+        )
+        if background_image is None:
+            logger.warning(
+                "No se pudo renderizar el mapa base '%s' para el GIF; se mantiene fondo transparente",
+                basemap_id,
+            )
+        else:
+            background_rgba = np.array(background_image, dtype=np.uint8)
 
     rendered_frames = []
     for frame_paths in resolved_frames:
         rendered_frames.append(
             _render_frame_rgba(
-            frame_paths=frame_paths,
-            width=width,
-            height=height,
-            dst_transform=dst_transform,
-            dst_crs=crs,
-        )
+                frame_paths=frame_paths,
+                width=width,
+                height=height,
+                dst_transform=dst_transform,
+                dst_crs=crs,
+                background_rgba=background_rgba,
+            )
         )
 
     if not rendered_frames:

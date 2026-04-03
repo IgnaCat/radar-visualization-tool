@@ -154,6 +154,10 @@ class GifAnimationRequest(BaseModel):
         default=None,
         description="ID de sesión para guardar el GIF en un subdirectorio temporal",
     )
+    basemap_id: Optional[str] = Field(
+        default=None,
+        description="ID del mapa base permitido para usar como fondo del GIF",
+    )
 
 
 class GifAnimationResponse(BaseModel):
