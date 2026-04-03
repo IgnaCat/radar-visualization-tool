@@ -87,6 +87,17 @@ button:focus-visible {
   font-family: "Inter", "Segoe UI", system-ui, sans-serif;
 }
 
+.leaflet-bottom.leaflet-right {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas:
+    "coords coords"
+    "scale attribution";
+  column-gap: 10px;
+  justify-content: end;
+  align-items: end;
+}
+
 .leaflet-control-coordinates {
   background: rgba(255, 255, 255, 0.8);
   color: #333;
@@ -101,10 +112,47 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.leaflet-bottom.leaflet-right .leaflet-control-attribution,
+.leaflet-bottom.leaflet-right .leaflet-control-coordinates,
+.leaflet-bottom.leaflet-right .leaflet-control-scale {
+  clear: none;
+  float: none;
+  margin: 0 !important;
+}
+
 .leaflet-right .leaflet-control-coordinates {
-  clear: both;
-  float: right;
+  grid-area: coords;
+  justify-self: end;
   margin-right: 0 !important;
+}
+
+.leaflet-control-scale {
+  grid-area: scale;
+  display: flex;
+  align-self: end;
+  justify-self: end;
+}
+
+.leaflet-control-scale-line {
+  background: rgba(255, 255, 255, 0.88);
+  border-color: rgba(66, 66, 66, 0.72);
+  border-radius: 3px 3px 0 0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  color: #333;
+  font:
+    10px / 1.25 "Inter",
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+  padding: 2px 8px 1px;
+}
+
+.leaflet-control-attribution {
+  grid-area: attribution;
+  align-self: end;
+  background: rgba(255, 255, 255, 0.8) !important;
+  color: #333;
+  padding-left: 5px;
 }
 
 /* Tooltip badge para marcadores RHI A/B */
@@ -136,6 +184,11 @@ button:focus-visible {
   .leaflet-control-coordinates {
     font-size: 9px;
     opacity: 0.7;
+  }
+
+  .leaflet-control-scale-line {
+    font-size: 9px;
+    opacity: 0.78;
   }
 }
 

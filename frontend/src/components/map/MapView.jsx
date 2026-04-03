@@ -18,6 +18,8 @@ import TextOverlay from "../overlays/TextOverlay";
 import ShapeAnnotationsOverlay from "../overlays/ShapeAnnotationsOverlay";
 import { setTileNativeZoomMetadata } from "./tileZoomCache";
 import MouseCoordinatesControl from "./MouseCoordinatesControl";
+import ScaleControl from "./ScaleControl";
+import AttributionPrefixControl from "./AttributionPrefixControl";
 
 function COGTile({
   tilejsonUrl,
@@ -269,7 +271,9 @@ export default function MapView({
       markerZoomAnimation={true}
     >
       <MapReadyHandler />
+      <AttributionPrefixControl />
       <MouseCoordinatesControl />
+      <ScaleControl />
       <TileLayer
         key={baseMapUrl}
         url={baseMapUrl}
