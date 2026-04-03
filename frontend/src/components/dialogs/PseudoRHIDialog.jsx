@@ -50,6 +50,9 @@ export default function PseudoRHIDialog({
   onClearPickedPoint,
   onGenerate,
   onLinePreviewChange,
+  onElevationProfileChange,
+  onHighlightPoint,
+  highlightedPoint = null,
   onAutoClose,
   onAutoReopen,
 }) {
@@ -83,6 +86,7 @@ export default function PseudoRHIDialog({
   const [expandedImage, setExpandedImage] = useState(null);
   const [elevationProfile, setElevationProfile] = useState(null);
   const [expandedElevation, setExpandedElevation] = useState(false);
+  const [hoverSyncEnabled, setHoverSyncEnabled] = useState(false);
   const [smoothingEnabled, setSmoothingEnabled] = useState(false);
   const [smoothingMethod, setSmoothingMethod] = useState("median");
   const [smoothingSigma, setSmoothingSigma] = useState(0.8);
@@ -125,6 +129,7 @@ export default function PseudoRHIDialog({
   const handlePickStart = () => {
     setResultImgs([]);
     setError("");
+    setHoverSyncEnabled(false);
     setPickTarget("start");
     setAutoFlowActive(true);
     onRequestPickPoint?.();
@@ -134,6 +139,7 @@ export default function PseudoRHIDialog({
   const handlePickEnd = () => {
     setResultImgs([]);
     setError("");
+    setHoverSyncEnabled(false);
     setPickTarget("end");
     setAutoFlowActive(true);
     onRequestPickPoint?.();
@@ -147,6 +153,7 @@ export default function PseudoRHIDialog({
       setResultImgs([]);
       setError("");
       setElevationProfile(null);
+      setHoverSyncEnabled(false);
     }
   };
 
@@ -201,7 +208,47 @@ export default function PseudoRHIDialog({
     };
 
     fetchElevationProfile();
-  }, [startLat, startLon, endLat, endLon, radarSiteLat, radarSiteLon]);
+  }, [
+    startLat,
+    startLon,
+    endLat,
+    endLon,
+    radarSiteLat,
+    radarSiteLon,
+    onElevationProfileChange,
+  ]);
+
+  const handleElevationHover = (point) => {
+    onHighlightPoint?.(point?.lat ?? null, point?.lon ?? null);
+  };
+
+  useEffect(() => {
+    // Si el usuario cambia alguno de los extremos manualmente, invalidamos la
+    // sincronización anterior hasta que vuelva a generar el corte.
+    setHoverSyncEnabled(false);
+  }, [startLat, startLon, endLat, endLon]);
+
+  useEffect(() => {
+    // El perfil del terreno del RHI puede calcularse apenas elegimos A y B,
+    // pero el hover bidireccional con el mapa solo debe activarse después de
+    // generar el corte. Esto evita que la línea responda antes de tiempo.
+    if (
+      hoverSyncEnabled &&
+      Array.isArray(elevationProfile?.profile) &&
+      elevationProfile.profile.length > 0
+    ) {
+      onElevationProfileChange?.(elevationProfile.profile);
+      return;
+    }
+
+    onElevationProfileChange?.([]);
+    onHighlightPoint?.(null, null);
+  }, [
+    hoverSyncEnabled,
+    elevationProfile,
+    onElevationProfileChange,
+    onHighlightPoint,
+  ]);
 
   // Map click handling: automatic chaining start -> end
   useEffect(() => {
@@ -312,6 +359,7 @@ export default function PseudoRHIDialog({
   const handleGenerate = async () => {
     setResultImgs([]);
     setError("");
+    setHoverSyncEnabled(false);
     if (!filepath) {
       setError("Seleccione un archivo primero");
       return;
@@ -386,6 +434,8 @@ export default function PseudoRHIDialog({
       }
 
       setResultImgs(results);
+      const hasSuccessfulImages = results.some((result) => result.image_url);
+      setHoverSyncEnabled(hasSuccessfulImages);
 
       // Si todos los campos fallaron, mostrar error
       if (results.length > 0 && results.every((r) => r.error)) {
@@ -402,6 +452,7 @@ export default function PseudoRHIDialog({
     // Limpiar resultados visuales pero mantener la configuración
     setResultImgs([]);
     setElevationProfile(null);
+    setHoverSyncEnabled(false);
     setError("");
     onClearPickedPoint?.();
     // Cancelar cualquier flujo automático pendiente
@@ -795,6 +846,8 @@ export default function PseudoRHIDialog({
                         height={200}
                         clickable={true}
                         onClick={() => setExpandedElevation(true)}
+                        onHover={handleElevationHover}
+                        highlightedPoint={highlightedPoint}
                       />
                       <Typography
                         variant="caption"
@@ -892,6 +945,8 @@ export default function PseudoRHIDialog({
                 profileData={elevationProfile.profile}
                 height={500}
                 clickable={false}
+                onHover={handleElevationHover}
+                highlightedPoint={highlightedPoint}
               />
             )}
           </Box>

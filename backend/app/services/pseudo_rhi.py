@@ -218,6 +218,7 @@ def variable_radar_cross_section(
         ax=ax2,
         mask_outside=True,
         gatefilter=gf_xsect,
+        colorbar_flag=False,
     )
     # Limites solicitados por el usuario (con fallback)
     x_min = max(0.0, plot_min_length_km) if plot_min_length_km else 0.0
@@ -227,13 +228,13 @@ def variable_radar_cross_section(
     y_max = max(0.1, min(y_max, 30))  # clamp razonable
     display.set_limits(xlim=[x_min, x_max], ylim=[y_min, y_max])
 
-    # Ajustar tamaño de fuente del colorbar generado por PyART
-    for ax_cbar in fig.axes:
-        if ax_cbar != ax2:  # El colorbar es el otro axes
-            ax_cbar.tick_params(
-                labelsize=14
-            )  # Tamaño de los valores numéricos del colorbar
-            ax_cbar.yaxis.label.set_size(16)  # Tamaño de la etiqueta del colorbar
+    # Ajuste del colorbar desactivado porque el colorbar no se renderiza.
+    # for ax_cbar in fig.axes:
+    #     if ax_cbar != ax2:  # El colorbar es el otro axes
+    #         ax_cbar.tick_params(
+    #             labelsize=17
+    #         )  # Tamaño de los valores numéricos del colorbar
+    #         ax_cbar.yaxis.label.set_size(16)  # Tamaño de la etiqueta del colorbar
 
     # Grafico el perfil de elevación del terreno
     ax2.plot(distances, perfil_elevacion_km, label=None, color="black", linewidth=2)
@@ -254,7 +255,7 @@ def variable_radar_cross_section(
             distancia_interes,
             elevacion_interes_value,
             "r*",
-            markersize=15,
+            markersize=20,
             label="Punto de interés",
         )
     else:
@@ -269,14 +270,14 @@ def variable_radar_cross_section(
         horizontalalignment="right",
         verticalalignment="top",
         transform=ax2.transAxes,
-        fontsize=16,
+        fontsize=17,
         bbox=dict(facecolor="white", alpha=0.7),
     )
 
-    plt.xlabel("Distancia (km)", fontsize=18)
-    plt.ylabel(f"Altura (km)", fontsize=18)
+    plt.xlabel("Distancia (km)", fontsize=22)
+    plt.ylabel(f"Altura (km)", fontsize=22)
     ax2.tick_params(
-        axis="both", which="major", labelsize=14
+        axis="both", which="major", labelsize=19
     )  # Tamaño de los valores numéricos de los ejes
     plt.grid()
     plt.tight_layout()
@@ -355,7 +356,8 @@ def generate_pseudo_rhi_png(
     else:
         smooth_suffix = "_nosmooth"
 
-    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{int(min_length_km)}kmin_{int(min_height_km)}hmin_{interp_suffix}{smooth_suffix}_{file_hash}.png"
+    plot_style_suffix = "_nocolorbar"
+    unique_out_name = f"pseudo_rhi_{field}_{points}_{filters_str}_{elevation}_{int(max_length_km)}km_{int(max_height_km)}km_{int(min_length_km)}kmin_{int(min_height_km)}hmin_{interp_suffix}{smooth_suffix}{plot_style_suffix}_{file_hash}.png"
     out_path = Path(output_dir) / unique_out_name
 
     # Construir URL relativa incluyendo session_id si existe
@@ -776,10 +778,10 @@ def _generate_segment_transect_png(
     norm = Normalize(vmin=vmin, vmax=vmax)
     im = ax.pcolormesh(D, Z, image, cmap=cmap, norm=norm, shading="auto")
 
-    # Colorbar
-    cbar = plt.colorbar(im, ax=ax, pad=0.02)
-    cbar.set_label(f"{field_name} ({units})", fontsize=16)
-    cbar.ax.tick_params(labelsize=14)  # Tamaño de los valores numéricos del colorbar
+    # Colorbar oculto a pedido.
+    # cbar = plt.colorbar(im, ax=ax, pad=0.02)
+    # cbar.set_label(f"{field_name} ({units})", fontsize=18)
+    # cbar.ax.tick_params(labelsize=16)  # Tamaño de los valores numéricos del colorbar
 
     # Perfil de terreno
     if terrain_dists_km is not None and terrain_elev_km is not None:
@@ -795,7 +797,7 @@ def _generate_segment_transect_png(
     # Marcador del punto final
     dist_end_km = length_km
     if end_elev_km is not None:
-        ax.plot(dist_end_km, end_elev_km, "r*", markersize=15, label="Punto final")
+        ax.plot(dist_end_km, end_elev_km, "r*", markersize=18, label="Punto final")
 
     # Límites
     x_min = max(0.0, min_length_km) if min_length_km else 0.0
@@ -803,10 +805,10 @@ def _generate_segment_transect_png(
     ax.set_xlim(x_min, x_max)
     ax.set_ylim(y_min_val, y_max_val)
 
-    ax.set_xlabel("Distancia (km)", fontsize=18)
-    ax.set_ylabel("Altura (km)", fontsize=18)
+    ax.set_xlabel("Distancia (km)", fontsize=22)
+    ax.set_ylabel("Altura (km)", fontsize=22)
     ax.tick_params(
-        axis="both", which="major", labelsize=14
+        axis="both", which="major", labelsize=19
     )  # Tamaño de los valores numéricos de los ejes
     ax.grid(True, alpha=0.3)
 

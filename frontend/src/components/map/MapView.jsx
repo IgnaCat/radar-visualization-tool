@@ -11,6 +11,7 @@ import "leaflet/dist/leaflet.css";
 import MapPickOverlay from "../overlays/MapPickOverlay";
 import AreaDrawOverlay from "../overlays/AreaDrawOverlay";
 import LineDrawOverlay from "../overlays/LineDrawOverlay";
+import ProfileLineHoverOverlay from "../overlays/ProfileLineHoverOverlay";
 import MarkersOverlay from "../overlays/MarkersOverlay";
 import UsePixelStatClick from "../overlays/UsePixelStatClick";
 import TextOverlay from "../overlays/TextOverlay";
@@ -180,6 +181,8 @@ export default function MapView({
   onLinePointsChange,
   elevationProfilePoints = [],
   onLineHoverPoint,
+  rhiProfilePoints = [],
+  onRhiLineHoverPoint,
   highlightedPoint = null,
   // Props para marcadores
   markerMode = false,
@@ -207,6 +210,28 @@ export default function MapView({
   const baseZ = 500;
   // overlayData ahora puede ser un array de capas de distintos radares para el frame actual
   const n = overlayData?.length ?? 0;
+  const rhiHoverLinePoints = useMemo(() => {
+    // Memoizamos la línea del RHI para que el overlay de hover no se reinicie
+    // en cada render. Si cambia la referencia todo el tiempo, el cleanup del
+    // efecto limpia el punto resaltado justo cuando queremos mostrarlo.
+    if (
+      !rhiEndpoints?.start ||
+      !rhiEndpoints?.end ||
+      !Number.isFinite(rhiEndpoints.start.lat) ||
+      !Number.isFinite(rhiEndpoints.start.lon) ||
+      !Number.isFinite(rhiEndpoints.end.lat) ||
+      !Number.isFinite(rhiEndpoints.end.lon)
+    ) {
+      return [];
+    }
+
+    return [rhiEndpoints.start, rhiEndpoints.end];
+  }, [
+    rhiEndpoints?.start?.lat,
+    rhiEndpoints?.start?.lon,
+    rhiEndpoints?.end?.lat,
+    rhiEndpoints?.end?.lon,
+  ]);
 
   // Ref compartido para controlar si ya se inicializó la vista del mapa
   const hasInitializedViewRef = useRef(false);
@@ -233,6 +258,7 @@ export default function MapView({
     <MapContainer
       center={center}
       zoom={6}
+      doubleClickZoom={false}
       style={{ height: "100vh", width: "100%" }}
       worldCopyJump={false}
       preferCanvas={false}
@@ -289,8 +315,27 @@ export default function MapView({
         points={drawnLineCoords}
         onComplete={onLineComplete}
         onPointsChange={onLinePointsChange}
+      />
+      {/* Hover para perfil de elevación */}
+      <ProfileLineHoverOverlay
+        enabled={!lineDrawMode}
+        linePoints={drawnLineCoords}
         profilePoints={elevationProfilePoints}
         onHoverPoint={onLineHoverPoint}
+      />
+      {/* Hover para puntos de RHI:
+          Se activa cuando tengamos la línea A-B y
+          muestras del perfil para poder sincronizar mapa y gráfico. */}
+      <ProfileLineHoverOverlay
+        enabled={
+          rhiHoverLinePoints.length === 2 &&
+          Array.isArray(rhiProfilePoints) &&
+          rhiProfilePoints.length > 0
+        }
+        linePoints={rhiHoverLinePoints}
+        profilePoints={rhiProfilePoints}
+        onHoverPoint={onRhiLineHoverPoint}
+        hoverTolerancePx={20}
       />
       <MarkersOverlay
         enabled={markerMode}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import MapView from "../map/MapView";
 import VerticalToolbar from "../controls/VerticalToolbar";
 import MapToolbar from "../controls/MapToolbar";
@@ -20,6 +20,27 @@ import { analyzeFieldsAcrossFiles } from "../../utils/fieldAnalysis";
 
 function getRangeCircleKey(layer) {
   return `${layer?.field || ""}::${layer?.source_file || ""}`;
+}
+
+function areProfilePointsEqual(prevPoints = [], nextPoints = []) {
+  if (prevPoints === nextPoints) return true;
+  if (prevPoints.length !== nextPoints.length) return false;
+
+  for (let i = 0; i < prevPoints.length; i += 1) {
+    const prev = prevPoints[i];
+    const next = nextPoints[i];
+
+    if (
+      prev?.lat !== next?.lat ||
+      prev?.lon !== next?.lon ||
+      prev?.distance !== next?.distance ||
+      prev?.elevation !== next?.elevation
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
@@ -166,6 +187,9 @@ export default function MapPanel({
   const [shapeAnnotations, setShapeAnnotations] = useState([]);
   const [rangeCircleLayers, setRangeCircleLayers] = useState(new Set());
   const [elevationProfilePoints, setElevationProfilePoints] = useState([]);
+  const [rhiElevationProfilePoints, setRhiElevationProfilePoints] = useState([]);
+  const elevationProfilePointsRef = useRef([]);
+  const rhiElevationProfilePointsRef = useRef([]);
 
   const availableRangeCircleKeys = useMemo(() => {
     if (!Array.isArray(mergedOutputs)) return new Set();
@@ -186,6 +210,14 @@ export default function MapPanel({
       return next.size === prev.size ? prev : next;
     });
   }, [availableRangeCircleKeys]);
+
+  useEffect(() => {
+    elevationProfilePointsRef.current = elevationProfilePoints;
+  }, [elevationProfilePoints]);
+
+  useEffect(() => {
+    rhiElevationProfilePointsRef.current = rhiElevationProfilePoints;
+  }, [rhiElevationProfilePoints]);
 
   const filesMetadataByPath = useMemo(
     () =>
@@ -329,10 +361,14 @@ export default function MapPanel({
     setPickedPoint(null);
     setPickPointMode(false);
     setRhiLinePreview({ start: null, end: null });
+    setRhiElevationProfilePoints([]);
+    setHighlightedPoint(null);
   };
 
   const handleClearLineOverlay = () => {
     setRhiLinePreview({ start: null, end: null });
+    setRhiElevationProfilePoints([]);
+    setHighlightedPoint(null);
   };
 
   const handleOpenAreaStatsMode = () => {
@@ -401,6 +437,7 @@ export default function MapPanel({
     setDrawnLineCoords([]);
     setLineDrawingFinished(false);
     setElevationProfilePoints([]);
+    setRhiElevationProfilePoints([]);
     setHighlightedPoint(null);
     setLineDrawMode(true);
   };
@@ -418,25 +455,46 @@ export default function MapPanel({
     setHighlightedPoint(null);
   };
 
-  const handleHighlightPoint = (lat, lon) => {
+  const handleHighlightPoint = useCallback((lat, lon) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
       setHighlightedPoint(null);
       return;
     }
 
-    const matchingPoint = elevationProfilePoints.find(
-      (point) => point.lat === lat && point.lon === lon,
-    );
+    // Leemos desde refs para mantener este callback estable y evitar que los
+    // efectos de los diálogos entren en loops al cambiar la identidad del handler.
+    const matchingPoint = [
+      ...elevationProfilePointsRef.current,
+      ...rhiElevationProfilePointsRef.current,
+    ].find((point) => point.lat === lat && point.lon === lon);
 
     setHighlightedPoint(matchingPoint || { lat, lon });
-  };
+  }, [setHighlightedPoint]);
 
-  const handleProfileGenerated = (profilePoints = []) => {
+  const handleProfileGenerated = useCallback((profilePoints = []) => {
     setLineDrawingFinished(false);
-    setElevationProfilePoints(
-      Array.isArray(profilePoints) ? profilePoints : [],
+    const nextProfilePoints = Array.isArray(profilePoints) ? profilePoints : [];
+    setElevationProfilePoints((prevPoints) =>
+      areProfilePointsEqual(prevPoints, nextProfilePoints)
+        ? prevPoints
+        : nextProfilePoints,
     );
-  };
+    if (nextProfilePoints.length === 0) {
+      setHighlightedPoint(null);
+    }
+  }, [setLineDrawingFinished, setHighlightedPoint]);
+
+  const handleRhiProfileChange = useCallback((profilePoints = []) => {
+    const nextProfilePoints = Array.isArray(profilePoints) ? profilePoints : [];
+    setRhiElevationProfilePoints((prevPoints) =>
+      areProfilePointsEqual(prevPoints, nextProfilePoints)
+        ? prevPoints
+        : nextProfilePoints,
+    );
+    if (nextProfilePoints.length === 0) {
+      setHighlightedPoint(null);
+    }
+  }, [setHighlightedPoint]);
 
   const handleOpenElevationProfile = () => {
     setElevationProfileOpen(true);
@@ -491,6 +549,8 @@ export default function MapPanel({
         onLinePointsChange={setDrawnLineCoords}
         elevationProfilePoints={elevationProfilePoints}
         onLineHoverPoint={setHighlightedPoint}
+        rhiProfilePoints={rhiElevationProfilePoints}
+        onRhiLineHoverPoint={setHighlightedPoint}
         highlightedPoint={highlightedPoint}
         markerMode={markerMode}
         markers={markers}
@@ -652,6 +712,9 @@ export default function MapPanel({
         onClearPickedPoint={handleClearPickedPoint}
         onGenerate={onGenerateRHI}
         onLinePreviewChange={setRhiLinePreview}
+        onElevationProfileChange={handleRhiProfileChange}
+        onHighlightPoint={handleHighlightPoint}
+        highlightedPoint={highlightedPoint}
         onAutoClose={() => setRhiOpen(false)}
         onAutoReopen={() => setRhiOpen(true)}
       />
