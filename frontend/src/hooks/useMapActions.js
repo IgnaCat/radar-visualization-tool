@@ -1,14 +1,24 @@
 import { useState, useCallback, useEffect } from "react";
 import domtoimage from "dom-to-image-more";
+import html2canvas from "html2canvas";
 
 /**
  * Custom hook para manejar acciones del mapa
- * - Captura de pantalla (usando dom-to-image-more para mejor calidad)
+ * - Captura de pantalla (dom-to-image-more + html2canvas para tiles COG)
  * - Impresión
  * - Pantalla completa
  */
 export function useMapActions() {
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  const isIgnoredCaptureElement = useCallback((node) => {
+    if (!node?.classList) return false;
+
+    return (
+      node.classList.contains("no-print") ||
+      node.classList.contains("leaflet-control-zoom")
+    );
+  }, []);
 
   // Detectar cambios en fullscreen (por ESC u otros métodos)
   useEffect(() => {
@@ -47,6 +57,56 @@ export function useMapActions() {
     });
   }, []);
 
+  const waitForPaint = useCallback(() => {
+    return new Promise((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(resolve);
+      });
+    });
+  }, []);
+
+  const captureWithDomToImage = useCallback(
+    async (container) => {
+      return await domtoimage.toPng(container, {
+        quality: 1.0,
+        bgcolor: "#ffffff",
+        cacheBust: true,
+        filter: (node) => !isIgnoredCaptureElement(node),
+      });
+    },
+    [isIgnoredCaptureElement],
+  );
+
+  const captureWithHtml2Canvas = useCallback(
+    async (container) => {
+      const canvas = await html2canvas(container, {
+        backgroundColor: "#ffffff",
+        useCORS: true,
+        allowTaint: false,
+        logging: false,
+        removeContainer: true,
+        scale: Math.max(window.devicePixelRatio || 1, 2),
+        ignoreElements: (element) => isIgnoredCaptureElement(element),
+        onclone: (clonedDocument) => {
+          clonedDocument
+            .querySelectorAll(".no-print, .leaflet-control-zoom")
+            .forEach((element) => {
+              element.style.display = "none";
+            });
+        },
+      });
+
+      return canvas.toDataURL("image/png");
+    },
+    [isIgnoredCaptureElement],
+  );
+
+  const shouldPreferHtml2Canvas = useCallback((container) => {
+    return Boolean(
+      container.querySelector('img.leaflet-tile[src*="/cog/"]'),
+    );
+  }, []);
+
   const captureMapImage = useCallback(
     async (containerId = "map-container") => {
       try {
@@ -56,6 +116,7 @@ export function useMapActions() {
         }
 
         await waitForTiles(container);
+        await waitForPaint();
 
         const elementsToHide = container.querySelectorAll(
           ".no-print, .leaflet-control-zoom",
@@ -66,20 +127,19 @@ export function useMapActions() {
         });
 
         try {
-          return await domtoimage.toPng(container, {
-            quality: 1.0,
-            bgcolor: "#ffffff",
-            cacheBust: true,
-            filter: (node) => {
-              if (node.classList) {
-                return (
-                  !node.classList.contains("no-print") &&
-                  !node.classList.contains("leaflet-control-zoom")
-                );
-              }
-              return true;
-            },
-          });
+          if (shouldPreferHtml2Canvas(container)) {
+            return await captureWithHtml2Canvas(container);
+          }
+
+          try {
+            return await captureWithDomToImage(container);
+          } catch (error) {
+            console.warn(
+              "dom-to-image no pudo exportar el mapa; usando html2canvas",
+              error,
+            );
+            return await captureWithHtml2Canvas(container);
+          }
         } finally {
           elementsToHide.forEach((el) => {
             el.style.display = el.dataset.originalDisplay || "";
@@ -91,7 +151,13 @@ export function useMapActions() {
         throw error;
       }
     },
-    [waitForTiles],
+    [
+      captureWithDomToImage,
+      captureWithHtml2Canvas,
+      shouldPreferHtml2Canvas,
+      waitForPaint,
+      waitForTiles,
+    ],
   );
 
   /**

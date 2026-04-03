@@ -82,7 +82,7 @@ export default function ColorLegend({
   }
 
   return (
-    <div style={{ display: "contents" }}>
+    <div className="color-legend-root" style={{ display: "contents", ...style }}>
       {fieldColormapPairs.map(({ field, colormap }) => {
         const key = `${field}_${colormap}`;
         const slot = legendSlots[key] ?? 0;

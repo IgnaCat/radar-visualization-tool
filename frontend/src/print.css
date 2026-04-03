@@ -84,7 +84,15 @@
   }
 
   /* Mantener la leyenda de colores visible */
-  [class*="ColorLegend"] {
-    display: block !important;
+  .color-legend-root,
+  .color-legend-root * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+    forced-color-adjust: none !important;
+  }
+
+  .color-legend-root {
+    display: contents !important;
   }
 }
