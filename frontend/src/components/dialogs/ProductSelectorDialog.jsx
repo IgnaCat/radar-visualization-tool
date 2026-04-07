@@ -807,8 +807,8 @@ export default function ProductSelectorDialog({
 
         {(isPPI || isCAPPI) && <Divider sx={{ my: 1.5 }} />}
 
-        {/* ---- Filtros por rango ---- */}
-        <Box mt={1.5}>
+        {/* ---- Filtros ---- */}
+        {/* <Box mt={1.5}>
           <Box display="flex" alignItems="center" gap={1}>
             <IconButton
               size="small"
@@ -822,7 +822,6 @@ export default function ProductSelectorDialog({
             </Typography>
           </Box>
           <Collapse in={showFilters} timeout="auto" unmountOnExit>
-            {/* RHOHV */}
             <Box mt={0.75} px={0.5}>
               <FormControlLabel
                 control={
@@ -881,7 +880,7 @@ export default function ProductSelectorDialog({
               </Box>
             </Box>
           </Collapse>
-        </Box>
+        </Box> */}
       </DialogContent>
 
       <DialogActions sx={{ flexShrink: 0, px: 2, py: 1, gap: 0.5 }}>
