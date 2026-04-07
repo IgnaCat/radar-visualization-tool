@@ -116,12 +116,22 @@ export async function generateAnimationGif({
   fps = 1,
   session_id,
   basemap_id,
+  show_logo = false,
+  show_colorbar = false,
+  colorbar_config = null,
+  show_metadata = false,
+  frame_labels = null,
 }) {
   return api.post("/process/animation/gif", {
     frames,
     fps,
     ...(session_id && { session_id }),
     ...(basemap_id && { basemap_id }),
+    show_logo,
+    show_colorbar,
+    ...(colorbar_config && { colorbar_config }),
+    show_metadata,
+    ...(frame_labels && { frame_labels }),
   });
 }
 

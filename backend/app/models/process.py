@@ -136,6 +136,13 @@ class ProcessResponse(BaseModel):
     warnings: Optional[List[str]] = []
 
 
+class ColorbarConfig(BaseModel):
+    """Configuración para la barra de colores a superponer en el GIF."""
+
+    field: str = Field(description="Nombre del campo meteorológico (ej. DBZH)")
+    colormap: Optional[str] = Field(default=None, description="Nombre del colormap")
+
+
 class GifAnimationRequest(BaseModel):
     """Request para generar un GIF a partir de imágenes raster ya procesadas."""
 
@@ -157,6 +164,26 @@ class GifAnimationRequest(BaseModel):
     basemap_id: Optional[str] = Field(
         default=None,
         description="ID del mapa base permitido para usar como fondo del GIF",
+    )
+    show_logo: bool = Field(
+        default=False,
+        description="Superponer el logo LSRS en la esquina superior izquierda",
+    )
+    show_colorbar: bool = Field(
+        default=False,
+        description="Superponer la barra de colores del campo principal",
+    )
+    colorbar_config: Optional[ColorbarConfig] = Field(
+        default=None,
+        description="Configuración de la barra de colores (campo y colormap)",
+    )
+    show_metadata: bool = Field(
+        default=False,
+        description="Superponer metadata de cada frame (producto, radar, timestamp)",
+    )
+    frame_labels: Optional[List[str]] = Field(
+        default=None,
+        description="Etiqueta de texto por frame para superponer como metadata",
     )
 
 

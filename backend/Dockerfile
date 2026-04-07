@@ -21,6 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Utilities
     curl \
     ca-certificates \
+    # Fuentes TrueType para overlays del GIF (DejaVu Sans)
+    fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
 # Set GDAL environment variables

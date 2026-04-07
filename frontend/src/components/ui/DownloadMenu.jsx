@@ -9,6 +9,7 @@ import {
   Box,
 } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
+import GifIcon from "@mui/icons-material/Gif";
 import ImageIcon from "@mui/icons-material/Image";
 import MapIcon from "@mui/icons-material/Map";
 import ShowChartIcon from "@mui/icons-material/ShowChart";
@@ -34,7 +35,7 @@ export default function DownloadMenu({
   onClose,
   availableDownloads = {},
 }) {
-  const { mapScreenshot, cogLayers, rhiImage, statsData } = availableDownloads;
+  const { mapScreenshot, cogLayers, animationGif, rhiImage, statsData } = availableDownloads;
 
   const hasAnyDownload = Object.values(availableDownloads).some(
     (item) => item && !item.disabled
@@ -113,6 +114,25 @@ export default function DownloadMenu({
           <ListItemText
             primary={cogLayers.label || "Capas COG/GeoTIFF"}
             secondary="Archivos georeferenciados"
+            secondaryTypographyProps={{ variant: "caption" }}
+          />
+        </MenuItem>
+      )}
+
+      {animationGif && (
+        <MenuItem
+          onClick={() => {
+            animationGif.handler?.();
+            onClose();
+          }}
+          disabled={animationGif.disabled}
+        >
+          <ListItemIcon>
+            <GifIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText
+            primary={animationGif.label || "Descargar GIF"}
+            secondary="Animación de frames visibles"
             secondaryTypographyProps={{ variant: "caption" }}
           />
         </MenuItem>

@@ -172,34 +172,6 @@ export default function DownloadLayersDialog({
           </Box>
         ) : (
           <>
-            <Box
-              sx={{
-                mx: 2,
-                mt: 1.5,
-                mb: 1,
-                px: 1.5,
-                py: 1.25,
-                borderRadius: "10px",
-                backgroundColor: "rgba(25, 118, 210, 0.05)",
-                border: "1px solid rgba(25, 118, 210, 0.14)",
-              }}
-            >
-              <Typography
-                variant="body2"
-                sx={{ fontWeight: 600, fontSize: "12px", mb: 0.35 }}
-              >
-                Descargar GIF
-              </Typography>
-              <Typography
-                variant="caption"
-                color="text.secondary"
-                sx={{ display: "block", lineHeight: 1.45 }}
-              >
-                Se exportará la animación con los {gifFrameCount} frames
-                visibles y {gifLayerCount} capa(s) visibles en total.
-              </Typography>
-            </Box>
-
             {/* Toggle seleccionar todo */}
             <Box
               sx={{
@@ -337,23 +309,6 @@ export default function DownloadLayersDialog({
           sx={{ fontSize: "12px", textTransform: "none" }}
         >
           Cancelar
-        </Button>
-        <Button
-          onClick={handleDownloadGif}
-          disabled={!canDownloadGif}
-          variant="outlined"
-          size="small"
-          startIcon={<DownloadIcon />}
-          sx={{
-            fontSize: "12px",
-            borderRadius: "8px",
-            textTransform: "none",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {canDownloadGif
-            ? `Descargar GIF (${gifFrameCount})`
-            : "Descargar GIF"}
         </Button>
         <Button
           onClick={handleDownload}
