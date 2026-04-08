@@ -265,7 +265,7 @@ export default function MapView({
       doubleClickZoom={false}
       style={{ height: "100vh", width: "100%" }}
       worldCopyJump={false}
-      preferCanvas={false}
+      preferCanvas={true}
       fadeAnimation={false}
       zoomAnimation={true}
       markerZoomAnimation={true}
