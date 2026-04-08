@@ -635,8 +635,27 @@ def create_animation_from_layer_urls(
     # Generar una paleta global combinando todos los frames en una sola imagen temporal (evita parpadeos)
     global_palette = None
     if rendered_frames:
+        combined_list = list(rendered_frames)
+        # Si hay una barra de colores, la repetimos masivamente para forzar a Pillow a mantener sus tonos intactos
+        if colorbar_img is not None:
+            try:
+                cb_np = np.array(colorbar_img.convert("RGBA"))
+                frame_h, frame_w = rendered_frames[0].shape[:2]
+                
+                # Repetir el colorbar horizontalmente para llenar el ancho del frame
+                repeats_x = max(1, frame_w // max(1, cb_np.shape[1]) + 1)
+                cb_row = np.tile(cb_np, (1, repeats_x, 1))[:, :frame_w, :]
+                
+                # Repetir esa fila de colorbars hacia abajo para cubrir todo el alto
+                repeats_y = max(1, frame_h // max(1, cb_np.shape[0]))
+                cb_block = np.tile(cb_row, (repeats_y, 1, 1))
+                
+                combined_list.append(cb_block)
+            except Exception as e:
+                logger.warning(f"No se pudo forzar el colorbar en la paleta global: {e}")
+                
         # Apilar verticalmente los arrays RGBA y calcular la mejor paleta común de 255 colores
-        combined_rgba = np.vstack(rendered_frames)
+        combined_rgba = np.vstack(combined_list)
         combined_pil = Image.fromarray(combined_rgba, mode="RGBA").convert("RGB")
         global_palette = combined_pil.quantize(colors=255, method=Image.MEDIANCUT)
 
