@@ -166,8 +166,18 @@ def compute_beam_height(
     # Radio efectivo de la Tierra
     ke_re = ke * re
 
+    # Caso especial: elevaciones cercanas a 90° (bird bath / scan vertical).
+    # Para elevaciones muy altas, la relación slant_range = horiz_dist / cos(elev)
+    # diverge porque cos(~90°) → 0. En un scan vertical, la distancia horizontal
+    # es prácticamente nula y la altura ≈ slant_range ≈ distancia radial.
+    # Usamos directamente h = horizontal_distance * tan(elev) que es físicamente
+    # correcto: a 90° el haz sube verticalmente y h → ∞ para cualquier dist > 0.
+    if abs(elevation_deg) > 80.0:
+        height = np.abs(horizontal_distance) * np.tan(elev_rad) + radar_altitude
+        return height
+
     # Aproximar slant range desde distancia horizontal
-    # Para ángulos pequeños: r ≈ s / cos(θ)
+    # Para ángulos moderados: r ≈ s / cos(θ)
     slant_range = horizontal_distance / np.maximum(cos_elev, 0.01)
 
     # Altura usando ecuación completa con curvatura terrestre

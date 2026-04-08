@@ -215,40 +215,46 @@ def collapse_colmax(data3d):
 def collapse_ppi(data3d, z_coords, x_coords, y_coords, elevation_deg):
     """
     Extrae un PPI a elevación constante desde la grilla 3D con interpolación lineal.
-    
+
     Para cada punto (x,y) en la grilla:
     1. Calcula la distancia horizontal al radar
     2. Calcula la altura del haz a esa distancia usando Earth curvature (4/3 modelo)
     3. Interpola linealmente entre los niveles Z para obtener el valor
-    
-    Esto resuelve el problema de "puntos transparentes" que ocurría con nearest neighbor.
-    La interpolación lineal suaviza la mezcla inherente de sweeps en la grilla cartesiana.
-    
+
+    Para scans verticales (bird bath, elevación > 80°), se usa un enfoque especial:
+    la distancia horizontal al radar se mapea como proxy de la altura. Esto replica
+    la visualización de PyART donde los anillos concéntricos corresponden a la
+    estructura vertical de la atmósfera muestreada por el scan bird bath.
+
     Args:
         data3d: Array 3D (nz, ny, nx) con los datos
         z_coords: Array 1D con coordenadas Z (alturas) en metros
         x_coords: Array 1D con coordenadas X en metros
         y_coords: Array 1D con coordenadas Y en metros
         elevation_deg: Ángulo de elevación en grados
-    
+
     Returns:
         Array 2D (ny, nx) con el PPI interpolado
     """
     nz, ny, nx = data3d.shape
     z_min, z_max = z_coords[0], z_coords[-1]
-    
-    # Rellenar huecos pequeños en grilla 3D antes de colapsar
-    # Esto mejora cobertura en niveles Z bajos que tienen pocos datos (0.5-18%)
-    #fill_grid3d_holes_inplace(data3d, max_distance=10)
-    
+
     # Crear meshgrid de coordenadas horizontales (indexing='ij' para match con products.py)
     yy, xx = np.meshgrid(y_coords, x_coords, indexing='ij')
-    
+
     # Distancia horizontal de cada pixel al radar (asumido en origen)
     horizontal_dist = np.sqrt(xx**2 + yy**2)
-    
-    # Calcular altura del haz con curvatura terrestre (modelo 4/3)
-    target_z = compute_beam_height(horizontal_dist, elevation_deg, radar_altitude=0.0)
+
+    # Bird bath (elevación > 80°): el scan es vertical, los gates están apilados
+    # sobre el radar. La distancia horizontal del pixel al radar se usa como
+    # proxy de la altura: cada anillo concéntrico a distancia d del centro
+    # muestra el valor de DBZH a altura d. Esto replica exactamente la
+    # visualización de PyART plot_ppi_map para bird bath.
+    if abs(elevation_deg) > 80.0:
+        target_z = horizontal_dist
+    else:
+        # Calcular altura del haz con curvatura terrestre (modelo 4/3)
+        target_z = compute_beam_height(horizontal_dist, elevation_deg, radar_altitude=0.0)
     
     # Interpolación lineal entre niveles Z
     z_step = (z_max - z_min) / (nz - 1) if nz > 1 else 1.0

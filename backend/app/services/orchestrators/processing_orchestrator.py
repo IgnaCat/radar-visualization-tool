@@ -115,11 +115,11 @@ class ProcessingOrchestrator:
             filename = Path(f).name
 
             # Validar volumen 03 con producto PPI
-            if vol == "03" and product.upper() == "PPI":
-                msg = f"{filename}: El volumen '03' no es válido para el producto PPI."
-                warnings.append(msg)
-                logger.warning(msg)
-                continue
+            # if vol == "03" and product.upper() == "PPI":
+            #     msg = f"{filename}: El volumen '03' no es válido para el producto PPI."
+            #     warnings.append(msg)
+            #     logger.warning(msg)
+            #     continue
 
             if vol in selected_volumes:
                 filtered_filepaths.append(f)

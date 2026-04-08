@@ -300,12 +300,14 @@ def process_radar_to_cog(
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
     z_grid_limits = (0.0, toa)
 
-    # Volumen 03 (bird bath) necesita grid XY más grande para COLMAX/CAPPI
-    # El scan vertical con 360 azimuts crea un patrón circular amplio
-    if volume == "03" and product.upper() in ["COLMAX", "CAPPI"]:
-        # Usar grid más grande para capturar el patrón circular completo
-        # Ajustado a 50km radio (gates alcanzan ~35km, con ROI ~9km total ~44km)
-        grid_extent_m = 50000.0  # 50 km de radio
+    # Volumen 03 (bird bath) necesita grid XY especial para TODOS los productos.
+    # El scan vertical (~90° elev) con 360 azimuts crea un patrón circular que
+    # se proyecta horizontalmente vía ROI grande. Sin esto, range_max_m del radar
+    # podría generar grids enormes e innecesarios (el rango radial es vertical,
+    # no horizontal). Para PPI, collapse_ppi mapea dist_horizontal → altura,
+    # produciendo anillos concéntricos que reflejan la estructura vertical.
+    if volume == "03":
+        grid_extent_m = 40000.0  # 40 km de radio
         y_grid_limits = (-grid_extent_m, grid_extent_m)
         x_grid_limits = (-grid_extent_m, grid_extent_m)
     else:

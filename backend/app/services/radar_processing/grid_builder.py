@@ -250,8 +250,17 @@ def get_or_build_W_operator(
         gates_xyz = get_gate_xyz_coords(radar_to_use, edges=False)
         voxels_xyz = get_grid_xyz_coords(grid_shape, grid_limits)
 
-        # Extraer elevación mínima para below-beam mask
+        # Extraer elevación mínima para below-beam mask.
+        # Para scans verticales (bird bath, elev > 80°), la below-beam mask
+        # no tiene sentido físico: el haz apunta vertical y no hay concepto
+        # de "debajo del haz" en el plano horizontal. Desactivarla.
         lowest_elev_deg = float(np.min(radar_to_use.fixed_angle["data"]))
+        if lowest_elev_deg > 80.0:
+            logger.info(
+                f"  Bird bath detectado (elev_min={lowest_elev_deg:.1f}°): "
+                f"desactivando below-beam mask"
+            )
+            lowest_elev_deg = None
 
         W = build_W_operator(
             gates_xyz=gates_xyz,
