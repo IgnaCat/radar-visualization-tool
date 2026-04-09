@@ -10,14 +10,14 @@ import {
   generateAnimationGif,
   removeFiles,
   resolveApiUrl,
+  setAuthToken,
 } from "./api/backend";
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
 import { useMapActions } from "./hooks/useMapActions";
 import { useDownloads } from "./hooks/useDownloads";
+import { useAuth } from "./contexts/AuthContext";
 import "./print.css";
-
-import { generateSessionId } from "./utils/session";
 import UploadButton from "./components/ui/UploadButton";
 import HeaderCard from "./components/ui/HeaderCard";
 import Alerts from "./components/ui/Alerts";
@@ -123,7 +123,7 @@ function buildComputeKey({
   });
 }
 
-export default function App() {
+export default function App({ sessionId }) {
   const [overlayData, setOverlayData] = useState({
     outputs: [],
     animation: false,
@@ -180,8 +180,20 @@ export default function App() {
 
   const { enqueueSnackbar } = useSnackbar();
 
-  // Session ID único para esta pestaña/ventana del navegador
-  const [sessionId] = useState(() => generateSessionId());
+  // Auth
+  const { token, logout, isAdmin, user } = useAuth();
+
+  // Sync Axios Bearer token whenever the JWT changes
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
+
+  // Handle token expiry (401 interceptor fires "auth:expired")
+  useEffect(() => {
+    const handleExpired = () => logout();
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
+  }, [logout]);
 
   const [pixelStatMode, setPixelStatMode] = useState(false);
   const [pixelStatMarker, setPixelStatMarker] = useState(null);
@@ -1340,7 +1352,12 @@ export default function App() {
       style={{ height: "100vh", width: "100%", position: "relative" }}
     >
       {/* Header común para ambas vistas */}
-      <HeaderCard onUploadClick={handleFileUpload} />
+      <HeaderCard
+        onUploadClick={handleFileUpload}
+        onLogout={logout}
+        isAdmin={isAdmin}
+        username={user?.username}
+      />
 
       {/* Contenedor de split screen que maneja uno o dos mapas */}
       <SplitScreenContainer
