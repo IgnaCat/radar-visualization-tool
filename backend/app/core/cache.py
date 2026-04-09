@@ -38,8 +38,9 @@ def _nbytes_pkg(pkg) -> int:
 
 GRID2D_CACHE = LRUCache(maxsize=100 * 1024 * 1024, getsizeof=_nbytes_pkg)
 
-# Índice secundario: session_id -> set de cache keys
-# Permite limpieza eficiente por sesión
+# Índice secundario: user_id (str) -> set de cache keys
+# Permite limpieza eficiente por usuario.
+# Nota: con autenticación activa, el key es str(user.id) en vez de session_id.
 SESSION_CACHE_INDEX: dict[str, set[str]] = {}
 
 # ---- Operador W  ----
