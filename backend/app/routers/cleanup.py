@@ -1,10 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pathlib import Path
 from typing import Iterable
 import shutil
 import os
 
 from ..core.config import settings
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
 from ..core.cache import (
     GRID2D_CACHE, 
     SESSION_CACHE_INDEX, 
@@ -108,7 +110,10 @@ def _delete_path(p: Path) -> bool:
         return False
 
 @router.post("/files")
-def cleanup_files(req: FileCleanupRequest):
+def cleanup_files(
+    req: FileCleanupRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Elimina archivos específicos subidos por el usuario.
     Borra el NetCDF, sus COGs asociados y entradas de cache en memoria.
@@ -119,9 +124,12 @@ def cleanup_files(req: FileCleanupRequest):
     file_hashes: set[str] = set()
     deleted = {"uploads": 0, "cogs": 0, "cache_entries": 0}
 
+    # Usar user_id como namespace de carpeta
+    user_namespace = str(current_user.id)
+
     for filepath in req.filepaths:
         rp = _first_safe_under(
-            filepath, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=req.session_id
+            filepath, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=user_namespace
         )
         if rp and rp.exists():
             # Calcular hash antes de borrar (para limpiar COGs y cache)
@@ -138,18 +146,20 @@ def cleanup_files(req: FileCleanupRequest):
 
     # Borrar COGs y cache relacionados
     if file_hashes:
-        deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=req.session_id)
-        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
+        deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=user_namespace)
+        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=user_namespace)
 
     # Limpiar carpetas vacías
-    if req.session_id:
-        _cleanup_empty_session_dirs(req.session_id)
+    _cleanup_empty_session_dirs(user_namespace)
 
     return {"deleted": deleted, "removed_files": deleted_files}
 
 
 @router.post("/close")
-def cleanup_close(req: CleanupRequest):
+def cleanup_close(
+    req: CleanupRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Borra archivos indicados por el front al cerrar la app.
     - Siempre intenta borrar 'uploads' (NetCDF)
@@ -159,48 +169,47 @@ def cleanup_close(req: CleanupRequest):
     """
     deleted = {"uploads": 0, "cogs": 0, "cache_entries": 0}
 
+    # Usar user_id como namespace (reemplaza session_id para paths)
+    user_namespace = str(current_user.id)
+
     # Recopilar nombres de archivos a borrar para limpieza de cache
     upload_filenames = set()
     file_hashes = set()
 
     # uploads (NetCDF subidos / temporales del usuario)
     for s in req.uploads:
-        rp = _first_safe_under(s, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=req.session_id)
+        rp = _first_safe_under(s, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=user_namespace)
         if rp and rp.exists():
-            # Guardar nombre del archivo para limpieza de cache
             upload_filenames.add(rp.name)
-            # Calcular hash antes de borrar
             try:
                 from ..services.radar_common import md5_file
                 file_hash = md5_file(str(rp))[:12]
                 file_hashes.add(file_hash)
             except Exception:
                 pass
-            # Borrar archivo
             if _delete_path(rp):
                 deleted["uploads"] += 1
 
     # archivos temporales explícitos enviados por el frontend (ej. GIFs exportados)
     for s in req.cogs:
-        rp = _first_safe_under(s, [TMP_DIR, BASE_DIR], session_id=req.session_id)
+        rp = _first_safe_under(s, [TMP_DIR, BASE_DIR], session_id=user_namespace)
         if rp and rp.exists():
             if _delete_path(rp):
                 deleted["cogs"] += 1
 
     # Borrar COGs relacionados con los uploads eliminados (por file_hash matching)
     if req.delete_cache and file_hashes:
-        deleted["cogs"] += _delete_related_cogs(file_hashes, session_id=req.session_id)
+        deleted["cogs"] += _delete_related_cogs(file_hashes, session_id=user_namespace)
 
     # Limpiar entradas de cache en memoria relacionadas con archivos borrados
     if file_hashes:
-        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
-        
-        # Limpiar W_OPERATOR_CACHE por sesión
+        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=user_namespace)
+
+        # Limpiar W_OPERATOR_CACHE por sesión (session_id del frontend, no user_id)
         deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
     
-    # Limpiar carpetas vacías de sesión en UPLOAD y TMP
-    if req.session_id:
-        _cleanup_empty_session_dirs(req.session_id)
+    # Limpiar carpetas vacías del usuario
+    _cleanup_empty_session_dirs(user_namespace)
 
     return {"deleted": deleted}
 

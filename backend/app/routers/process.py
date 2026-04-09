@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.concurrency import run_in_threadpool
 
 from ..core.config import settings
@@ -12,6 +12,8 @@ from ..models import (
 )
 from ..services.animation import create_animation_from_layer_urls
 from ..services.orchestrators import ProcessingOrchestrator
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +21,10 @@ router = APIRouter(prefix="/process", tags=["process"])
 
 
 @router.post("", response_model=ProcessResponse)
-async def process_file(payload: ProcessRequest):
+async def process_file(
+    payload: ProcessRequest,
+    _user: User = Depends(get_current_user),
+):
     """
     Endpoint para procesar archivos de radar previamente subidos.
 
@@ -57,7 +62,10 @@ async def process_file(payload: ProcessRequest):
 
 
 @router.post("/animation/gif", response_model=GifAnimationResponse)
-async def create_gif_animation(payload: GifAnimationRequest):
+async def create_gif_animation(
+    payload: GifAnimationRequest,
+    _user: User = Depends(get_current_user),
+):
     """Genera un GIF animado a partir de rasters procesados ya existentes."""
     try:
         images_dir = Path(settings.IMAGES_DIR)

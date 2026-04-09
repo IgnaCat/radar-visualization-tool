@@ -1,19 +1,24 @@
 import os
 from pathlib import Path
 from typing import List
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.concurrency import run_in_threadpool
 from ..models import PseudoRHIRequest, PseudoRHIResponse, RangeFilter
 from ..services.pseudo_rhi import generate_pseudo_rhi_png
 from ..core.config import settings
 from ..core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ..utils import helpers
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
 
 router = APIRouter(prefix="/process", tags=["process"])
 
 
 @router.post("/pseudo_rhi", response_model=List[PseudoRHIResponse])
-async def pseudo_rhi(payload: PseudoRHIRequest):
+async def pseudo_rhi(
+    payload: PseudoRHIRequest,
+    _user: User = Depends(get_current_user),
+):
     """
     Generate a pseudo RHI images.
     """

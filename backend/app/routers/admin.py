@@ -1,11 +1,13 @@
 """
 Endpoints de administración para mantenimiento del sistema.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from typing import Optional
 import time
 import datetime
+from ..dependencies.auth import require_admin
+from ..models.db.user import User
 
 from ..core.cache import (
     GRID2D_CACHE, 
@@ -23,7 +25,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 @router.post("/clear-cache")
 def clear_cache(
     cache_type: Optional[str] = None,
-    max_age_hours: Optional[float] = None
+    max_age_hours: Optional[float] = None,
+    _admin: User = Depends(require_admin),
 ):
     """
     Limpia cache del sistema.
@@ -162,7 +165,7 @@ def _clear_w_operator_cache(max_age_hours: Optional[float] = None, clear_ram: bo
 
 
 @router.get("/cache-stats")
-def get_cache_stats():
+def get_cache_stats(_admin: User = Depends(require_admin)):
     """
     Obtiene estadísticas del uso de cache.
     
