@@ -63,6 +63,32 @@ const api = axios.create({
   baseURL: getApiBaseUrl(),
 });
 
+// ── Auth token management ─────────────────────────────────────────────────────
+// Call setAuthToken(token) after login to attach Bearer header to all requests.
+let _authToken = null;
+
+export function setAuthToken(token) {
+  _authToken = token;
+}
+
+api.interceptors.request.use((config) => {
+  if (_authToken) {
+    config.headers.Authorization = `Bearer ${_authToken}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid — notify app to redirect to login
+      window.dispatchEvent(new CustomEvent("auth:expired"));
+    }
+    return Promise.reject(error);
+  },
+);
+
 export const uploadFile = async (files, session_id = null) => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
