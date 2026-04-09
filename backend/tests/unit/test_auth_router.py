@@ -1,0 +1,104 @@
+"""Tests for /auth endpoints using FastAPI TestClient."""
+import pytest
+from fastapi.testclient import TestClient
+
+from app.core.database import Base, engine, SessionLocal, init_db
+from app.core.security import hash_password
+from app.models.db.user import User, UserRole
+
+
+@pytest.fixture(autouse=True)
+def setup_db():
+    """Create fresh tables for each test."""
+    Base.metadata.create_all(bind=engine)
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture
+def db():
+    session = SessionLocal()
+    yield session
+    session.close()
+
+
+@pytest.fixture
+def admin_user(db):
+    user = User(
+        username="admin",
+        hashed_password=hash_password("adminpass"),
+        role=UserRole.admin,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@pytest.fixture
+def client():
+    from app.main import app
+    return TestClient(app)
+
+
+def test_login_success(client, admin_user):
+    resp = client.post("/auth/login", json={
+        "username": "admin",
+        "password": "adminpass",
+        "session_id": "session-123",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert data["user"]["username"] == "admin"
+    assert data["user"]["role"] == "admin"
+
+
+def test_login_wrong_password(client, admin_user):
+    resp = client.post("/auth/login", json={
+        "username": "admin",
+        "password": "wrongpass",
+    })
+    assert resp.status_code == 401
+
+
+def test_login_nonexistent_user(client):
+    resp = client.post("/auth/login", json={
+        "username": "ghost",
+        "password": "anything",
+    })
+    assert resp.status_code == 401
+
+
+def test_login_inactive_user(client, db):
+    user = User(
+        username="disabled",
+        hashed_password=hash_password("pass"),
+        role=UserRole.user,
+        is_active=False,
+    )
+    db.add(user)
+    db.commit()
+    resp = client.post("/auth/login", json={
+        "username": "disabled",
+        "password": "pass",
+    })
+    assert resp.status_code == 403
+
+
+def test_logout_clears_session(client, admin_user):
+    # Login first
+    login_resp = client.post("/auth/login", json={
+        "username": "admin",
+        "password": "adminpass",
+        "session_id": "session-abc",
+    })
+    token = login_resp.json()["access_token"]
+
+    # Logout
+    resp = client.post(
+        "/auth/logout",
+        json={"session_id": "session-abc"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200

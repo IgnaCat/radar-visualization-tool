@@ -23,7 +23,7 @@ from titiler.core.factory import TilerFactory
 from fastapi.responses import HTMLResponse
 
 from .core.config import settings
-from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin
+from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin, auth, admin_users
 
 # Logging configuration
 logging.basicConfig(
@@ -93,6 +93,20 @@ app.include_router(radar_pixel.router)
 app.include_router(elevation_profile.router)
 app.include_router(colormap.router)
 app.include_router(admin.router)
+app.include_router(auth.router)
+app.include_router(admin_users.router)
+
+
+@app.on_event("startup")
+def on_startup():
+    """Initialize database, seed admin user, and clean stale files on startup."""
+    from .core.database import init_db
+    from .services.seed import seed_admin
+    from .services.stale_cleanup import cleanup_stale_files
+    init_db()
+    seed_admin()
+    cleanup_stale_files()
+
 
 @app.get("/health")
 def health():
