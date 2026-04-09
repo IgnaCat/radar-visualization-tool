@@ -24,6 +24,12 @@ services:
       # Upload rules
       - MAX_UPLOAD_MB=500
 
+      # Auth & database
+      - JWT_SECRET=CHANGE-ME-IN-PRODUCTION
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admin
+      - DB_DIR=/app/app/storage/db
+
       # Python output buffering (critical for Docker logs)
       - PYTHONUNBUFFERED=1
 
@@ -41,6 +47,10 @@ services:
       - ./backend/app/storage/data:/app/app/storage/data:ro
       # Archivos cacheados (matriz W)
       - ./backend/app/storage/cache:/app/app/storage/cache
+      # Base de datos SQLite (usuarios, access logs)
+      - ./backend/app/storage/db:/app/app/storage/db
+      # GeoLite2 para resolución de IP a ciudad/país (opcional)
+      - ./backend/app/storage/geolite2:/app/app/storage/geolite2:ro
     networks:
       - radar-network
     restart: unless-stopped
