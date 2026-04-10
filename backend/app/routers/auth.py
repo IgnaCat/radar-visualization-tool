@@ -58,11 +58,15 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
     # Register session (if session_id provided)
     if body.session_id:
-        # Deactivate any existing session with same session_id
-        db.query(UserSession).filter(
+        existing_session = db.query(UserSession).filter(
             UserSession.session_id == body.session_id
-        ).update({"is_active": False})
-        db.add(UserSession(user_id=user.id, session_id=body.session_id, is_active=True))
+        ).first()
+
+        if existing_session:
+            existing_session.user_id = user.id
+            existing_session.is_active = True
+        else:
+            db.add(UserSession(user_id=user.id, session_id=body.session_id, is_active=True))
 
     # Log access
     client_ip = _get_client_ip(request)
