@@ -124,8 +124,10 @@ def cleanup_files(
     file_hashes: set[str] = set()
     deleted = {"uploads": 0, "cogs": 0, "cache_entries": 0}
 
-    # Usar user_id como namespace de carpeta
+    # Namespace de paths: UPLOAD_DIR/{user_id}/{session_id}/
     user_namespace = str(current_user.id)
+    if req.session_id:
+        user_namespace = f"{current_user.id}/{req.session_id}"
 
     for filepath in req.filepaths:
         rp = _first_safe_under(
@@ -144,13 +146,18 @@ def cleanup_files(
                 deleted["uploads"] += 1
                 deleted_files.append(filepath)
 
-    # Borrar COGs y cache relacionados
+    # Borrar COGs asociados.
+    # Los COGs viven en TMP_DIR/{session_id}/ → usar session_id del browser.
     if file_hashes:
-        deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=user_namespace)
-        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=user_namespace)
+        deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=req.session_id)
+        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
 
-    # Limpiar carpetas vacías
+    # Limpiar carpetas vacías:
+    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/ → user_namespace
+    # - COGs:    TMP_DIR/{session_id}/              → session_id del browser
     _cleanup_empty_session_dirs(user_namespace)
+    if req.session_id:
+        _cleanup_empty_session_dirs(req.session_id)
 
     return {"deleted": deleted, "removed_files": deleted_files}
 
@@ -169,8 +176,12 @@ def cleanup_close(
     """
     deleted = {"uploads": 0, "cogs": 0, "cache_entries": 0}
 
-    # Usar user_id como namespace (reemplaza session_id para paths)
+    # Namespace de paths: UPLOAD_DIR/{user_id}/{session_id}/
+    # Usar el session_id del request para aislar el borrado a esta sesión
+    # y no afectar otras sesiones del mismo usuario abiertas en paralelo.
     user_namespace = str(current_user.id)
+    if req.session_id:
+        user_namespace = f"{current_user.id}/{req.session_id}"
 
     # Recopilar nombres de archivos a borrar para limpieza de cache
     upload_filenames = set()
@@ -197,19 +208,25 @@ def cleanup_close(
             if _delete_path(rp):
                 deleted["cogs"] += 1
 
-    # Borrar COGs relacionados con los uploads eliminados (por file_hash matching)
+    # Borrar COGs relacionados con uploads eliminados.
+    # Los COGs viven en TMP_DIR/{session_id}/ → usar session_id del browser, no user_namespace.
     if req.delete_cache and file_hashes:
-        deleted["cogs"] += _delete_related_cogs(file_hashes, session_id=user_namespace)
+        deleted["cogs"] += _delete_related_cogs(file_hashes, session_id=req.session_id)
 
-    # Limpiar entradas de cache en memoria relacionadas con archivos borrados
+    # Limpiar entradas de GRID2D_CACHE.
+    # SESSION_CACHE_INDEX está indexado por session_id del browser (no por user_namespace).
     if file_hashes:
-        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=user_namespace)
+        deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
 
-        # Limpiar W_OPERATOR_CACHE por sesión (session_id del frontend, no user_id)
-        deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
-    
-    # Limpiar carpetas vacías del usuario
+    # Limpiar W_OPERATOR_CACHE por sesión.
+    deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
+
+    # Limpiar carpetas vacías:
+    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/ → user_namespace
+    # - COGs:    TMP_DIR/{session_id}/              → session_id del browser
     _cleanup_empty_session_dirs(user_namespace)
+    if req.session_id:
+        _cleanup_empty_session_dirs(req.session_id)
 
     return {"deleted": deleted}
 

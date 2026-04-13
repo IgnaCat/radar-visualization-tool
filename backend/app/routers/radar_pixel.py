@@ -22,7 +22,8 @@ async def pixel_stat(
         # Ejecutar en threadpool (bloqueante pero seguro)
         response = await run_in_threadpool(
             PixelOrchestrator.process_pixel_request,
-            payload
+            payload,
+            str(_user.id),
         )
         return response
     except ValueError as e:

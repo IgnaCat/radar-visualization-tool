@@ -49,8 +49,11 @@ async def upload(
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
     
-    # Crear subdirectorio por user_id para aislar archivos entre usuarios
+    # Aislar por usuario Y por sesión: UPLOAD_DIR/{user_id}/{session_id}/
+    # Esto permite que dos sesiones del mismo usuario no interfieran entre sí.
     UPLOAD_DIR = Path(settings.UPLOAD_DIR) / str(current_user.id)
+    if session_id:
+        UPLOAD_DIR = UPLOAD_DIR / session_id
     os.makedirs(UPLOAD_DIR, exist_ok=True)
 
     warnings: list[str] = []

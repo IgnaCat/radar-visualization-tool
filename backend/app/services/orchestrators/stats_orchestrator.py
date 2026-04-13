@@ -48,17 +48,19 @@ class StatsOrchestrator:
             raise ValueError("El campo 'filepath' es obligatorio.")
 
     @staticmethod
-    def get_filepath(payload: RadarStatsRequest) -> str:
+    def get_filepath(payload: RadarStatsRequest, user_id: str) -> str:
         """
         Construye el path completo del archivo desde el request.
+        Estructura: UPLOAD_DIR/{user_id}/{session_id}/{filepath}
+        Si no hay session_id cae en UPLOAD_DIR/{user_id}/{filepath}.
 
         Returns:
             Path absoluto al archivo de radar
         """
-        UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+        base = Path(settings.UPLOAD_DIR) / str(user_id)
         if payload.session_id:
-            UPLOAD_DIR = UPLOAD_DIR / payload.session_id
-        return str(UPLOAD_DIR / payload.filepath)
+            base = base / payload.session_id
+        return str(base / payload.filepath)
 
     @staticmethod
     def resolve_field_name(product: str, field: str) -> str:
@@ -387,12 +389,13 @@ class StatsOrchestrator:
         }
 
     @staticmethod
-    def process_stats_request(payload: RadarStatsRequest) -> RadarStatsResponse:
+    def process_stats_request(payload: RadarStatsRequest, user_id: str) -> RadarStatsResponse:
         """
         Método principal que orquesta el cálculo de estadísticas.
 
         Args:
             payload: Request de estadísticas
+            user_id: ID del usuario autenticado (para localizar sus uploads)
 
         Returns:
             Response con estadísticas calculadas
@@ -404,7 +407,7 @@ class StatsOrchestrator:
         StatsOrchestrator.validate_request(payload)
 
         # 2. Obtener filepath completo
-        filepath = StatsOrchestrator.get_filepath(payload)
+        filepath = StatsOrchestrator.get_filepath(payload, user_id)
 
         # 3. Resolver nombre del campo
         field = StatsOrchestrator.resolve_field_name(payload.product, payload.field)

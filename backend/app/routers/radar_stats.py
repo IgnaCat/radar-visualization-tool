@@ -22,7 +22,8 @@ async def radar_stats(
         # Ejecutar en threadpool (bloqueante pero seguro)
         response = await run_in_threadpool(
             StatsOrchestrator.process_stats_request,
-            payload
+            payload,
+            str(_user.id),
         )
         return response
     except ValueError as e:

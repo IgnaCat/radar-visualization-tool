@@ -71,12 +71,14 @@ class ProcessingOrchestrator:
         return warnings
 
     @staticmethod
-    def get_upload_directory(session_id: Optional[str] = None) -> Path:
+    def get_upload_directory(user_id: str, session_id: Optional[str] = None) -> Path:
         """
-        Determina el directorio de uploads según session_id.
+        Determina el directorio de uploads según user_id + session_id.
+        Estructura: UPLOAD_DIR/{user_id}/{session_id}/
+        Si no hay session_id, cae en UPLOAD_DIR/{user_id}/ (compatibilidad).
         Crea el directorio si no existe.
         """
-        upload_dir = Path(settings.UPLOAD_DIR)
+        upload_dir = Path(settings.UPLOAD_DIR) / str(user_id)
         if session_id:
             upload_dir = upload_dir / session_id
         os.makedirs(upload_dir, exist_ok=True)
@@ -403,15 +405,17 @@ class ProcessingOrchestrator:
         return radar_results, all_warnings
 
     @staticmethod
-    def process_radar_files(payload: ProcessRequest) -> ProcessResponse:
+    def process_radar_files(payload: ProcessRequest, user_id: str) -> ProcessResponse:
         """
         Método principal que orquesta todo el procesamiento.
+        user_id: ID del usuario autenticado (para localizar sus archivos subidos).
+        El session_id de payload se usa para sub-aislar dentro del usuario.
         """
         # 1. Validar request
         warnings = ProcessingOrchestrator.validate_request(payload)
 
-        # 2. Obtener directorio de uploads
-        upload_dir = ProcessingOrchestrator.get_upload_directory(payload.session_id)
+        # 2. Obtener directorio de uploads: UPLOAD_DIR/{user_id}/{session_id}/
+        upload_dir = ProcessingOrchestrator.get_upload_directory(user_id, payload.session_id)
 
         # 3. Verificar que archivos existan
         ProcessingOrchestrator.verify_files_exist(payload.filepaths, upload_dir)

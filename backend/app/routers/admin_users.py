@@ -158,7 +158,14 @@ def force_cleanup_user(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
-    """Force cleanup of all resources for a specific user."""
+    """
+    Limpieza forzada de todos los recursos de un usuario (acción de admin).
+    Borra TODAS sus sesiones activas y sus archivos.
+
+    Estructura de directorios:
+      uploads → UPLOAD_DIR/{user_id}/{session_id}/   (un dir por sesión)
+      COGs    → IMAGES_DIR/{session_id}/             (keyed por session_id del browser)
+    """
     from pathlib import Path
     import shutil
     from ..core.config import settings
@@ -169,14 +176,27 @@ def force_cleanup_user(
 
     deleted = {"uploads": 0, "tmp": 0, "sessions": 0}
 
-    # Delete file directories
-    for base_dir, key in [(settings.UPLOAD_DIR, "uploads"), (settings.IMAGES_DIR, "tmp")]:
-        user_dir = Path(base_dir) / str(target_user_id)
-        if user_dir.exists():
-            shutil.rmtree(user_dir, ignore_errors=True)
-            deleted[key] = 1
+    # 1. Borrar uploads: UPLOAD_DIR/{user_id}/ contiene todos los {session_id}/ del usuario
+    upload_user_dir = Path(settings.UPLOAD_DIR) / str(target_user_id)
+    if upload_user_dir.exists():
+        shutil.rmtree(upload_user_dir, ignore_errors=True)
+        deleted["uploads"] = 1
 
-    # Deactivate sessions
+    # 2. Borrar COGs por session_id (viven en IMAGES_DIR/{session_id}/, no en user_id/)
+    #    Obtenemos los session_ids de este usuario desde la DB.
+    user_sessions = (
+        db.query(UserSession)
+        .filter(UserSession.user_id == target_user_id)
+        .all()
+    )
+    images_base = Path(settings.IMAGES_DIR)
+    for us in user_sessions:
+        session_dir = images_base / us.session_id
+        if session_dir.exists():
+            shutil.rmtree(session_dir, ignore_errors=True)
+            deleted["tmp"] += 1
+
+    # 3. Marcar todas las sesiones del usuario como inactivas
     count = (
         db.query(UserSession)
         .filter(UserSession.user_id == target_user_id, UserSession.is_active == True)  # noqa: E712

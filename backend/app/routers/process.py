@@ -35,7 +35,7 @@ async def process_file(
     """
     try:
         return await run_in_threadpool(
-            ProcessingOrchestrator.process_radar_files, payload
+            ProcessingOrchestrator.process_radar_files, payload, str(_user.id)
         )
     except ValueError as e:
         # Errores de validación se convierten en 400 Bad Request

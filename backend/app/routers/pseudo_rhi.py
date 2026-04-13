@@ -17,7 +17,7 @@ router = APIRouter(prefix="/process", tags=["process"])
 @router.post("/pseudo_rhi", response_model=List[PseudoRHIResponse])
 async def pseudo_rhi(
     payload: PseudoRHIRequest,
-    _user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Generate a pseudo RHI images.
@@ -86,8 +86,8 @@ async def pseudo_rhi(
             detail="El ángulo de elevación debe estar entre 0 y 12.",
         )
 
-    # Determinar directorio de uploads según session_id
-    UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+    # Directorio de uploads: UPLOAD_DIR/{user_id}/{session_id}/
+    UPLOAD_DIR = Path(settings.UPLOAD_DIR) / str(current_user.id)
     if payload.session_id:
         UPLOAD_DIR = UPLOAD_DIR / payload.session_id
     os.makedirs(UPLOAD_DIR, exist_ok=True)

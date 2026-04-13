@@ -453,11 +453,12 @@ def process_radar_to_cog(
         }
         GRID2D_CACHE[cache_key] = pkg_cached
 
-        # Registrar en índice de sesión si existe session_id
+        # Registrar en índice de sesión si existe session_id.
+        # setdefault es atómica en CPython: evita la race condition check-then-set
+        # que ocurre cuando el ThreadPoolExecutor procesa varios archivos en paralelo
+        # bajo el mismo session_id.
         if session_id:
-            if session_id not in SESSION_CACHE_INDEX:
-                SESSION_CACHE_INDEX[session_id] = set()
-            SESSION_CACHE_INDEX[session_id].add(cache_key)
+            SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -518,11 +519,9 @@ def process_radar_to_cog(
         pkg_cached["crs_warped"] = crs_warped
         GRID2D_CACHE[cache_key] = pkg_cached
 
-        # Registrar en índice de sesión si existe session_id
+        # Registrar en índice de sesión (setdefault atómico — thread-safe).
         if session_id:
-            if session_id not in SESSION_CACHE_INDEX:
-                SESSION_CACHE_INDEX[session_id] = set()
-            SESSION_CACHE_INDEX[session_id].add(cache_key)
+            SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
     else:
         # Usar el warp cacheado
         arr_warped = pkg_cached["arr_warped"]
