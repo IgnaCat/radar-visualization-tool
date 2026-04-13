@@ -444,6 +444,14 @@ export default function AdminDashboard() {
           <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
             Panel de administración
           </Typography>
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={() => navigate("/cache")}
+            sx={{ textTransform: "none" }}
+          >
+            📊 Cache Stats
+          </Button>
           <Typography variant="body2" color="text.secondary">
             {user?.username}
           </Typography>

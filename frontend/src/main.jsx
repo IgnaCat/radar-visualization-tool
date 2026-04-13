@@ -31,7 +31,14 @@ createRoot(document.getElementById("root")).render(
         <AuthProvider sessionId={sessionId}>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/cache" element={<CacheStats />} />
+            <Route
+              path="/cache"
+              element={
+                <RequireAdmin>
+                  <CacheStats />
+                </RequireAdmin>
+              }
+            />
             <Route
               path="/admin"
               element={

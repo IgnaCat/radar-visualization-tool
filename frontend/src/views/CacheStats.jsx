@@ -1,14 +1,22 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getCacheStats, clearCache } from "../api/backend";
+import { getCacheStats, clearCache, setAuthToken } from "../api/backend";
+import { useAuth } from "../contexts/AuthContext";
 import "../print.css";
 
 export default function CacheStats() {
   const navigate = useNavigate();
+  const { token } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [alert, setAlert] = useState({ message: "", type: "" });
+
+  // Sync Axios Bearer token — needed when navigating directly to /cache
+  // without going through App.jsx (which normally does this sync).
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
 
   const loadStats = async () => {
     try {
@@ -130,21 +138,38 @@ export default function CacheStats() {
     <div style={styles.container}>
       <div style={styles.header}>
         <h1 style={styles.title}>📊 Cache Statistics</h1>
-        <button
-          onClick={() => navigate("/")}
-          style={styles.closeBtn}
-          onMouseOver={(e) => {
-            e.currentTarget.style.background = "#d1d5db";
-            e.currentTarget.style.transform = "scale(1.05)";
-          }}
-          onMouseOut={(e) => {
-            e.currentTarget.style.background = "#e5e7eb";
-            e.currentTarget.style.transform = "scale(1)";
-          }}
-          title="Volver a página principal"
-        >
-          ✕
-        </button>
+        <div style={styles.headerButtons}>
+          <button
+            onClick={() => navigate("/admin")}
+            style={styles.adminBtn}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = "#1d4ed8";
+              e.currentTarget.style.transform = "scale(1.05)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "#2563eb";
+              e.currentTarget.style.transform = "scale(1)";
+            }}
+            title="Ir al Panel de Administración"
+          >
+            ← Admin Panel
+          </button>
+          <button
+            onClick={() => navigate("/")}
+            style={styles.closeBtn}
+            onMouseOver={(e) => {
+              e.currentTarget.style.background = "#d1d5db";
+              e.currentTarget.style.transform = "scale(1.05)";
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.background = "#e5e7eb";
+              e.currentTarget.style.transform = "scale(1)";
+            }}
+            title="Volver a página principal"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {alert.message && (
@@ -356,6 +381,22 @@ const styles = {
   title: {
     color: "#333",
     margin: 0,
+  },
+  headerButtons: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "center",
+  },
+  adminBtn: {
+    background: "#2563eb",
+    border: "none",
+    borderRadius: "6px",
+    padding: "8px 16px",
+    fontSize: "14px",
+    cursor: "pointer",
+    fontWeight: 500,
+    color: "white",
+    transition: "all 0.2s ease",
   },
   closeBtn: {
     background: "#e5e7eb",
