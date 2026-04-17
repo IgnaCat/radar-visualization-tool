@@ -247,7 +247,10 @@ const adminTheme = createTheme({
 
 function fmtDate(isoStr) {
   if (!isoStr) return "—";
-  return new Date(isoStr).toLocaleString("es-AR", {
+  const date = new Date(isoStr);
+  // Restamos 3 horas para ajustar de UTC a hora local (Argentina)
+  date.setHours(date.getHours() - 3);
+  return date.toLocaleString("es-AR", {
     dateStyle: "short",
     timeStyle: "short",
   });
