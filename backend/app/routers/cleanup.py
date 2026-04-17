@@ -153,11 +153,9 @@ def cleanup_files(
         deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
 
     # Limpiar carpetas vacías:
-    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/ → user_namespace
-    # - COGs:    TMP_DIR/{session_id}/              → session_id del browser
-    _cleanup_empty_session_dirs(user_namespace)
-    if req.session_id:
-        _cleanup_empty_session_dirs(req.session_id)
+    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/
+    # - COGs:    TMP_DIR/{session_id}/
+    _cleanup_empty_session_dirs(session_id=req.session_id, user_namespace=user_namespace)
 
     return {"deleted": deleted, "removed_files": deleted_files}
 
@@ -222,11 +220,9 @@ def cleanup_close(
     deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
 
     # Limpiar carpetas vacías:
-    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/ → user_namespace
-    # - COGs:    TMP_DIR/{session_id}/              → session_id del browser
-    _cleanup_empty_session_dirs(user_namespace)
-    if req.session_id:
-        _cleanup_empty_session_dirs(req.session_id)
+    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/
+    # - COGs:    TMP_DIR/{session_id}/
+    _cleanup_empty_session_dirs(session_id=req.session_id, user_namespace=user_namespace)
 
     return {"deleted": deleted}
 
@@ -422,18 +418,20 @@ def cleanup_w_operator_lock(cache_key: str) -> None:
             del _W_OPERATOR_LOCKS[cache_key]
 
 
-def _cleanup_empty_session_dirs(session_id: str) -> None:
+def _cleanup_empty_session_dirs(session_id: str, user_namespace: str | None = None) -> None:
     """
     Elimina carpetas de sesión si están vacías en UPLOAD_DIR y TMP_DIR.
-    
+
     Args:
         session_id: ID de sesión a limpiar
+        user_namespace: string formato '{user_id}/{session_id}' para UPLOAD_DIR
     """
-    dirs_to_check = [
-        UPLOAD_DIR / session_id,
-        TMP_DIR / session_id,
-    ]
-    
+    dirs_to_check = []
+    if user_namespace:
+        dirs_to_check.append(UPLOAD_DIR / user_namespace)
+    if session_id:
+        dirs_to_check.append(TMP_DIR / session_id)
+
     for session_dir in dirs_to_check:
         try:
             if not session_dir.exists():
