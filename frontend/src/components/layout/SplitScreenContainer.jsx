@@ -526,6 +526,7 @@ export default function SplitScreenContainer({
         >
           <MapPanel
             panelId="secondary"
+            hideFilesButton={true}
             overlayData={(() => {
               // Filtrar capas ocultas del mapa 2 para el render
               const frame =

@@ -169,6 +169,7 @@ export default function MapPanel({
   onToggleLock,
   loading = false,
   onSettingsOpen,
+  hideFilesButton = false,
 }) {
   // Estado local para la instancia del mapa
   const [localMapInstance, setLocalMapInstance] = useState(null);
@@ -605,9 +606,7 @@ export default function MapPanel({
         paletteSelectorActive={paletteSelectorOpen}
         layerManagerActive={layerManagerOpen}
         fileManagerActive={fileManagerOpen}
-      />
-
-      <MapToolbar
+        hideFilesButton={hideFilesButton}
         onScreenshot={onScreenshot}
         onPrint={onPrint}
         onFullscreen={onFullscreen}

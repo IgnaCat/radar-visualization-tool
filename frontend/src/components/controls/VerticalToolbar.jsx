@@ -41,6 +41,7 @@ export default function VerticalToolbar({
   paletteSelectorActive = false,
   layerManagerActive = false,
   fileManagerActive = false,
+  hideFilesButton = false,
 }) {
   const tools = [
     {
@@ -55,12 +56,16 @@ export default function VerticalToolbar({
       action: onLayerManagerToggle,
       active: layerManagerActive,
     },
-    {
-      icon: <FolderOpenIcon />,
-      tooltip: "Archivos cargados",
-      action: onFileManagerToggle,
-      active: fileManagerActive,
-    },
+    ...(!hideFilesButton
+      ? [
+          {
+            icon: <FolderOpenIcon />,
+            tooltip: "Archivos cargados",
+            action: onFileManagerToggle,
+            active: fileManagerActive,
+          },
+        ]
+      : []),
     {
       icon: <MapIcon />,
       tooltip: "Mapas base",
