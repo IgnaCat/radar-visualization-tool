@@ -607,6 +607,9 @@ export default function MapPanel({
         layerManagerActive={layerManagerOpen}
         fileManagerActive={fileManagerOpen}
         hideFilesButton={hideFilesButton}
+      />
+
+      <MapToolbar
         onScreenshot={onScreenshot}
         onPrint={onPrint}
         onFullscreen={onFullscreen}

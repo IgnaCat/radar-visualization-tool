@@ -526,7 +526,6 @@ export default function SplitScreenContainer({
         >
           <MapPanel
             panelId="secondary"
-            hideFilesButton={true}
             overlayData={(() => {
               // Filtrar capas ocultas del mapa 2 para el render
               const frame =
@@ -683,6 +682,7 @@ export default function SplitScreenContainer({
             onToggleLock={handleToggleLock}
             loading={loading2}
             onSettingsOpen={() => setSettingsOpen2(true)}
+            hideFilesButton={true}
           />
         </Box>
       )}
