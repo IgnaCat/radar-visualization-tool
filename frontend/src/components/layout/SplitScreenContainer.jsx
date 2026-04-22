@@ -65,6 +65,7 @@ export default function SplitScreenContainer({
   const [fieldsUsed2, setFieldsUsed2] = useState([]);
   const [savedLayers2, setSavedLayers2] = useState([]);
   const [filtersUsed2, setFiltersUsed2] = useState([]);
+  const [filtersPerField2, setFiltersPerField2] = useState({});
   const [selectedVolumesUsed2, setSelectedVolumesUsed2] = useState([]);
   const [selectedRadarsUsed2, setSelectedRadarsUsed2] = useState([]);
   const [activeElevation2, setActiveElevation2] = useState(null);
@@ -188,6 +189,7 @@ export default function SplitScreenContainer({
         filters: data.filters,
         selectedVolumes: data.selectedVolumes,
         selectedRadars: data.selectedRadars,
+        filters_per_field: {}, // Reset filters when re-processing
         colormap_overrides: selectedColormaps2,
         session_id: sharedProps.sessionId,
         weight_func: interpSettings2.weightFunc,
@@ -207,6 +209,7 @@ export default function SplitScreenContainer({
         setFieldsUsed2(enabledLayers); // Array de strings con nombres de campos
         setSavedLayers2(data.layers);
         setFiltersUsed2(data.filters || []);
+        setFiltersPerField2({});
         setSelectedVolumesUsed2(data.selectedVolumes || []);
         setSelectedRadarsUsed2(data.selectedRadars || []);
         setActiveElevation2(data.elevation);
@@ -219,6 +222,47 @@ export default function SplitScreenContainer({
     } catch (error) {
       console.error("Error al procesar producto en mapa 2:", error);
       sharedProps.enqueueSnackbar("Error al procesar producto", {
+        variant: "error",
+      });
+    } finally {
+      setLoading2(false);
+    }
+  };
+
+  const handleApplyLayerFilters2 = async (newFiltersPerField) => {
+    if (sharedProps.uploadedFiles.length === 0) return;
+    setFiltersPerField2(newFiltersPerField);
+    try {
+      setLoading2(true);
+      const processResp = await sharedProps.processFile({
+        files: sharedProps.uploadedFiles, // Usar los archivos compartidos
+        layers: fieldsUsed2,
+        product: product2 || "PPI",
+        height: activeHeight2,
+        elevation: activeElevation2,
+        filters: filtersUsed2,
+        selectedVolumes: selectedVolumesUsed2,
+        selectedRadars: selectedRadarsUsed2,
+        filters_per_field: newFiltersPerField,
+        colormap_overrides: selectedColormaps2,
+        session_id: sharedProps.sessionId,
+        weight_func: interpSettings2.weightFunc,
+        max_neighbors: interpSettings2.maxNeighbors,
+        smoothing: interpSettings2.smoothing,
+      });
+
+      if (processResp.data?.results?.length > 0) {
+        const mergedOutputs = sharedProps.mergeRadarFrames(
+          processResp.data.results || [],
+          deltaT2,
+        );
+        setOverlayData2(mergedOutputs);
+        setWarnings2(processResp.data.warnings || []);
+        setCurrentIndex2(0);
+      }
+    } catch (err) {
+      console.error(err);
+      sharedProps.enqueueSnackbar("Error al aplicar filtros", {
         variant: "error",
       });
     } finally {
@@ -254,6 +298,7 @@ export default function SplitScreenContainer({
         filters: filtersUsed2,
         selectedVolumes: selectedVolumesUsed2,
         selectedRadars: selectedRadarsUsed2,
+        filters_per_field: filtersPerField2,
         colormap_overrides: selectedColormaps2,
         session_id: sharedProps.sessionId,
         weight_func: newInterpSettings.weightFunc,
@@ -653,6 +698,8 @@ export default function SplitScreenContainer({
               const key = `${String(field || "").toUpperCase()}::${sourceFile || ""}`;
               setOpacityByLayer2((prev) => ({ ...prev, [key]: value }));
             }}
+            filtersPerField={filtersPerField2}
+            onApplyFilters={handleApplyLayerFilters2}
             onMapReady={setMap2Instance}
             onScreenshot={() =>
               map1Props.onScreenshot(map2Instance, "map-container-secondary")
