@@ -220,11 +220,11 @@ export default function App({ sessionId }) {
   const [markerMode, setMarkerMode] = useState(false);
   const [markers, setMarkers] = useState([]);
   const [selectedBaseMap, setSelectedBaseMap] = useState({
-    id: "osm",
+    id: "argenmap",
     name: "Argenmap",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    url: "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png",
     attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      '<a href="https://www.ign.gob.ar/AreaServicios/Argenmap/IntroduccionV2" target="_blank">Instituto Geográfico Nacional</a> + <a href="https://www.osm.org/copyright" target="_blank">OpenStreetMap</a>',
   });
   // Estado para paletas de colores personalizadas por campo
   const [selectedColormaps, setSelectedColormaps] = useState({});
@@ -238,12 +238,8 @@ export default function App({ sessionId }) {
   const [splitScreenActive, setSplitScreenActive] = useState(false);
 
   // Hook para acciones del mapa (screenshot, print, fullscreen)
-  const {
-    isFullscreen,
-    handleScreenshot,
-    handlePrint,
-    handleFullscreen,
-  } = useMapActions();
+  const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } =
+    useMapActions();
 
   // Hook para gestión de descargas
   const { downloadFile, generateFilename } = useDownloads();
@@ -291,7 +287,8 @@ export default function App({ sessionId }) {
           if (!Array.isArray(frame)) return null;
 
           const visibleLayers = frame.filter(
-            (layer) => !hiddenLayers.has(`${layer.field}::${layer.source_file}`),
+            (layer) =>
+              !hiddenLayers.has(`${layer.field}::${layer.source_file}`),
           );
 
           if (visibleLayers.length === 0) return null;
@@ -413,105 +410,123 @@ export default function App({ sessionId }) {
     [currentOverlay, generateFilename, enqueueSnackbar],
   );
 
-  const handleDownloadGif = useCallback(async (options = {}) => {
-    if (visibleFramesForGif.length < 2) {
-      enqueueSnackbar("Se necesitan al menos 2 frames visibles para generar un GIF", {
-        variant: "warning",
-      });
-      return;
-    }
+  const handleDownloadGif = useCallback(
+    async (options = {}) => {
+      if (visibleFramesForGif.length < 2) {
+        enqueueSnackbar(
+          "Se necesitan al menos 2 frames visibles para generar un GIF",
+          {
+            variant: "warning",
+          },
+        );
+        return;
+      }
 
-    const {
-      includeBasemap = true,
-      showColorbar = false,
-      showMetadata = false,
-      showLogo = false,
-      fps = 1,
-    } = options;
+      const {
+        includeBasemap = true,
+        showColorbar = false,
+        showMetadata = false,
+        showLogo = false,
+        fps = 1,
+      } = options;
 
-    try {
-      enqueueSnackbar("Generando GIF animado...", { variant: "info" });
+      try {
+        enqueueSnackbar("Generando GIF animado...", { variant: "info" });
 
-      const gifFrames = visibleFramesForGif.map((frame) =>
-        frame.layers.map((layer) => layer.image_url).filter(Boolean),
-      );
+        const gifFrames = visibleFramesForGif.map((frame) =>
+          frame.layers.map((layer) => layer.image_url).filter(Boolean),
+        );
 
-      // Colorbar config: campo y colormap de la primera capa visible
-      const firstLayer = visibleFramesForGif[0]?.layers[0];
-      const colorbarConfig =
-        showColorbar && firstLayer?.field
-          ? {
-              field: firstLayer.field,
-              colormap: selectedColormaps[firstLayer.field] ?? null,
-            }
+        // Colorbar config: campo y colormap de la primera capa visible
+        const firstLayer = visibleFramesForGif[0]?.layers[0];
+        const colorbarConfig =
+          showColorbar && firstLayer?.field
+            ? {
+                field: firstLayer.field,
+                colormap: selectedColormaps[firstLayer.field] ?? null,
+              }
+            : null;
+
+        // Labels de metadata por frame
+        const frameLabels = showMetadata
+          ? visibleFramesForGif.map((frame, i) => {
+              const layers = frame.layers;
+              const timestamp = layers
+                .map((l) => l.timestamp)
+                .filter(Boolean)
+                .sort()[0];
+              const product = overlayData.product || "";
+              const radars = [
+                ...new Set(layers.map((l) => l.radar).filter(Boolean)),
+              ];
+              const strategies = new Set();
+              const volumes = new Set();
+              layers.forEach((l) => {
+                if (l.source_file) {
+                  const parts = l.source_file.split(/[\\/]/).pop().split("_");
+                  if (parts.length >= 4) {
+                    strategies.add(parts[1]);
+                    volumes.add(parts[2]);
+                  }
+                }
+              });
+              const parts = [product.toUpperCase()];
+              if (radars.length) parts.push(radars.join(", "));
+              if (strategies.size) parts.push([...strategies].join(", "));
+              if (volumes.size) parts.push(`Vol ${[...volumes].join(", ")}`);
+              if (timestamp) {
+                const d = new Date(
+                  new Date(timestamp).getTime() - 3 * 3600 * 1000,
+                );
+                const fmt = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+                parts.push(
+                  `${fmt} (Frame ${i + 1}/${visibleFramesForGif.length})`,
+                );
+              }
+              return parts.join(" | ");
+            })
           : null;
 
-      // Labels de metadata por frame
-      const frameLabels = showMetadata
-        ? visibleFramesForGif.map((frame, i) => {
-            const layers = frame.layers;
-            const timestamp = layers.map((l) => l.timestamp).filter(Boolean).sort()[0];
-            const product = overlayData.product || "";
-            const radars = [...new Set(layers.map((l) => l.radar).filter(Boolean))];
-            const strategies = new Set();
-            const volumes = new Set();
-            layers.forEach((l) => {
-              if (l.source_file) {
-                const parts = l.source_file.split(/[\\/]/).pop().split("_");
-                if (parts.length >= 4) {
-                  strategies.add(parts[1]);
-                  volumes.add(parts[2]);
-                }
-              }
-            });
-            const parts = [product.toUpperCase()];
-            if (radars.length) parts.push(radars.join(", "));
-            if (strategies.size) parts.push([...strategies].join(", "));
-            if (volumes.size) parts.push(`Vol ${[...volumes].join(", ")}`);
-            if (timestamp) {
-              const d = new Date(new Date(timestamp).getTime() - 3 * 3600 * 1000);
-              const fmt = `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}/${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`;
-              parts.push(`${fmt} (Frame ${i + 1}/${visibleFramesForGif.length})`);
-            }
-            return parts.join(" | ");
-          })
-        : null;
+        const response = await generateAnimationGif({
+          frames: gifFrames,
+          fps,
+          session_id: sessionId,
+          basemap_id: includeBasemap ? selectedBaseMap?.id : null,
+          show_logo: showLogo,
+          show_colorbar: showColorbar,
+          colorbar_config: colorbarConfig,
+          show_metadata: showMetadata,
+          frame_labels: frameLabels,
+        });
 
-      const response = await generateAnimationGif({
-        frames: gifFrames,
-        fps,
-        session_id: sessionId,
-        basemap_id: includeBasemap ? selectedBaseMap?.id : null,
-        show_logo: showLogo,
-        show_colorbar: showColorbar,
-        colorbar_config: colorbarConfig,
-        show_metadata: showMetadata,
-        frame_labels: frameLabels,
-      });
+        const gifPath = response.data?.gif_url;
+        if (!gifPath) throw new Error("El backend no devolvió la URL del GIF");
 
-      const gifPath = response.data?.gif_url;
-      if (!gifPath) throw new Error("El backend no devolvió la URL del GIF");
+        allCogsRef.current.add(gifPath);
+        const gifUrl = resolveApiUrl(gifPath);
+        const filename =
+          gifPath.split("/").pop() || generateFilename("animacion", ".gif");
+        await downloadFile(gifUrl, filename);
 
-      allCogsRef.current.add(gifPath);
-      const gifUrl = resolveApiUrl(gifPath);
-      const filename = gifPath.split("/").pop() || generateFilename("animacion", ".gif");
-      await downloadFile(gifUrl, filename);
-
-      enqueueSnackbar(`GIF descargado (${gifFrames.length} frames)`, { variant: "success" });
-    } catch (error) {
-      console.error("Error generando GIF:", error);
-      enqueueSnackbar("Error al generar el GIF", { variant: "error" });
-    }
-  }, [
-    downloadFile,
-    enqueueSnackbar,
-    generateFilename,
-    overlayData,
-    selectedBaseMap,
-    selectedColormaps,
-    sessionId,
-    visibleFramesForGif,
-  ]);
+        enqueueSnackbar(`GIF descargado (${gifFrames.length} frames)`, {
+          variant: "success",
+        });
+      } catch (error) {
+        console.error("Error generando GIF:", error);
+        enqueueSnackbar("Error al generar el GIF", { variant: "error" });
+      }
+    },
+    [
+      downloadFile,
+      enqueueSnackbar,
+      generateFilename,
+      overlayData,
+      selectedBaseMap,
+      selectedColormaps,
+      sessionId,
+      visibleFramesForGif,
+    ],
+  );
 
   // Configurar descargas disponibles para el toolbar
   const availableDownloads = useMemo(() => {
@@ -1498,8 +1513,10 @@ export default function App({ sessionId }) {
         onConfirm={handleDownloadGif}
         frameCount={visibleFramesForGif.length}
         hasBasemap={!!selectedBaseMap}
-        hasColorbar={!!(visibleFramesForGif[0]?.layers[0]?.field)}
-        hasMetadata={visibleFramesForGif.some((f) => f.layers.some((l) => l.timestamp))}
+        hasColorbar={!!visibleFramesForGif[0]?.layers[0]?.field}
+        hasMetadata={visibleFramesForGif.some((f) =>
+          f.layers.some((l) => l.timestamp),
+        )}
       />
 
       <SettingsDialog
