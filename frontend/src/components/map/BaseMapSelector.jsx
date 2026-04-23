@@ -22,14 +22,14 @@ import esritImg from "../../assets/esrit.webp";
 import bingImg from "../../assets/bing.webp";
 
 const baseMaps = [
-  {
-    id: "osm",
-    name: "Mapa Base",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    image: argenmapImg,
-  },
+  // {
+  //   id: "osm",
+  //   name: "Mapa Base",
+  //   url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  //   attribution:
+  //     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  //   image: argenmapImg,
+  // },
   {
     id: "argenmap",
     name: "Argenmap",
