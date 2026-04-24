@@ -689,7 +689,11 @@ export default function LayerManagerDialog({
                               !localFilters[String(layer.field).toUpperCase()]
                                 ?.range?.enabled
                             }
-                            inputProps={{ step: 1 }}
+                            inputProps={
+                              String(layer.field).toUpperCase() !== "RHOHV"
+                                ? { step: 1 }
+                                : undefined
+                            }
                             sx={compactFilterInputSx}
                           />
                           <TextField
@@ -715,7 +719,11 @@ export default function LayerManagerDialog({
                               !localFilters[String(layer.field).toUpperCase()]
                                 ?.range?.enabled
                             }
-                            inputProps={{ step: 1 }}
+                            inputProps={
+                              String(layer.field).toUpperCase() !== "RHOHV"
+                                ? { step: 1 }
+                                : { step: 0.1 }
+                            }
                             sx={compactFilterInputSx}
                           />
                         </Box>

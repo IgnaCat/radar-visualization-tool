@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey
 
 from ...core.database import Base
 
@@ -16,3 +16,8 @@ class AccessLog(Base):
     logged_in_at = Column(
         DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
     )
+    # Geolocation fields
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    address = Column(String(500), nullable=True)
+    location_source = Column(String(20), nullable=True)  # "browser" or "geoip"

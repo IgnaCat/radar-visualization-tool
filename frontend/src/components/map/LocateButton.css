@@ -1,0 +1,16 @@
+/* Outer pulsating ring for user location marker */
+.user-location-pulse {
+  animation: location-pulse 2s ease-in-out infinite;
+}
+
+@keyframes location-pulse {
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.15;
+  }
+  100% {
+    opacity: 0.4;
+  }
+}

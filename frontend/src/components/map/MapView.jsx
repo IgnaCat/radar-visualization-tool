@@ -20,6 +20,7 @@ import { setTileNativeZoomMetadata } from "./tileZoomCache";
 import MouseCoordinatesControl from "./MouseCoordinatesControl";
 import ScaleControl from "./ScaleControl";
 import AttributionPrefixControl from "./AttributionPrefixControl";
+import LocateButton from "./LocateButton";
 
 function COGTile({
   tilejsonUrl,
@@ -208,6 +209,9 @@ export default function MapView({
   onShapeUpdate,
   onShapeRemove,
   onShapeModeDeactivate,
+  // Geolocation marker
+  userPosition = null,
+  onDismissLocation = null,
 }) {
   const center = useMemo(() => [-31.4, -64.2], []);
   const baseZ = 500;
@@ -274,6 +278,7 @@ export default function MapView({
       <AttributionPrefixControl />
       <MouseCoordinatesControl />
       <ScaleControl />
+      <LocateButton position={userPosition} onDismiss={onDismissLocation} />
       <TileLayer
         key={baseMapUrl}
         url={baseMapUrl}

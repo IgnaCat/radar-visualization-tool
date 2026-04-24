@@ -48,6 +48,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteSweepIcon from "@mui/icons-material/DeleteSweep";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import StorageIcon from "@mui/icons-material/Storage";
+import PlaceIcon from "@mui/icons-material/Place";
 import logoSrc from "../assets/lrsr_logo.png";
 
 // ── Institutional theme ───────────────────────────────────────────────────────
@@ -610,7 +611,24 @@ function AccessLogsTab({ token }) {
                   {log.ip_address}
                 </TableCell>
                 <TableCell>{log.city || "—"}</TableCell>
-                <TableCell>{log.country || "—"}</TableCell>
+                <TableCell>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    {log.country || "—"}
+                    {log.address && (
+                      <Tooltip title={log.address} placement="top" arrow>
+                        <PlaceIcon
+                          sx={{
+                            fontSize: 11,
+                            color: "#94A3B8",
+                            cursor: "default",
+                            flexShrink: 0,
+                            mb: "1px",
+                          }}
+                        />
+                      </Tooltip>
+                    )}
+                  </Box>
+                </TableCell>
                 <TableCell
                   sx={{
                     fontFamily: "'Fira Code', monospace",

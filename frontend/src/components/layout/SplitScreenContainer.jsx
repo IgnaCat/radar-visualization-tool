@@ -556,6 +556,7 @@ export default function SplitScreenContainer({
           onToggleLock={handleToggleLock}
           loading={map1Props.loading || false}
           onSettingsOpen={map1Props.onSettingsOpen}
+          sessionId={sharedProps.sessionId}
         />
       </Box>
 
@@ -730,6 +731,7 @@ export default function SplitScreenContainer({
             loading={loading2}
             onSettingsOpen={() => setSettingsOpen2(true)}
             hideFilesButton={true}
+            sessionId={sharedProps.sessionId}
           />
         </Box>
       )}

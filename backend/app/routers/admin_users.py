@@ -123,6 +123,8 @@ def get_access_logs(
             country=log.country,
             user_agent=log.user_agent,
             logged_in_at=log.logged_in_at,
+            address=log.address,
+            location_source=log.location_source,
         )
         for log, username in rows
     ]

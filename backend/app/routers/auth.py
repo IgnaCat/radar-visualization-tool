@@ -77,6 +77,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
         city=geo["city"],
         country=geo["country"],
         user_agent=request.headers.get("User-Agent", "")[:500],
+        location_source="geoip",
     ))
     db.commit()
 

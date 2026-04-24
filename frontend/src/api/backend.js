@@ -341,3 +341,19 @@ export async function removeFiles(filepaths, sessionId = null) {
     ...(sessionId && { session_id: sessionId }),
   });
 }
+
+/**
+ * Send browser geolocation to backend for access log enrichment.
+ * Fire-and-forget — errors are logged but don't affect UI.
+ */
+export async function sendUserLocation(sessionId, latitude, longitude) {
+  try {
+    await api.post("/location", {
+      session_id: sessionId,
+      latitude,
+      longitude,
+    });
+  } catch (err) {
+    console.warn("Failed to send user location:", err);
+  }
+}

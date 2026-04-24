@@ -49,6 +49,8 @@ class AccessLogOut(BaseModel):
     country: Optional[str]
     user_agent: Optional[str]
     logged_in_at: datetime
+    address: Optional[str] = None
+    location_source: Optional[str] = None
 
 
 class ActiveSessionOut(BaseModel):

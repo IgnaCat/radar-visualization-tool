@@ -11,6 +11,7 @@ import {
   removeFiles,
   resolveApiUrl,
   setAuthToken,
+  sendUserLocation,
 } from "./api/backend";
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
@@ -194,6 +195,46 @@ export default function App({ sessionId }) {
     window.addEventListener("auth:expired", handleExpired);
     return () => window.removeEventListener("auth:expired", handleExpired);
   }, [logout]);
+
+  // Auto-request geolocation on login + watch for permission changes.
+  // If the user denies and later enables it in browser settings, onchange fires
+  // and we send the location automatically without requiring a new login.
+  useEffect(() => {
+    if (!token || !("geolocation" in navigator)) return;
+    let permStatus = null;
+    const requestLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          sendUserLocation(sessionId, coords.latitude, coords.longitude);
+        },
+        (err) => {
+          if (err.code === 1) {
+            // PERMISSION_DENIED — browser blocked the site, user must unblock manually
+            enqueueSnackbar(
+              "Ubicación bloqueada. Para activarla, habilitá el permiso en la configuración del navegador.",
+              { variant: "warning" },
+            );
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+      );
+    };
+    requestLocation();
+    if ("permissions" in navigator) {
+      navigator.permissions
+        .query({ name: "geolocation" })
+        .then((status) => {
+          permStatus = status;
+          status.onchange = () => {
+            if (status.state === "granted") requestLocation();
+          };
+        })
+        .catch(() => {});
+    }
+    return () => {
+      if (permStatus) permStatus.onchange = null;
+    };
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [pixelStatMode, setPixelStatMode] = useState(false);
   const [pixelStatMarker, setPixelStatMarker] = useState(null);
