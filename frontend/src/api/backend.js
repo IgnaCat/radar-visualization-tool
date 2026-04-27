@@ -71,6 +71,10 @@ export function setAuthToken(token) {
   _authToken = token;
 }
 
+export function getAuthToken() {
+  return _authToken;
+}
+
 api.interceptors.request.use((config) => {
   if (_authToken) {
     config.headers.Authorization = `Bearer ${_authToken}`;
