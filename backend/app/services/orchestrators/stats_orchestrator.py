@@ -13,7 +13,7 @@ from shapely.ops import transform as shp_transform
 from rasterio.features import geometry_mask
 
 from ...models import RadarStatsRequest, RadarStatsResponse
-from ...core.cache import GRID2D_CACHE
+from ...core.cache import GRID2D_CACHE, NETCDF_READ_LOCK
 from ...core.config import settings
 from ...core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ...utils.helpers import extract_metadata_from_filename
@@ -325,8 +325,9 @@ class StatsOrchestrator:
         Returns:
             Dict con stats, noCoverage y reason
         """
-        # Leer radar desde disco
-        radar = pyart.io.read(filepath)
+        # Leer radar desde disco (con lock para ser thread-safe con HDF5)
+        with NETCDF_READ_LOCK:
+            radar = pyart.io.read(filepath, delay_field_loading=False)
 
         # Generar hash del archivo
         file_hash = md5_file(filepath)[:12]

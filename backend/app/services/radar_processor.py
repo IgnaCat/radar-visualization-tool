@@ -251,7 +251,7 @@ def process_radar_to_cog(
 
     # Leer archivo NetCDF con PyART (protegido con lock - NetCDF/HDF5 no es thread-safe)
     with NETCDF_READ_LOCK:
-        radar = pyart.io.read(filepath)
+        radar = pyart.io.read(filepath, delay_field_loading=False)
 
     try:
         field_to_use, field_key = resolve_field(radar, field_requested)

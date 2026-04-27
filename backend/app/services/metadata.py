@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 
 import numpy as np
 import pyart
+from ..core.cache import NETCDF_READ_LOCK
 
 EXCLUDED_FIELDS_PRESENT = {"COLMAX", "DBZHF"}
 
@@ -23,7 +24,8 @@ def extract_radar_metadata(path: str) -> Dict[str, Any]:
         return {"error": f"file_not_found: {path}"}
 
     try:
-        radar = pyart.io.read(str(p), delay_field_loading=True)  # más rápido
+        with NETCDF_READ_LOCK:
+            radar = pyart.io.read(str(p), delay_field_loading=True)  # más rápido
     except Exception as e:
         return {"error": f"pyart_read_failed: {e.__class__.__name__}: {e}"}
 
