@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     # Auth & database
     JWT_SECRET: str = "CHANGE-ME-IN-PRODUCTION"
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_HOURS: int = 24
+    # Token expiration time (hours)
+    JWT_EXPIRE_HOURS: int = 2
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = "admin"
     DB_DIR: str = os.path.join(os.getcwd(), "app/storage/db")

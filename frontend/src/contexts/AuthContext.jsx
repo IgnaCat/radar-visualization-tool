@@ -9,8 +9,8 @@ import { loginApi, logoutApi } from "../api/auth";
 
 const AuthContext = createContext(null);
 
-// El backend token dura 24 horas. (JWT_EXPIRE_HOURS = 24)
-const TOKEN_EXPIRY_MS = 24 * 60 * 60 * 1000;
+// El backend token dura 2 horas. (JWT_EXPIRE_HOURS = 2)
+const TOKEN_EXPIRY_MS = 2 * 60 * 60 * 1000;
 
 export function AuthProvider({ children, sessionId }) {
   // Inicializamos el estado desde localStorage, comprobando expiración
