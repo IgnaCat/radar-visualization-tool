@@ -16,14 +16,19 @@ for _pkg, _rel in [("pyproj", "proj_dir/share/proj"), ("rasterio", "proj_data")]
             os.environ["PROJ_LIB"] = str(_proj_data)
             break
 
-from fastapi import FastAPI
+from datetime import datetime, timezone, timedelta
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from titiler.core.factory import TilerFactory
 from fastapi.responses import HTMLResponse
 
 from .core.config import settings
+from .core.middleware import CustomAccessLogMiddleware
 from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin, auth, admin_users, location
+
+# Forzar zona horaria Argentina (UTC-3) para todos los logs
+logging.Formatter.converter = lambda *args: datetime.now(timezone(timedelta(hours=-3))).timetuple()
 
 # Logging configuration
 logging.basicConfig(
@@ -34,17 +39,13 @@ logging.basicConfig(
     force=True,              # override any prior basicConfig
 )
 
-# Filter to exclude /health endpoint from access logs
-class HealthCheckFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        return "/health" not in record.getMessage()
-
 # Reduce noise from chatty libraries
 logging.getLogger("rasterio").setLevel(logging.WARNING)
 logging.getLogger("blib2to3").setLevel(logging.WARNING)
+
+# Disable Uvicorn default access log to use our custom middleware instead
 uvicorn_logger = logging.getLogger("uvicorn.access")
-uvicorn_logger.setLevel(logging.INFO)
-uvicorn_logger.addFilter(HealthCheckFilter())
+uvicorn_logger.disabled = True
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,7 @@ os.environ.setdefault("GDAL_MAX_DATASET_POOL_SIZE", "450")
 os.environ.setdefault("GDAL_FORCE_CACHING", "YES")
 os.environ.setdefault("PROJ_NETWORK", "OFF")
 
+app.add_middleware(CustomAccessLogMiddleware)
 # CORS
 app.add_middleware(
     CORSMiddleware,
