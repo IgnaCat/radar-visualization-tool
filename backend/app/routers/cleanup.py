@@ -3,10 +3,15 @@ from pathlib import Path
 from typing import Iterable
 import shutil
 import os
+import gc
+import ctypes
+import logging
 
 from ..core.config import settings
 from ..dependencies.auth import get_current_user
 from ..models.db.user import User
+
+logger = logging.getLogger(__name__)
 from ..core.cache import (
     GRID2D_CACHE, 
     SESSION_CACHE_INDEX, 
@@ -19,6 +24,41 @@ from ..core.cache import (
 from ..models import CleanupRequest, FileCleanupRequest
 
 router = APIRouter(prefix="/cleanup", tags=["cleanup"])
+
+
+def _release_memory_to_os() -> None:
+    """
+    Fuerza la devolución de memoria al sistema operativo.
+
+    Problema: cuando Python hace `del obj`, el memory allocator de glibc
+    (malloc) mantiene la memoria reservada en el heap del proceso para
+    reutilización futura. Esto es eficiente para el proceso pero hace que
+    docker stats muestre RAM alta incluso después de limpiar caches.
+
+    Solución:
+    1. gc.collect() — elimina objetos sin referencias (ciclos, numpy arrays)
+    2. malloc_trim(0) — le dice a glibc que devuelva páginas libres al OS
+       (solo funciona en Linux/glibc, que es donde corre Docker)
+    """
+    # Paso 1: garbage collection (libera numpy arrays huérfanos, ciclos, etc.)
+    collected = gc.collect()
+
+    # Paso 2: devolver memoria libre al OS (glibc malloc_trim)
+    trimmed = False
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        result = libc.malloc_trim(0)
+        trimmed = result == 1  # malloc_trim returns 1 if memory was released
+    except (OSError, AttributeError):
+        # No disponible (macOS, Windows, musl libc) — no pasa nada
+        pass
+
+    if collected > 0 or trimmed:
+        logger.info(
+            f"Memoria liberada: gc collected {collected} objetos, "
+            f"malloc_trim {'devolvió memoria al OS' if trimmed else 'sin efecto'}"
+        )
+
 
 # Directorios “oficiales” de tu app
 UPLOAD_DIR = Path(settings.UPLOAD_DIR).resolve()       # app/storage/uploads
@@ -157,6 +197,9 @@ def cleanup_files(
     # - COGs:    TMP_DIR/{session_id}/
     _cleanup_empty_session_dirs(session_id=req.session_id, user_namespace=user_namespace)
 
+    # Forzar devolución de memoria al OS después de limpiar caches
+    _release_memory_to_os()
+
     return {"deleted": deleted, "removed_files": deleted_files}
 
 
@@ -223,6 +266,9 @@ def cleanup_close(
     # - uploads: UPLOAD_DIR/{user_id}/{session_id}/
     # - COGs:    TMP_DIR/{session_id}/
     _cleanup_empty_session_dirs(session_id=req.session_id, user_namespace=user_namespace)
+
+    # Forzar devolución de memoria al OS después de limpiar caches
+    _release_memory_to_os()
 
     return {"deleted": deleted}
 
