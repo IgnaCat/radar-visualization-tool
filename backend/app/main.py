@@ -52,14 +52,18 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title=settings.APP_NAME)
 
 # GDAL/Rasterio optimizations for COG tile serving
-os.environ.setdefault("GDAL_CACHEMAX", "512")  # 512 MB cache for better tile performance
-os.environ.setdefault("GDAL_NUM_THREADS", "ALL_CPUS")
-os.environ.setdefault("VSI_CACHE", "TRUE")
-os.environ.setdefault("VSI_CACHE_SIZE", "262144000")  # 250 MB
-os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
-os.environ.setdefault("GDAL_MAX_DATASET_POOL_SIZE", "450")
-os.environ.setdefault("GDAL_FORCE_CACHING", "YES")
-os.environ.setdefault("PROJ_NETWORK", "OFF")
+# NOTE: these are fallback defaults for running without Docker.
+# In Docker, environment variables from docker-compose.yml take precedence
+# (setdefault won't overwrite existing env vars).
+# Keep values in sync with docker-compose.yml.
+os.environ.setdefault("GDAL_CACHEMAX", "512")           # 512 MB raster block cache
+os.environ.setdefault("GDAL_NUM_THREADS", "ALL_CPUS")   # parallel TIFF decompression
+os.environ.setdefault("VSI_CACHE", "TRUE")               # VSI file block caching
+os.environ.setdefault("VSI_CACHE_SIZE", "262144000")     # 250 MB VSI cache
+os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")  # skip dir listing on open
+os.environ.setdefault("GDAL_MAX_DATASET_POOL_SIZE", "450")  # max open datasets
+os.environ.setdefault("GDAL_FORCE_CACHING", "NO")       # NO for local files (YES only for S3/HTTP)
+os.environ.setdefault("PROJ_NETWORK", "OFF")             # no network CRS lookups
 
 app.add_middleware(CustomAccessLogMiddleware)
 # CORS

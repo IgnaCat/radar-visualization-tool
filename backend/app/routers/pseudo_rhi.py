@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from ..models import PseudoRHIRequest, PseudoRHIResponse, RangeFilter
 from ..services.pseudo_rhi import generate_pseudo_rhi_png
 from ..core.config import settings
+from ..core.concurrency import acquire_processing_slot, release_processing_slot
 from ..core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ..utils import helpers
 from ..dependencies.auth import get_current_user
@@ -100,7 +101,8 @@ async def pseudo_rhi(
                 detail=f"Archivo no encontrado: {file}",
             )
 
-    # Procesar y generar PNG
+    # Procesar y generar PNG (con control de concurrencia)
+    await acquire_processing_slot()
     try:
         # Limpieza de temporales (en threadpool para no bloquear)
         await run_in_threadpool(helpers.cleanup_tmp)
@@ -155,3 +157,5 @@ async def pseudo_rhi(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error pseudo RHI: {e}",
         )
+    finally:
+        release_processing_slot()

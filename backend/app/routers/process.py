@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.concurrency import run_in_threadpool
 
 from ..core.config import settings
+from ..core.concurrency import acquire_processing_slot, release_processing_slot
 from ..models import (
     ProcessRequest,
     ProcessResponse,
@@ -28,11 +29,17 @@ async def process_file(
     """
     Endpoint para procesar archivos de radar previamente subidos.
 
-    IMPORTANT: The heavy computation is offloaded to a thread via
-    run_in_threadpool so that the asyncio event-loop is never blocked.
-    Without this, a single long /process request (e.g. building the W
-    operator) would freeze the entire server for ALL clients.
+    Concurrency control:
+    - acquire_processing_slot() limits how many heavy pipelines run at once
+      (default: 2 simultaneous). Extra requests wait in queue up to 5 min,
+      then get 503 Service Unavailable.
+    - run_in_threadpool offloads CPU work to a thread so the asyncio
+      event-loop stays responsive for lightweight requests (tiles, health).
+    - numpy/scipy/rasterio release the GIL, so threads DO run in parallel
+      for the heavy math. build_W_operator also uses multiprocessing.Pool
+      internally for per-level parallelism.
     """
+    await acquire_processing_slot()
     try:
         return await run_in_threadpool(
             ProcessingOrchestrator.process_radar_files, payload, str(_user.id)
@@ -59,6 +66,8 @@ async def process_file(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error procesando archivos: {e}"
         )
+    finally:
+        release_processing_slot()
 
 
 @router.post("/animation/gif", response_model=GifAnimationResponse)
