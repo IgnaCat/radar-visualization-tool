@@ -39,6 +39,14 @@ const baseMaps = [
     image: argenmapImg,
   },
   {
+    id: "mapbox-light-ar",
+    name: "Mapbox ARG",
+    url: `https://api.mapbox.com/styles/v1/ignacio-martinez-goloboff/cmot9wnbn000401s228lf3lmo/tiles/256/{z}/{x}/{y}?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`,
+    attribution:
+      '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    image: argenmapImg, // o alguna imagen de mapbox
+  },
+  {
     id: "argenmap-gris",
     name: "Argenmap gris",
     url: "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/mapabase_gris@EPSG%3A3857@png/{z}/{x}/{-y}.png",
