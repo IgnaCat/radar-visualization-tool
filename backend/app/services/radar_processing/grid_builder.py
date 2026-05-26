@@ -211,10 +211,23 @@ def get_or_build_W_operator(
         logger.error(f"Error generando cache_key: {e}")
         raise
 
+    def _register_session_for_w(ck: str, sid: str | None) -> None:
+        """Registra sid en W_OPERATOR_SESSION_INDEX/REF_COUNT si aún no está."""
+        if not sid:
+            return
+        if sid not in W_OPERATOR_SESSION_INDEX:
+            W_OPERATOR_SESSION_INDEX[sid] = set()
+        if ck not in W_OPERATOR_SESSION_INDEX[sid]:
+            W_OPERATOR_REF_COUNT[ck] = W_OPERATOR_REF_COUNT.get(ck, 0) + 1
+            W_OPERATOR_SESSION_INDEX[sid].add(ck)
+
     # 1. Verificar cache RAM (sin lock - lectura rápida)
     cached_pkg = W_OPERATOR_CACHE.get(cache_key)
     if cached_pkg is not None:
         logger.info(f"Operador W recuperado de cache RAM: {cache_key[:16]}...")
+        # Registrar esta sesión aunque el W ya estuviera en RAM (otro usuario lo puso),
+        # de lo contrario su cleanup no decrementaría el REF_COUNT y el W quedaría huérfano.
+        _register_session_for_w(cache_key, session_id)
         return cached_pkg["W"], dict(cached_pkg.get("metadata", {}) or {})
 
     # 2. Adquirir lock para esta cache_key (evita construcción duplicada en concurrencia)
@@ -226,6 +239,7 @@ def get_or_build_W_operator(
             logger.info(
                 f"Operador W recuperado de cache RAM (post-lock): {cache_key[:16]}..."
             )
+            _register_session_for_w(cache_key, session_id)
             return cached_pkg["W"], dict(cached_pkg.get("metadata", {}) or {})
 
         # 3. Verificar cache disco

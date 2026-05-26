@@ -10,7 +10,8 @@ from urllib.parse import quote
 from affine import Affine
 
 from ..core.config import settings
-from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, NETCDF_READ_LOCK
+import time
+from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, SESSION_LAST_ACTIVITY, NETCDF_READ_LOCK
 from ..core.constants import (
     AFFECTS_INTERP_FIELDS,
     FIELD_RENDER,
@@ -199,6 +200,8 @@ def process_radar_to_cog(
     if session_id:
         output_dir = str(Path(output_dir) / session_id)
         os.makedirs(output_dir, exist_ok=True)
+        # Marcar actividad para el cleanup de inactividad
+        SESSION_LAST_ACTIVITY[session_id] = time.time()
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]
@@ -451,14 +454,14 @@ def process_radar_to_cog(
             "crs_warped": None,
             "transform_warped": None,
         }
-        GRID2D_CACHE[cache_key] = pkg_cached
-
-        # Registrar en índice de sesión si existe session_id.
-        # setdefault es atómica en CPython: evita la race condition check-then-set
-        # que ocurre cuando el ThreadPoolExecutor procesa varios archivos en paralelo
-        # bajo el mismo session_id.
+        # Registrar en índice ANTES de guardar en caché.
+        # Así un cleanup concurrente que llegue justo después del setdefault
+        # encontrará la key en el índice y la buscará en GRID2D_CACHE (donde aún
+        # no está → la saltea), que es mejor que el caso inverso donde la key
+        # existe en caché pero no en el índice y queda huérfana para siempre.
         if session_id:
             SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
+        GRID2D_CACHE[cache_key] = pkg_cached
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -517,11 +520,10 @@ def process_radar_to_cog(
         pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
         pkg_cached["transform_warped"] = transform_warped
         pkg_cached["crs_warped"] = crs_warped
-        GRID2D_CACHE[cache_key] = pkg_cached
-
-        # Registrar en índice de sesión (setdefault atómico — thread-safe).
+        # Mismo orden que arriba: índice primero, caché después.
         if session_id:
             SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
+        GRID2D_CACHE[cache_key] = pkg_cached
     else:
         # Usar el warp cacheado
         arr_warped = pkg_cached["arr_warped"]

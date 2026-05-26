@@ -380,23 +380,15 @@ def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None)
         if not SESSION_CACHE_INDEX[session_id]:
             del SESSION_CACHE_INDEX[session_id]
     else:
-        # Sin session_id o sesión no encontrada: buscar por file_hash en todas las keys
-        # Esto es menos eficiente pero funciona para casos legacy
-        keys_to_delete = []
-        for cache_key in list(GRID2D_CACHE.keys()):
-            # Las cache keys contienen el file_hash hasheado en su contenido
-            # Como no podemos deshacer el hash, eliminamos todas las keys de esa sesión
-            # o si no hay sesión, no hacemos nada (para evitar borrar cache de otras sesiones)
-            if not session_id:
-                # Sin session_id: no limpiar para evitar afectar otras sesiones
-                break
-        
-        for key in keys_to_delete:
-            try:
-                del GRID2D_CACHE[key]
-                count += 1
-            except Exception:
-                pass
+        # session_id no encontrado en SESSION_CACHE_INDEX:
+        # - Si nunca se registró (bug de race condition, restart, etc.) no podemos
+        #   reconstruir qué keys le pertenecen porque la cache_key es un hash opaco.
+        # - Si no hay session_id, no limpiar para no afectar otras sesiones.
+        if session_id:
+            logger.warning(
+                f"Cleanup GRID2D_CACHE: sesión '{session_id}' no está en SESSION_CACHE_INDEX. "
+                f"Posibles entradas huérfanas en caché (se limpiarán por LRU)."
+            )
     
     if count > 0:
         print(f"Limpiadas {count} entradas de GRID2D_CACHE {'para sesión ' + session_id if session_id else 'globales'}")

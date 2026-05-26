@@ -45,22 +45,18 @@ async def process_file(
             ProcessingOrchestrator.process_radar_files, payload, str(_user.id)
         )
     except ValueError as e:
-        # Errores de validación se convierten en 400 Bad Request
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except FileNotFoundError as e:
-        # Archivos no encontrados se convierten en 404 Not Found
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
         )
     except HTTPException:
-        # Re-emitir las HTTPException tal cual
         raise
     except Exception as e:
-        # 500 Internal Server Error para cualquier otro error
         logger.exception("Error procesando archivos")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
