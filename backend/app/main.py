@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 import logging
@@ -105,16 +106,19 @@ app.include_router(location.router)
 
 
 @app.on_event("startup")
-def on_startup():
-    """Initialize database, seed admin user, and clean stale files on startup."""
+async def on_startup():
+    """Initialize database, seed admin user, clean stale files, and start background tasks."""
     from .core.database import init_db
     from .core.migrations import run_migrations
     from .services.seed import seed_admin
     from .services.stale_cleanup import cleanup_stale_files
+    from .services.inactivity_cleanup import inactivity_cleanup_loop
     init_db()
     run_migrations()
     seed_admin()
     cleanup_stale_files()
+    # Background task: libera RAM de sesiones abandonadas (tab cerrada sin logout)
+    asyncio.create_task(inactivity_cleanup_loop())
 
 
 @app.get("/health")
