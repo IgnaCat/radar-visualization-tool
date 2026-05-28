@@ -1,4 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, status, Form, Depends
+from fastapi.concurrency import run_in_threadpool
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from typing import Optional
@@ -81,7 +82,7 @@ async def upload(
                 if _is_bufr(file.filename):
                     bufr_paths.append(target)
                 else:
-                    meta = extract_radar_metadata(str(target))
+                    meta = await run_in_threadpool(extract_radar_metadata, str(target))
                     radar, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
                     if volume is not None:
                         volumes.add(volume)
@@ -130,7 +131,7 @@ async def upload(
                 bufr_paths.append(target)
             else:
                 # NetCDF — procesar inmediatamente
-                meta = extract_radar_metadata(str(target))
+                meta = await run_in_threadpool(extract_radar_metadata, str(target))
                 radar, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
                 if volume is not None:
                     volumes.add(volume)
@@ -163,7 +164,7 @@ async def upload(
                 )
 
             for nc_path, vol_key in converted:
-                meta = extract_radar_metadata(str(nc_path))
+                meta = await run_in_threadpool(extract_radar_metadata, str(nc_path))
                 radar_name, _, volume, _ = helpers.extract_metadata_from_filename(str(nc_path))
                 if volume is not None:
                     volumes.add(volume)

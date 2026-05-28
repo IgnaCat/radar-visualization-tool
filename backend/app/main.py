@@ -1,9 +1,15 @@
 import asyncio
+import faulthandler
 import os
 import sys
 import logging
 import importlib.util
 from pathlib import Path
+
+# Dump C-level stack trace to stderr on SIGSEGV/SIGFPE/SIGABRT.
+# This survives crashes in native extensions (GDAL, HDF5, libdecbufr, etc.)
+# and prints *before* the process dies, so Docker logs capture it.
+faulthandler.enable()
 
 # Fix PROJ database version conflict: osgeo ships an older proj.db (minor=3)
 # but rasterio/pyproj expect minor>=4. Must be set before osgeo/rasterio import
