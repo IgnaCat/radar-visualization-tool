@@ -18,6 +18,7 @@ from ...core.cache import (
     W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT,
 )
+from ...core.cancellation import raise_if_cancelled
 from ...core.constants import (
     AFFECTS_INTERP_FIELDS,
     ROI_PARAMS_BY_VOLUME,
@@ -259,6 +260,9 @@ def get_or_build_W_operator(
             )
 
         # 4. Construir operador W
+        # Último punto de corte limpio: si el cliente ya se fue, no tiene
+        # sentido lanzar el multiprocessing.Pool (no se puede interrumpir mid-flight).
+        raise_if_cancelled(session_id)
         logger.info(f"Construyendo operador W: {radar}_{estrategia}_{volumen}")
 
         gates_xyz = get_gate_xyz_coords(radar_to_use, edges=False)
