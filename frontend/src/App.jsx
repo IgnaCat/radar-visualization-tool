@@ -18,6 +18,7 @@ import stableStringify from "json-stable-stringify";
 import { useMapActions } from "./hooks/useMapActions";
 import { useDownloads } from "./hooks/useDownloads";
 import { useAuth } from "./contexts/AuthContext";
+import { useBackendHealth } from "./hooks/useBackendHealth";
 import "./print.css";
 import UploadButton from "./components/ui/UploadButton";
 import HeaderCard from "./components/ui/HeaderCard";
@@ -125,6 +126,8 @@ function buildComputeKey({
 }
 
 export default function App({ sessionId }) {
+  const { isOnline } = useBackendHealth();
+
   const [overlayData, setOverlayData] = useState({
     outputs: [],
     animation: false,
@@ -1407,6 +1410,28 @@ export default function App({ sessionId }) {
       id="app-container"
       style={{ height: "100vh", width: "100%", position: "relative" }}
     >
+      {/* Banner de backend offline */}
+      {!isOnline && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 9999,
+            background: "#b71c1c",
+            color: "#fff",
+            textAlign: "center",
+            padding: "10px 16px",
+            fontSize: "0.9rem",
+            fontWeight: 500,
+            letterSpacing: "0.02em",
+          }}
+        >
+          ⚠️ Backend desconectado — esperando que el servidor vuelva a estar disponible…
+        </div>
+      )}
+
       {/* Header común para ambas vistas */}
       <HeaderCard
         onUploadClick={handleFileUpload}
