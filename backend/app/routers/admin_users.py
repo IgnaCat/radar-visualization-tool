@@ -149,6 +149,7 @@ def get_active_sessions(
             username=username,
             session_id=s.session_id,
             created_at=s.created_at,
+            last_activity_at=s.last_activity_at,
         )
         for s, username in rows
     ]

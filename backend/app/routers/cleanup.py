@@ -7,9 +7,13 @@ import gc
 import ctypes
 import logging
 
+from sqlalchemy.orm import Session as DBSession
+
 from ..core.config import settings
+from ..core.database import get_db
 from ..dependencies.auth import get_current_user
 from ..models.db.user import User
+from ..models.db.session import UserSession
 
 logger = logging.getLogger(__name__)
 from ..core.cache import (
@@ -207,6 +211,7 @@ def cleanup_files(
 def cleanup_close(
     req: CleanupRequest,
     current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
 ):
     """
     Borra archivos indicados por el front al cerrar la app.
@@ -266,6 +271,17 @@ def cleanup_close(
     # - uploads: UPLOAD_DIR/{user_id}/{session_id}/
     # - COGs:    TMP_DIR/{session_id}/
     _cleanup_empty_session_dirs(session_id=req.session_id, user_namespace=user_namespace)
+
+    # Marcar sesión como inactiva en DB
+    if req.session_id:
+        try:
+            db.query(UserSession).filter(
+                UserSession.session_id == req.session_id,
+                UserSession.user_id == current_user.id,
+            ).update({"is_active": False})
+            db.commit()
+        except Exception as exc:
+            logger.warning("cleanup_close: no se pudo marcar sesión como inactiva: %s", exc)
 
     # Forzar devolución de memoria al OS después de limpiar caches
     _release_memory_to_os()

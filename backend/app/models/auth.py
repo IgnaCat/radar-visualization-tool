@@ -59,3 +59,4 @@ class ActiveSessionOut(BaseModel):
     username: str
     session_id: str
     created_at: datetime
+    last_activity_at: Optional[datetime] = None

@@ -27,7 +27,10 @@ import ctypes
 import gc
 import logging
 import time
+from datetime import datetime, timezone, timedelta
 
+from ..core.database import SessionLocal
+from ..models.db.session import UserSession
 from ..core.cache import (
     GRID2D_CACHE,
     SESSION_CACHE_INDEX,
@@ -161,8 +164,141 @@ def run_inactivity_cleanup() -> list[str]:
 
     if evicted:
         _release_memory_to_os()
+        # Marcar las sesiones evictadas como inactivas en la DB
+        _deactivate_sessions_in_db(evicted)
 
     return evicted
+
+
+def _deactivate_sessions_in_db(session_ids: list[str]) -> None:
+    """Marca las sesiones evictadas como is_active=False en la base de datos."""
+    try:
+        db = SessionLocal()
+        try:
+            db.query(UserSession).filter(
+                UserSession.session_id.in_(session_ids)
+            ).update({"is_active": False}, synchronize_session=False)
+            db.commit()
+            logger.info(
+                "inactivity_cleanup: %d sesión(es) marcadas inactivas en DB",
+                len(session_ids),
+            )
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.error("inactivity_cleanup: error actualizando DB: %s", exc)
+
+
+def cleanup_stale_db_sessions() -> int:
+    """
+    Marca como inactivas las sesiones DB cuyo último heartbeat (last_activity_at)
+    es más viejo que SESSION_TTL_SECONDS, O que nunca tuvieron heartbeat y fueron
+    creadas hace más de SESSION_TTL_SECONDS.
+
+    Esto cubre el caso de sesiones zombie: el usuario cerró el browser sin logout
+    y el frontend nunca llegó a llamar /cleanup/close (crash, mobile, red caída).
+    Sin un heartbeat periódico, estas sesiones quedaban activas en DB hasta el
+    próximo reinicio del servidor.
+
+    Retorna la cantidad de sesiones desactivadas.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(seconds=SESSION_TTL_SECONDS)
+    try:
+        db = SessionLocal()
+        try:
+            # Sesiones activas cuyo último heartbeat es más viejo que el TTL,
+            # o que nunca tuvieron heartbeat (last_activity_at IS NULL) y cuyo
+            # created_at también es más viejo que el TTL.
+            from sqlalchemy import or_, and_
+            stale = db.query(UserSession).filter(
+                UserSession.is_active == True,  # noqa: E712
+                or_(
+                    and_(
+                        UserSession.last_activity_at != None,  # noqa: E711
+                        UserSession.last_activity_at < cutoff,
+                    ),
+                    and_(
+                        UserSession.last_activity_at == None,  # noqa: E711
+                        UserSession.created_at < cutoff,
+                    ),
+                )
+            ).all()
+
+            if not stale:
+                return 0
+
+            stale_ids = [s.session_id for s in stale]
+
+            # Solo desactivar las que tampoco tienen actividad RAM en este servidor.
+            # (Podría ser que el heartbeat falló temporalmente pero la sesión sigue
+            # procesando en esta instancia — en ese caso SESSION_LAST_ACTIVITY lo sabe.)
+            truly_stale = [
+                sid for sid in stale_ids
+                if sid not in SESSION_LAST_ACTIVITY
+            ]
+
+            if not truly_stale:
+                return 0
+
+            db.query(UserSession).filter(
+                UserSession.session_id.in_(truly_stale)
+            ).update({"is_active": False}, synchronize_session=False)
+            db.commit()
+
+            logger.info(
+                "inactivity_cleanup: %d sesión(es) zombie sin heartbeat marcadas inactivas en DB",
+                len(truly_stale),
+            )
+            return len(truly_stale)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.error("inactivity_cleanup: error en cleanup_stale_db_sessions: %s", exc)
+        return 0
+
+
+def reactivate_session_in_db(session_id: str) -> None:
+    """
+    Marca una sesión como is_active=True en DB.
+    Se llama cuando el usuario vuelve a procesar después de haber sido
+    evictado por inactividad (session_id no estaba en SESSION_LAST_ACTIVITY).
+    """
+    try:
+        db = SessionLocal()
+        try:
+            db.query(UserSession).filter(
+                UserSession.session_id == session_id
+            ).update({"is_active": True})
+            db.commit()
+            logger.info("sesión '%s' reactivada en DB", session_id)
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning("no se pudo reactivar sesión '%s' en DB: %s", session_id, exc)
+
+
+def deactivate_all_sessions() -> int:
+    """
+    Marca todas las sesiones activas como is_active=False.
+    Se llama en el startup del servidor: todas las sesiones previas son stale
+    porque el frontend ya no las controla y nunca llamará /cleanup/close.
+    Retorna la cantidad de sesiones desactivadas.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            count = (
+                db.query(UserSession)
+                .filter(UserSession.is_active == True)  # noqa: E712
+                .update({"is_active": False})
+            )
+            db.commit()
+            return count
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.error("deactivate_all_sessions: error actualizando DB: %s", exc)
+        return 0
 
 
 async def inactivity_cleanup_loop() -> None:
@@ -184,6 +320,12 @@ async def inactivity_cleanup_loop() -> None:
                     "inactivity_cleanup: %d sesión(es) limpiada(s): %s",
                     len(evicted),
                     evicted,
+                )
+            stale = cleanup_stale_db_sessions()
+            if stale:
+                logger.info(
+                    "inactivity_cleanup: %d sesión(es) zombie desactivadas en DB",
+                    stale,
                 )
         except Exception as exc:
             # Nunca dejar que el loop muera por un error puntual

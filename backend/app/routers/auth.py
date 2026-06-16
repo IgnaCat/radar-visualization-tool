@@ -1,5 +1,6 @@
 """Authentication endpoints: login and logout."""
 import logging
+from datetime import datetime, timezone
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -58,6 +59,7 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
 
     # Register session (if session_id provided)
     if body.session_id:
+        now = datetime.now(timezone.utc)
         existing_session = db.query(UserSession).filter(
             UserSession.session_id == body.session_id
         ).first()
@@ -65,8 +67,14 @@ def login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
         if existing_session:
             existing_session.user_id = user.id
             existing_session.is_active = True
+            existing_session.last_activity_at = now
         else:
-            db.add(UserSession(user_id=user.id, session_id=body.session_id, is_active=True))
+            db.add(UserSession(
+                user_id=user.id,
+                session_id=body.session_id,
+                is_active=True,
+                last_activity_at=now,
+            ))
 
     # Log access
     client_ip = _get_client_ip(request)
@@ -119,3 +127,28 @@ def logout(
 
     logger.info("Logout: %s", current_user.username)
     return {"detail": "Sesión cerrada"}
+
+
+class HeartbeatRequest(BaseModel):
+    session_id: str | None = None
+
+
+@router.post("/heartbeat")
+def session_heartbeat(
+    body: HeartbeatRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Actualiza last_activity_at de la sesión activa.
+    El frontend lo llama cada 5 minutos para que el servidor sepa que la sesión sigue viva.
+    Esto permite detectar sesiones zombie (browser cerrado sin logout).
+    """
+    if body.session_id:
+        now = datetime.now(timezone.utc)
+        db.query(UserSession).filter(
+            UserSession.session_id == body.session_id,
+            UserSession.user_id == current_user.id,
+        ).update({"last_activity_at": now, "is_active": True})
+        db.commit()
+    return {"ok": True}

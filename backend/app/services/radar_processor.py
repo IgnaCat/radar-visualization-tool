@@ -1,8 +1,11 @@
+import logging
 import os
 import pyart
 import pyproj
 import numpy as np
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 import rasterio
 import rasterio.transform
 from rasterio.warp import calculate_default_transform, reproject, Resampling
@@ -200,8 +203,14 @@ def process_radar_to_cog(
     if session_id:
         output_dir = str(Path(output_dir) / session_id)
         os.makedirs(output_dir, exist_ok=True)
-        # Marcar actividad para el cleanup de inactividad
+        # Marcar actividad para el cleanup de inactividad.
+        # Si la sesión no estaba en el dict (fue evictada tras inactividad),
+        # reactivarla en DB — el usuario volvió después de 2 h.
+        was_evicted = session_id not in SESSION_LAST_ACTIVITY
         SESSION_LAST_ACTIVITY[session_id] = time.time()
+        if was_evicted:
+            from .inactivity_cleanup import reactivate_session_in_db
+            reactivate_session_in_db(session_id)
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]

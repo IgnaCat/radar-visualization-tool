@@ -26,3 +26,4 @@ def run_migrations() -> None:
     _add_column_if_missing("access_logs", "longitude", "FLOAT")
     _add_column_if_missing("access_logs", "address", "VARCHAR(500)")
     _add_column_if_missing("access_logs", "location_source", "VARCHAR(20)")
+    _add_column_if_missing("user_sessions", "last_activity_at", "DATETIME")

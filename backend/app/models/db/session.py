@@ -14,3 +14,4 @@ class UserSession(Base):
         DateTime, nullable=False, default=lambda: datetime.now(timezone.utc)
     )
     is_active = Column(Boolean, nullable=False, default=True)
+    last_activity_at = Column(DateTime, nullable=True)

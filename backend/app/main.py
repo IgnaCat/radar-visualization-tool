@@ -118,11 +118,17 @@ async def on_startup():
     from .core.migrations import run_migrations
     from .services.seed import seed_admin
     from .services.stale_cleanup import cleanup_stale_files
-    from .services.inactivity_cleanup import inactivity_cleanup_loop
+    from .services.inactivity_cleanup import inactivity_cleanup_loop, deactivate_all_sessions
+
     init_db()
     run_migrations()
     seed_admin()
     cleanup_stale_files()
+
+    count = deactivate_all_sessions()
+    if count:
+        logger.info("startup: %d sesión(es) previa(s) marcadas inactivas", count)
+
     # Background task: libera RAM de sesiones abandonadas (tab cerrada sin logout)
     asyncio.create_task(inactivity_cleanup_loop())
 

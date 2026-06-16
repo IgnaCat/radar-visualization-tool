@@ -19,6 +19,7 @@ import { useMapActions } from "./hooks/useMapActions";
 import { useDownloads } from "./hooks/useDownloads";
 import { useAuth } from "./contexts/AuthContext";
 import { useBackendHealth } from "./hooks/useBackendHealth";
+import { useSessionHeartbeat } from "./hooks/useSessionHeartbeat";
 import "./print.css";
 import UploadButton from "./components/ui/UploadButton";
 import HeaderCard from "./components/ui/HeaderCard";
@@ -186,6 +187,7 @@ export default function App({ sessionId }) {
 
   // Auth
   const { token, logout, isAdmin, user } = useAuth();
+  useSessionHeartbeat(sessionId, token);
 
   // Sync Axios Bearer token whenever the JWT changes
   useEffect(() => {

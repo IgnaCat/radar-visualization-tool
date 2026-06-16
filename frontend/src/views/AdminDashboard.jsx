@@ -379,7 +379,7 @@ function UsersTab({ token, currentUserId }) {
             <TableRow>
               <TableCell>Usuario</TableCell>
               <TableCell>Rol</TableCell>
-              <TableCell>Estado</TableCell>
+              <TableCell>Cuenta</TableCell>
               <TableCell>Creado</TableCell>
               <TableCell align="right">Acciones</TableCell>
             </TableRow>
@@ -402,7 +402,7 @@ function UsersTab({ token, currentUserId }) {
                 </TableCell>
                 <TableCell>
                   <Chip
-                    label={u.is_active ? "Activo" : "Inactivo"}
+                    label={u.is_active ? "Habilitada" : "Deshabilitada"}
                     size="small"
                     sx={{
                       bgcolor: u.is_active
@@ -739,6 +739,7 @@ function ActiveSessionsTab({ token }) {
               <TableCell>Usuario</TableCell>
               <TableCell>Session ID</TableCell>
               <TableCell>Inicio</TableCell>
+              <TableCell>Último acceso</TableCell>
               <TableCell align="right">Acciones</TableCell>
             </TableRow>
           </TableHead>
@@ -764,6 +765,15 @@ function ActiveSessionsTab({ token }) {
                   }}
                 >
                   {fmtDate(s.created_at)}
+                </TableCell>
+                <TableCell
+                  sx={{
+                    fontFamily: "'Fira Code', monospace",
+                    fontSize: "11px",
+                    color: s.last_activity_at ? "text.primary" : "text.disabled",
+                  }}
+                >
+                  {s.last_activity_at ? fmtDate(s.last_activity_at) : "—"}
                 </TableCell>
                 <TableCell align="right">
                   <Tooltip title="Forzar limpieza de archivos">
@@ -791,7 +801,7 @@ function ActiveSessionsTab({ token }) {
             {sessions.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={4}
+                  colSpan={5}
                   align="center"
                   sx={{ color: "text.secondary", py: 4, fontStyle: "italic" }}
                 >
