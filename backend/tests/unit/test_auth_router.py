@@ -1,23 +1,44 @@
 """Tests for /auth endpoints using FastAPI TestClient."""
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.core.database import Base, engine, SessionLocal, init_db
+from app.core.database import Base, get_db
 from app.core.security import hash_password
 from app.models.db.user import User, UserRole
+
+# Isolated in-memory DB — never touches the real radar.db
+# StaticPool ensures all connections share the same SQLite in-memory database,
+# so tables created by setup_db are visible to sessions opened during requests.
+_test_engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+_TestSession = sessionmaker(bind=_test_engine, autocommit=False, autoflush=False)
+
+
+def _override_get_db():
+    db = _TestSession()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    """Create fresh tables for each test."""
-    Base.metadata.create_all(bind=engine)
+    """Create fresh tables for each test, then tear them down."""
+    Base.metadata.create_all(bind=_test_engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=_test_engine)
 
 
 @pytest.fixture
 def db():
-    session = SessionLocal()
+    session = _TestSession()
     yield session
     session.close()
 
@@ -38,7 +59,9 @@ def admin_user(db):
 @pytest.fixture
 def client():
     from app.main import app
-    return TestClient(app)
+    app.dependency_overrides[get_db] = _override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.pop(get_db, None)
 
 
 def test_login_success(client, admin_user):

@@ -3,6 +3,7 @@ Proyección de arrays a Web Mercator.
 """
 import numpy as np
 from pyproj import Proj
+from rasterio.crs import CRS
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from affine import Affine
 
@@ -26,7 +27,14 @@ def warp_array_to_mercator(data_2d, radar_lat, radar_lon, x_limits, y_limits):
     """
     # Proyección de origen: Azimuthal Equidistant centrada en el radar
     src_proj = Proj(proj='aeqd', lat_0=radar_lat, lon_0=radar_lon, datum='WGS84')
-    src_crs = src_proj.to_wkt()
+    # Usar CRS.from_dict en vez de WKT para evitar conflicto de versiones
+    # PROJ DB entre osgeo (minor=3) y rasterio (requiere minor>=4)
+    src_crs = CRS.from_dict({
+        'proj': 'aeqd',
+        'lat_0': float(radar_lat),
+        'lon_0': float(radar_lon),
+        'datum': 'WGS84',
+    })
     
     # Calcular transform de origen (coordenadas locales del radar)
     ny, nx = data_2d.shape

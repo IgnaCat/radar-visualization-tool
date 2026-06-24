@@ -1,33 +1,49 @@
 """Tests for /admin/* user management endpoints."""
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from app.core.database import Base, engine, SessionLocal, init_db
+from app.core.database import Base, get_db
 from app.core.security import hash_password, create_access_token
 from app.models.db.user import User, UserRole
+
+# Isolated in-memory DB — never touches the real radar.db
+# StaticPool ensures all connections share the same SQLite in-memory database,
+# so tables created by setup_db are visible to sessions opened during requests.
+_test_engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+_TestSession = sessionmaker(bind=_test_engine, autocommit=False, autoflush=False)
+
+
+def _override_get_db():
+    db = _TestSession()
+    try:
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture(autouse=True)
 def setup_db():
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=_test_engine)
     yield
-    Base.metadata.drop_all(bind=engine)
+    Base.metadata.drop_all(bind=_test_engine)
 
 
 @pytest.fixture
 def db():
-    session = SessionLocal()
+    session = _TestSession()
     yield session
     session.close()
 
 
 @pytest.fixture
 def admin_user(db):
-    # seed_admin() ya crea un 'admin' durante el startup del app,
-    # así que intentamos recuperarlo primero.
-    existing = db.query(User).filter(User.username == "admin").first()
-    if existing:
-        return existing
     user = User(
         username="admin",
         hashed_password=hash_password("pass"),
@@ -60,7 +76,9 @@ def user_token(db):
 @pytest.fixture
 def client():
     from app.main import app
-    return TestClient(app)
+    app.dependency_overrides[get_db] = _override_get_db
+    yield TestClient(app)
+    app.dependency_overrides.pop(get_db, None)
 
 
 def test_list_users_as_admin(client, admin_token, admin_user):
@@ -68,7 +86,8 @@ def test_list_users_as_admin(client, admin_token, admin_user):
     assert resp.status_code == 200
     users = resp.json()
     assert len(users) >= 1
-    assert users[0]["username"] == "admin"
+    usernames = [u["username"] for u in users]
+    assert "admin" in usernames
 
 
 def test_list_users_as_regular_user_forbidden(client, user_token):
