@@ -23,6 +23,11 @@ def db():
 
 @pytest.fixture
 def admin_user(db):
+    # seed_admin() ya crea un 'admin' durante el startup del app,
+    # así que intentamos recuperarlo primero.
+    existing = db.query(User).filter(User.username == "admin").first()
+    if existing:
+        return existing
     user = User(
         username="admin",
         hashed_password=hash_password("pass"),

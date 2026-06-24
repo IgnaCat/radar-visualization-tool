@@ -125,21 +125,21 @@ class TestApplyVisualFilters:
         # Ningún valor enmascarado porque el filtro no es para este campo
         assert not np.any(np.ma.getmaskarray(result))
 
-    def test_excepcion_rhohv_min_bajo(self):
+    def test_rhohv_min_bajo_si_aplica(self):
         """
-        Caso especial: RHOHV con min <= 0.3 se ignora (bypass).
-        Esto es por diseño — umbrales QC muy bajos no tienen sentido como 
-        filtro visual porque dejarían pasar ruido.
+        apply_visual_filters aplica el filtro tal cual, sin bypass.
+        El bypass de RHOHV min <= 0.3 solo existe en build_gatefilter_for_visual
+        (filtrado pre-gridding), no en el filtrado post-grid.
         """
         arr = np.ma.array([0.1, 0.5, 0.8, 0.95])
-        f = RangeFilter(field="RHOHV", min=0.2, max=1.0)  # min=0.2 ≤ 0.3
+        f = RangeFilter(field="RHOHV", min=0.2, max=1.0)  # min=0.2
         result = apply_visual_filters(arr, [f], "RHOHV")
-        
-        # El min NO se aplica (bypass), solo max
-        assert result.mask[0] == False  # 0.1 normalmente sería filtrado, pero bypass
-        assert result.mask[1] == False
-        assert result.mask[2] == False
-        assert result.mask[3] == False
+
+        # El min SÍ se aplica (es filtro visual post-grid, sin bypass)
+        assert result.mask[0] == True   # 0.1 < 0.2 → enmascarado
+        assert result.mask[1] == False  # 0.5 ok
+        assert result.mask[2] == False  # 0.8 ok
+        assert result.mask[3] == False  # 0.95 ok
 
     def test_rhohv_min_alto_si_aplica(self):
         """RHOHV con min > 0.3 SÍ se aplica normalmente."""

@@ -1,31 +1,30 @@
+"""
+Tests para POST /location — recepción de geolocalización del browser.
+
+Usa dependency_overrides para inyectar mocks de auth y DB,
+porque @patch no funciona con FastAPI Depends().
+"""
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 from fastapi.testclient import TestClient
 from app.main import app
+from app.routers.auth import get_current_user
+from app.core.database import get_db
 
 
-client = TestClient(app)
-
-
-def _auth_header(token="test-token"):
-    return {"Authorization": f"Bearer {token}"}
-
-
-def _mock_db_with_log(user_id=1, session_id="session-123"):
+def _mock_db_with_log(user_id=1):
     """Create a mock DB session that returns a matching AccessLog."""
     mock_db = MagicMock()
 
-    # Mock session lookup
     mock_session = MagicMock()
     mock_session.user_id = user_id
     mock_session.is_active = True
 
-    # Mock access log
     mock_log = MagicMock()
     mock_log.user_id = user_id
     mock_log.latitude = None
 
-    # query().filter().first() chain — called twice: once for UserSession, once for AccessLog
     mock_query = MagicMock()
     mock_filter = MagicMock()
     mock_order = MagicMock()
@@ -38,14 +37,31 @@ def _mock_db_with_log(user_id=1, session_id="session-123"):
     return mock_db, mock_log
 
 
-@patch("app.routers.location.reverse_geocode", new_callable=AsyncMock)
-@patch("app.routers.location.get_current_user")
-@patch("app.core.database.get_db")
-def test_location_success(mock_get_db, mock_get_user, mock_geocode):
-    """Valid coordinates → updates AccessLog with browser location."""
+@pytest.fixture(autouse=True)
+def override_auth():
+    """Inyecta un usuario mock en el DI de FastAPI para todos los tests."""
+    mock_user = MagicMock(id=1)
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    yield mock_user
+    app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.fixture(autouse=True)
+def override_db():
+    """Inyecta una DB mock en el DI de FastAPI."""
     mock_db, mock_log = _mock_db_with_log()
-    mock_get_db.return_value = iter([mock_db])
-    mock_get_user.return_value = MagicMock(id=1)
+    app.dependency_overrides[get_db] = lambda: mock_db
+    yield mock_db, mock_log
+    app.dependency_overrides.pop(get_db, None)
+
+
+client = TestClient(app)
+
+
+@patch("app.routers.location.reverse_geocode", new_callable=AsyncMock)
+def test_location_success(mock_geocode, override_db):
+    """Valid coordinates → updates AccessLog with browser location."""
+    _, mock_log = override_db
     mock_geocode.return_value = {
         "address": "Centro, Córdoba, Argentina",
         "city": "Córdoba",
@@ -55,7 +71,6 @@ def test_location_success(mock_get_db, mock_get_user, mock_geocode):
     response = client.post(
         "/location",
         json={"session_id": "session-123", "latitude": -31.4135, "longitude": -64.1811},
-        headers=_auth_header(),
     )
 
     assert response.status_code == 200
@@ -65,29 +80,19 @@ def test_location_success(mock_get_db, mock_get_user, mock_geocode):
     assert mock_log.location_source == "browser"
 
 
-@patch("app.routers.location.get_current_user")
-def test_location_invalid_latitude(mock_get_user):
+def test_location_invalid_latitude():
     """Latitude out of range → 422."""
-    mock_get_user.return_value = MagicMock(id=1)
-
     response = client.post(
         "/location",
         json={"session_id": "session-123", "latitude": 999, "longitude": -64.18},
-        headers=_auth_header(),
     )
-
     assert response.status_code == 422
 
 
-@patch("app.routers.location.get_current_user")
-def test_location_invalid_longitude(mock_get_user):
+def test_location_invalid_longitude():
     """Longitude out of range → 422."""
-    mock_get_user.return_value = MagicMock(id=1)
-
     response = client.post(
         "/location",
         json={"session_id": "session-123", "latitude": -31.41, "longitude": 999},
-        headers=_auth_header(),
     )
-
     assert response.status_code == 422
