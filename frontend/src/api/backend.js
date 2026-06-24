@@ -63,6 +63,8 @@ const api = axios.create({
   baseURL: getApiBaseUrl(),
 });
 
+export default api;
+
 // ── Auth token management ─────────────────────────────────────────────────────
 // Call setAuthToken(token) after login to attach Bearer header to all requests.
 let _authToken = null;
