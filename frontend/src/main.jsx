@@ -11,6 +11,7 @@ import RequireAdmin from "./components/guards/RequireAdmin";
 import LoginPage from "./views/LoginPage";
 import AdminDashboard from "./views/AdminDashboard";
 import CacheStats from "./views/CacheStats";
+import LogViewer from "./views/LogViewer";
 import App from "./App.jsx";
 
 // One stable session ID for the lifetime of this browser tab.
@@ -44,6 +45,14 @@ createRoot(document.getElementById("root")).render(
               element={
                 <RequireAdmin>
                   <AdminDashboard />
+                </RequireAdmin>
+              }
+            />
+            <Route
+              path="/logs"
+              element={
+                <RequireAdmin>
+                  <LogViewer />
                 </RequireAdmin>
               }
             />

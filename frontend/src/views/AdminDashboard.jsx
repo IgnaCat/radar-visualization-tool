@@ -905,20 +905,35 @@ export default function AdminDashboard() {
                 </Typography>
               </Box>
 
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<StorageIcon sx={{ fontSize: 15 }} />}
-                onClick={() => navigate("/cache")}
-                sx={{
-                  fontSize: 13,
-                  borderColor: "#CBD5E1",
-                  color: "text.secondary",
-                  display: { xs: "none", sm: "flex" },
-                }}
-              >
-                Cache Stats
-              </Button>
+              <Box sx={{ display: "flex", gap: 1 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<StorageIcon sx={{ fontSize: 15 }} />}
+                  onClick={() => navigate("/cache")}
+                  sx={{
+                    fontSize: 13,
+                    borderColor: "#CBD5E1",
+                    color: "text.secondary",
+                    display: { xs: "none", sm: "flex" },
+                  }}
+                >
+                  Cache Stats
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => navigate("/logs")}
+                  sx={{
+                    fontSize: 13,
+                    borderColor: "#CBD5E1",
+                    color: "text.secondary",
+                    display: { xs: "none", sm: "flex" },
+                  }}
+                >
+                  Logs
+                </Button>
+              </Box>
 
               {user?.username && (
                 <Box

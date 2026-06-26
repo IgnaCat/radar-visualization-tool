@@ -3,6 +3,7 @@ import faulthandler
 import os
 import sys
 import logging
+from logging.handlers import RotatingFileHandler
 import importlib.util
 from pathlib import Path
 
@@ -38,13 +39,30 @@ from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pi
 logging.Formatter.converter = lambda *args: datetime.now(timezone(timedelta(hours=-3))).timetuple()
 
 # Logging configuration
+LOG_FORMAT = "%(asctime)s  %(levelname)-8s  [%(name)s]  %(message)s"
+LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  [%(name)s]  %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    format=LOG_FORMAT,
+    datefmt=LOG_DATEFMT,
     stream=sys.stdout,       # stdout is captured by Docker logs
     force=True,              # override any prior basicConfig
 )
+
+# Also write logs to a rotating file for the /admin/logs endpoint
+_log_dir = Path(settings.LOG_DIR)
+_log_dir.mkdir(parents=True, exist_ok=True)
+_file_handler = RotatingFileHandler(
+    _log_dir / "backend.log",
+    maxBytes=10 * 1024 * 1024,  # 10 MB per file
+    backupCount=3,
+    encoding="utf-8",
+)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
+_file_handler.formatter.converter = lambda *args: datetime.now(timezone(timedelta(hours=-3))).timetuple()
+logging.getLogger().addHandler(_file_handler)
 
 # Reduce noise from chatty libraries
 logging.getLogger("rasterio").setLevel(logging.WARNING)

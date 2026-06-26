@@ -40,3 +40,12 @@ export async function forceCleanupUser(token, userId) {
   const resp = await makeAdminApi(token).post(`/admin/cleanup/${userId}`);
   return resp.data;
 }
+
+export async function fetchLogs(token, { lines = 200, level, search } = {}) {
+  const params = new URLSearchParams();
+  params.set("lines", lines);
+  if (level) params.set("level", level);
+  if (search) params.set("search", search);
+  const resp = await makeAdminApi(token).get(`/admin/logs?${params}`);
+  return resp.data;
+}

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = "admin"
     DB_DIR: str = os.path.join(os.getcwd(), "app/storage/db")
+    LOG_DIR: str = os.path.join(os.getcwd(), "app/storage/logs")
 
     class Config:
         env_file = ".env"

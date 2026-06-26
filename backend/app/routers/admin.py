@@ -1,13 +1,16 @@
 """
 Endpoints de administración para mantenimiento del sistema.
 """
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from typing import Optional
+from pathlib import Path
+import re
 import time
 import datetime
 from ..dependencies.auth import require_admin
 from ..models.db.user import User
+from ..core.config import settings
 
 from ..core.cache import (
     GRID2D_CACHE, 
@@ -253,4 +256,52 @@ def get_cache_stats(_admin: User = Depends(require_admin)):
             "newest_timestamp": w_disk_newest
         },
         "cache_files": cache_files_list
+    }
+
+
+# ── Log viewer ────────────────────────────────────────────────────────────────
+
+_LOG_FILE = Path(settings.LOG_DIR) / "backend.log"
+
+
+@router.get("/logs")
+def get_logs(
+    lines: int = Query(200, ge=1, le=10000, description="Número de líneas a retornar (desde el final)"),
+    level: Optional[str] = Query(None, description="Filtrar por nivel: INFO, WARNING, ERROR, CRITICAL"),
+    search: Optional[str] = Query(None, description="Filtrar líneas que contengan este texto (case-insensitive)"),
+    _admin: User = Depends(require_admin),
+):
+    """
+    Retorna las últimas N líneas del log del backend con filtrado opcional.
+    """
+    if not _LOG_FILE.exists():
+        return {"lines": [], "total": 0, "file": str(_LOG_FILE), "truncated": False}
+
+    # Read all lines (file is capped at ~10 MB by RotatingFileHandler)
+    all_lines = _LOG_FILE.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    # Filter by level
+    if level:
+        level_upper = level.upper()
+        if level_upper not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            raise HTTPException(400, f"Nivel inválido: {level}")
+        # Match lines that contain the level token
+        level_pattern = re.compile(rf"\b{level_upper}\b")
+        all_lines = [l for l in all_lines if level_pattern.search(l)]
+
+    # Filter by search text
+    if search:
+        search_lower = search.lower()
+        all_lines = [l for l in all_lines if search_lower in l.lower()]
+
+    total = len(all_lines)
+    truncated = total > lines
+    result_lines = all_lines[-lines:]
+
+    return {
+        "lines": result_lines,
+        "total": total,
+        "returned": len(result_lines),
+        "truncated": truncated,
+        "file": _LOG_FILE.name,
     }
