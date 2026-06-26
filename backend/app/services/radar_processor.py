@@ -261,9 +261,15 @@ def process_radar_to_cog(
     if not Path(filepath).exists():
         raise ValueError(f"Archivo no encontrado: {filepath}")
 
+    # ── BENCHMARK: Lectura y normalización ──
+    _t_read_start = time.perf_counter()
+
     # Leer archivo NetCDF con PyART (protegido con lock - NetCDF/HDF5 no es thread-safe)
     with NETCDF_READ_LOCK:
         radar = pyart.io.read(filepath, delay_field_loading=False)
+
+    _t_read_end = time.perf_counter()
+    print(f"[BENCHMARK] Lectura archivo: {_t_read_end - _t_read_start:.4f} s  ({Path(filepath).name})")
 
     try:
         field_to_use, field_key = resolve_field(radar, field_requested)
@@ -375,6 +381,9 @@ def process_radar_to_cog(
     pkg_cached = GRID2D_CACHE.get(cache_key)
 
     if pkg_cached is None:
+        # ── BENCHMARK: Interpolación (operador W) ──
+        _t_interp_start = time.perf_counter()
+
         # Construir o recuperar grilla 3D multi-campo con el operador W
         grid = get_or_build_grid3d_with_operator(
             radar_to_use=radar,
@@ -395,6 +404,9 @@ def process_radar_to_cog(
             session_id=session_id,
         )
 
+        _t_interp_end = time.perf_counter()
+        print(f"[BENCHMARK] Interpolación (W): {_t_interp_end - _t_interp_start:.4f} s")
+
         grid_metadata = dict(getattr(grid, "metadata", {}) or {})
         if grid_metadata:
             for key in ("last_gate_range_m", "blind_range_m"):
@@ -408,6 +420,9 @@ def process_radar_to_cog(
                 f"Campo '{field_to_use}' no encontrado en grilla. Disponibles: {available}"
             )
 
+        # ── BENCHMARK: Colapso a producto 2D ──
+        _t_collapse_start = time.perf_counter()
+
         collapse_grid_to_2d(
             grid,
             field=field_to_use,
@@ -417,6 +432,9 @@ def process_radar_to_cog(
             vmin=vmin,
         )
         arr2d = grid.fields[field_to_use]["data"][0, :, :]
+
+        _t_collapse_end = time.perf_counter()
+        print(f"[BENCHMARK] Colapso {product}: {_t_collapse_end - _t_collapse_start:.4f} s")
         arr2d = np.ma.array(arr2d.astype(np.float32), mask=np.ma.getmaskarray(arr2d))
 
         # PyART grid: y[0]=ymin (sur), y[-1]=ymax (norte).
@@ -478,6 +496,9 @@ def process_radar_to_cog(
     # Se usa el Affine transform correcto (con offset de medio pixel) calculado
     # al construir pkg_cached, evitando PyART write_grid_geotiff que tiene
     # errores de GeoTransform (sin half-pixel offset + asume grilla cuadrada).
+    # ── BENCHMARK: Warping + COG ──
+    _t_warp_start = time.perf_counter()
+
     if pkg_cached.get("arr_warped") is None:
         arr2d = pkg_cached["arr"]
         src_transform = pkg_cached["transform"]
@@ -556,6 +577,8 @@ def process_radar_to_cog(
         )
 
     # Crear COG RGB desde el array warped (suavizado opcional) usando la función optimizada
+    _t_cog_start = time.perf_counter()
+
     create_cog_from_warped_array(
         data_warped=arr_to_render,
         output_path=cog_path,
@@ -565,6 +588,12 @@ def process_radar_to_cog(
         vmin=vmin,
         vmax=vmax,
     )
+
+    _t_cog_end = time.perf_counter()
+    print(f"[BENCHMARK] Warping: {_t_cog_start - _t_warp_start:.4f} s")
+    print(f"[BENCHMARK] COG export: {_t_cog_end - _t_cog_start:.4f} s")
+    print(f"[BENCHMARK] Total pipeline (sin lectura): {_t_cog_end - _t_read_end:.4f} s")
+    print(f"[BENCHMARK] Total pipeline (con lectura): {_t_cog_end - _t_read_start:.4f} s")
 
     version_tag = str(cog_path.stat().st_mtime_ns)
     return _build_output_summary(
