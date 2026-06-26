@@ -25,7 +25,6 @@ from .radar_processing import (
     calculate_z_limits,
     calculate_grid_resolution,
     calculate_grid_points,
-    prepare_radar_for_product,
     fill_dbzh_if_needed,
     separate_filters,
 )
@@ -75,11 +74,17 @@ def generate_grid2d_on_demand(
     # Resolver nombre del campo en el radar (devuelve tupla: field_name, field_key)
     field_name, field_key = resolve_field(radar, field_requested)
 
-    # Preparar radar según producto (rellena DBZH si es CAPPI/COLMAX)
+    # Preparar campo según producto (rellena DBZH si es CAPPI/COLMAX)
     field_name = fill_dbzh_if_needed(radar, field_name, product)
-    radar_to_use, field_to_use = prepare_radar_for_product(
-        radar, product, field_name, elevation, cappi_height
-    )
+    field_to_use = field_name
+
+    # IMPORTANTE: NO llamar a prepare_radar_for_product aquí.
+    # radar_processor.py pasa el radar COMPLETO a get_or_build_grid3d_with_operator
+    # y colapsa post-gridding con collapse_grid_to_2d. Si aquí extraemos un solo
+    # sweep (extract_sweeps para PPI), el número de gates cambia y el operador W
+    # cacheado (construido con el radar completo) tiene dimensiones incompatibles
+    # → "matmul: dimension mismatch".
+    radar_to_use = radar
 
     # Separar filtros QC
     qc_filters, _ = separate_filters(filters, field_requested_upper)
@@ -95,8 +100,17 @@ def generate_grid2d_on_demand(
         radar_fixed_angles=radar.fixed_angle["data"],
     )
     z_grid_limits = (z_min, z_max)
-    y_grid_limits = (-range_max_m, range_max_m)
-    x_grid_limits = (-range_max_m, range_max_m)
+
+    # Volumen 03 (bird bath): usar grid XY fijo de 40km para consistencia
+    # con radar_processor.py (el rango radial es vertical, no horizontal)
+    if volume == "03":
+        grid_extent_m = 40000.0
+        y_grid_limits = (-grid_extent_m, grid_extent_m)
+        x_grid_limits = (-grid_extent_m, grid_extent_m)
+    else:
+        y_grid_limits = (-range_max_m, range_max_m)
+        x_grid_limits = (-range_max_m, range_max_m)
+
     grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
 
     # Resolución según volumen
