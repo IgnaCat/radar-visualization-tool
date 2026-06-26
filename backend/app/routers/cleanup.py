@@ -17,10 +17,11 @@ from ..models.db.session import UserSession
 
 logger = logging.getLogger(__name__)
 from ..core.cache import (
-    GRID2D_CACHE, 
-    SESSION_CACHE_INDEX, 
-    W_OPERATOR_CACHE, 
-    W_OPERATOR_SESSION_INDEX, 
+    GRID2D_CACHE,
+    GRID2D_LOCK,
+    SESSION_CACHE_INDEX,
+    W_OPERATOR_CACHE,
+    W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT,
     _W_OPERATOR_LOCKS,
     _W_OPERATOR_LOCKS_MASTER
@@ -383,10 +384,10 @@ def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None)
         
         for cache_key in keys_to_delete:
             try:
-                # Verificar que la key exista en la cache antes de eliminar
-                if cache_key in GRID2D_CACHE:
-                    del GRID2D_CACHE[cache_key]
-                    count += 1
+                with GRID2D_LOCK:
+                    if cache_key in GRID2D_CACHE:
+                        del GRID2D_CACHE[cache_key]
+                        count += 1
                 # Eliminar del índice
                 SESSION_CACHE_INDEX[session_id].discard(cache_key)
             except Exception as e:

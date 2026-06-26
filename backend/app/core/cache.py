@@ -38,6 +38,7 @@ def _nbytes_pkg(pkg) -> int:
     return n
 
 GRID2D_CACHE = LRUCache(maxsize=100 * 1024 * 1024, getsizeof=_nbytes_pkg)
+GRID2D_LOCK = threading.Lock()  # LRUCache no es thread-safe; proteger todo acceso
 
 # Índice secundario: user_id (str) -> set de cache keys
 # Permite limpieza eficiente por usuario.

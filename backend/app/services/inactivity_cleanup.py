@@ -33,6 +33,7 @@ from ..core.database import SessionLocal
 from ..models.db.session import UserSession
 from ..core.cache import (
     GRID2D_CACHE,
+    GRID2D_LOCK,
     SESSION_CACHE_INDEX,
     SESSION_LAST_ACTIVITY,
     W_OPERATOR_CACHE,
@@ -87,9 +88,10 @@ def _evict_session(session_id: str, decided_at: float) -> dict:
         keys = list(SESSION_CACHE_INDEX[session_id])
         for key in keys:
             try:
-                if key in GRID2D_CACHE:
-                    del GRID2D_CACHE[key]
-                    removed["grid2d"] += 1
+                with GRID2D_LOCK:
+                    if key in GRID2D_CACHE:
+                        del GRID2D_CACHE[key]
+                        removed["grid2d"] += 1
                 SESSION_CACHE_INDEX[session_id].discard(key)
             except Exception as exc:
                 logger.warning("inactivity_cleanup: error borrando GRID2D key %s: %s", key, exc)

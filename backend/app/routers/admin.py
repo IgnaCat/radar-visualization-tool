@@ -13,7 +13,8 @@ from ..models.db.user import User
 from ..core.config import settings
 
 from ..core.cache import (
-    GRID2D_CACHE, 
+    GRID2D_CACHE,
+    GRID2D_LOCK,
     W_OPERATOR_CACHE,
     get_w_operator_cache_path,
     CACHE_DIR,
@@ -57,8 +58,9 @@ def clear_cache(
     
     # Limpiar GRID2D_CACHE
     if cache_type in ['grid2d', 'all']:
-        size_before = len(GRID2D_CACHE)
-        GRID2D_CACHE.clear()
+        with GRID2D_LOCK:
+            size_before = len(GRID2D_CACHE)
+            GRID2D_CACHE.clear()
         cleared["grid2d_entries"] = size_before
     
     # Limpiar W_OPERATOR_CACHE (RAM + Disco)
@@ -178,10 +180,11 @@ def get_cache_stats(_admin: User = Depends(require_admin)):
     import pickle
     
     # Estadísticas GRID2D_CACHE
-    grid2d_count = len(GRID2D_CACHE)
-    grid2d_size_mb = sum(
-        GRID2D_CACHE.getsizeof(pkg) for pkg in GRID2D_CACHE.values()
-    ) / (1024 * 1024)
+    with GRID2D_LOCK:
+        grid2d_count = len(GRID2D_CACHE)
+        grid2d_size_mb = sum(
+            GRID2D_CACHE.getsizeof(pkg) for pkg in GRID2D_CACHE.values()
+        ) / (1024 * 1024)
     
     # Estadísticas W_OPERATOR_CACHE (RAM)
     w_ram_count = len(W_OPERATOR_CACHE)

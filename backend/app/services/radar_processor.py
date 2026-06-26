@@ -14,7 +14,7 @@ from affine import Affine
 
 from ..core.config import settings
 import time
-from ..core.cache import GRID2D_CACHE, SESSION_CACHE_INDEX, SESSION_LAST_ACTIVITY, NETCDF_READ_LOCK
+from ..core.cache import GRID2D_CACHE, GRID2D_LOCK, SESSION_CACHE_INDEX, SESSION_LAST_ACTIVITY, NETCDF_READ_LOCK
 from ..core.constants import (
     AFFECTS_INTERP_FIELDS,
     FIELD_RENDER,
@@ -372,7 +372,8 @@ def process_radar_to_cog(
         session_id=session_id,
     )
 
-    pkg_cached = GRID2D_CACHE.get(cache_key)
+    with GRID2D_LOCK:
+        pkg_cached = GRID2D_CACHE.get(cache_key)
 
     if pkg_cached is None:
         # Construir o recuperar grilla 3D multi-campo con el operador W
@@ -468,9 +469,10 @@ def process_radar_to_cog(
         # encontrará la key en el índice y la buscará en GRID2D_CACHE (donde aún
         # no está → la saltea), que es mejor que el caso inverso donde la key
         # existe en caché pero no en el índice y queda huérfana para siempre.
-        if session_id:
-            SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
-        GRID2D_CACHE[cache_key] = pkg_cached
+        with GRID2D_LOCK:
+            if session_id:
+                SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
+            GRID2D_CACHE[cache_key] = pkg_cached
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -530,9 +532,10 @@ def process_radar_to_cog(
         pkg_cached["transform_warped"] = transform_warped
         pkg_cached["crs_warped"] = crs_warped
         # Mismo orden que arriba: índice primero, caché después.
-        if session_id:
-            SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
-        GRID2D_CACHE[cache_key] = pkg_cached
+        with GRID2D_LOCK:
+            if session_id:
+                SESSION_CACHE_INDEX.setdefault(session_id, set()).add(cache_key)
+            GRID2D_CACHE[cache_key] = pkg_cached
     else:
         # Usar el warp cacheado
         arr_warped = pkg_cached["arr_warped"]
