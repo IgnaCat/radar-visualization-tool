@@ -95,13 +95,15 @@ api.interceptors.response.use(
   },
 );
 
-export const uploadFile = async (files, session_id = null) => {
+export const uploadFile = async (files, session_id = null, onUploadProgress = null) => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (session_id) {
     formData.append("session_id", session_id);
   }
-  return api.post("/upload", formData);
+  return api.post("/upload", formData, {
+    ...(onUploadProgress && { onUploadProgress }),
+  });
 };
 
 export const processFile = async ({

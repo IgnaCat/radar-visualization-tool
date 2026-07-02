@@ -141,6 +141,7 @@ export default function App({ sessionId }) {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [downloadLayersDialogOpen, setDownloadLayersDialogOpen] =
     useState(false);
@@ -620,7 +621,10 @@ export default function App({ sessionId }) {
   const handleFilesSelected = async (files) => {
     try {
       setLoading(true);
-      const uploadResp = await uploadFile(files, sessionId);
+      setUploadProgress(0);
+      const uploadResp = await uploadFile(files, sessionId, (e) => {
+        if (e.total) setUploadProgress(e.loaded / e.total);
+      });
       const warnings = uploadResp.data.warnings || [];
       const filesInfo = uploadResp.data.files || [];
       const filepaths = filesInfo.map((f) => f.filepath);
@@ -670,6 +674,7 @@ export default function App({ sessionId }) {
       });
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -1537,7 +1542,7 @@ export default function App({ sessionId }) {
           availableDownloads,
           drawnLayerRef,
           product,
-          loading,
+          loading: loading && uploadProgress === null,
         }}
         sharedProps={{
           uploadedFiles,
@@ -1608,7 +1613,7 @@ export default function App({ sessionId }) {
         }}
       />
 
-      <Loader open={loading} />
+      <Loader open={loading} uploadProgress={uploadProgress} />
     </div>
   );
 }
