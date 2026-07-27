@@ -158,15 +158,15 @@ def grid_with_pyart(
         radar,
         grid_shape=grid_shape,
         grid_limits=grid_limits,
-        gridding_algo="map_to_grid",
+        gridding_algo="map_gates_to_grid",
         grid_origin=grid_origin,
         fields=[field_name],
         weighting_function=weighting_function,
-        gatefilters=None,
+        gatefilters=False,
         roi_func="dist_beam",
         nb=nb,
         bsp=bsp,
-        h_factor=h_factor,
+        h_factor=np.full(1, h_factor, dtype=np.float32),
         min_radius=min_radius,
     )
     t_pyart = time.time() - t0
