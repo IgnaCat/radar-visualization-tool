@@ -232,7 +232,7 @@ export default function LoginPage() {
                     lineHeight: 1,
                   }}
                 >
-                  RADARG
+                  SIVAR
                 </Typography>
                 <Typography
                   sx={{
@@ -257,7 +257,7 @@ export default function LoginPage() {
               variant="h5"
               sx={{ color: "#FFFFFF", mb: 2, fontWeight: 600 }}
             >
-              Sistema de Visualización de Radar Meteorológico
+              Sistema Interactivo de Visualización y Análisis Radar
             </Typography>
 
             <Typography
@@ -335,7 +335,7 @@ export default function LoginPage() {
                 letterSpacing: "0.04em",
               }}
             >
-              RADARG
+              SIVAR
             </Typography>
           </Box>
 

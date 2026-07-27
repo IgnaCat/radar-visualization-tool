@@ -862,7 +862,7 @@ export default function CacheStats() {
         </Paper>
 
         <Typography variant="caption" color="text.disabled" sx={{ mt: 2.5 }}>
-          Actualización automática cada 10 s · RADARG v2.0
+          Actualización automática cada 10 s · SIVAR v2.0
         </Typography>
       </Box>
     </ThemeProvider>

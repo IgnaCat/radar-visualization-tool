@@ -992,7 +992,7 @@ export default function AdminDashboard() {
           color="text.disabled"
           sx={{ mt: 2.5, fontFamily: "'Fira Code', monospace" }}
         >
-          RADARG · FAMAF UNC · v2.0
+          SIVAR · FAMAF UNC · v2.0
         </Typography>
       </Box>
     </ThemeProvider>
