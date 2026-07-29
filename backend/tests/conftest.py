@@ -8,6 +8,23 @@ Conceptos clave:
          "function" = se ejecuta una vez por cada test (default).
 """
 
+# ─── Fix PROJ antes de cualquier import de rasterio/osgeo ─────────
+# osgeo (GDAL) trae un proj.db viejo (minor=3) que rompe rasterio/pyproj
+# (necesitan minor>=4). Forzamos PROJ_DATA al directorio de pyproj/rasterio
+# SIN importar esos paquetes (para no inicializar PROJ con el DB equivocado).
+import os
+import importlib.util
+from pathlib import Path
+
+for _pkg, _rel in [("pyproj", "proj_dir/share/proj"), ("rasterio", "proj_data")]:
+    _spec = importlib.util.find_spec(_pkg)
+    if _spec and _spec.submodule_search_locations:
+        _proj_data = Path(next(iter(_spec.submodule_search_locations))) / _rel
+        if (_proj_data / "proj.db").exists():
+            os.environ["PROJ_DATA"] = str(_proj_data)
+            os.environ["PROJ_LIB"] = str(_proj_data)
+            break
+
 import pytest
 import numpy as np
 from app.models import RangeFilter

@@ -1,15 +1,27 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pathlib import Path
 from typing import Iterable
 import shutil
 import os
+import gc
+import ctypes
+import logging
+
+from sqlalchemy.orm import Session as DBSession
 
 from ..core.config import settings
+from ..core.database import get_db
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
+from ..models.db.session import UserSession
+
+logger = logging.getLogger(__name__)
 from ..core.cache import (
-    GRID2D_CACHE, 
-    SESSION_CACHE_INDEX, 
-    W_OPERATOR_CACHE, 
-    W_OPERATOR_SESSION_INDEX, 
+    GRID2D_CACHE,
+    GRID2D_LOCK,
+    SESSION_CACHE_INDEX,
+    W_OPERATOR_CACHE,
+    W_OPERATOR_SESSION_INDEX,
     W_OPERATOR_REF_COUNT,
     _W_OPERATOR_LOCKS,
     _W_OPERATOR_LOCKS_MASTER
@@ -17,6 +29,41 @@ from ..core.cache import (
 from ..models import CleanupRequest, FileCleanupRequest
 
 router = APIRouter(prefix="/cleanup", tags=["cleanup"])
+
+
+def _release_memory_to_os() -> None:
+    """
+    Fuerza la devolución de memoria al sistema operativo.
+
+    Problema: cuando Python hace `del obj`, el memory allocator de glibc
+    (malloc) mantiene la memoria reservada en el heap del proceso para
+    reutilización futura. Esto es eficiente para el proceso pero hace que
+    docker stats muestre RAM alta incluso después de limpiar caches.
+
+    Solución:
+    1. gc.collect() — elimina objetos sin referencias (ciclos, numpy arrays)
+    2. malloc_trim(0) — le dice a glibc que devuelva páginas libres al OS
+       (solo funciona en Linux/glibc, que es donde corre Docker)
+    """
+    # Paso 1: garbage collection (libera numpy arrays huérfanos, ciclos, etc.)
+    collected = gc.collect()
+
+    # Paso 2: devolver memoria libre al OS (glibc malloc_trim)
+    trimmed = False
+    try:
+        libc = ctypes.CDLL("libc.so.6")
+        result = libc.malloc_trim(0)
+        trimmed = result == 1  # malloc_trim returns 1 if memory was released
+    except (OSError, AttributeError):
+        # No disponible (macOS, Windows, musl libc) — no pasa nada
+        pass
+
+    if collected > 0 or trimmed:
+        logger.info(
+            f"Memoria liberada: gc collected {collected} objetos, "
+            f"malloc_trim {'devolvió memoria al OS' if trimmed else 'sin efecto'}"
+        )
+
 
 # Directorios “oficiales” de tu app
 UPLOAD_DIR = Path(settings.UPLOAD_DIR).resolve()       # app/storage/uploads
@@ -108,7 +155,10 @@ def _delete_path(p: Path) -> bool:
         return False
 
 @router.post("/files")
-def cleanup_files(req: FileCleanupRequest):
+def cleanup_files(
+    req: FileCleanupRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Elimina archivos específicos subidos por el usuario.
     Borra el NetCDF, sus COGs asociados y entradas de cache en memoria.
@@ -119,9 +169,14 @@ def cleanup_files(req: FileCleanupRequest):
     file_hashes: set[str] = set()
     deleted = {"uploads": 0, "cogs": 0, "cache_entries": 0}
 
+    # Namespace de paths: UPLOAD_DIR/{user_id}/{session_id}/
+    user_namespace = str(current_user.id)
+    if req.session_id:
+        user_namespace = f"{current_user.id}/{req.session_id}"
+
     for filepath in req.filepaths:
         rp = _first_safe_under(
-            filepath, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=req.session_id
+            filepath, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=user_namespace
         )
         if rp and rp.exists():
             # Calcular hash antes de borrar (para limpiar COGs y cache)
@@ -136,20 +191,29 @@ def cleanup_files(req: FileCleanupRequest):
                 deleted["uploads"] += 1
                 deleted_files.append(filepath)
 
-    # Borrar COGs y cache relacionados
+    # Borrar COGs asociados.
+    # Los COGs viven en TMP_DIR/{session_id}/ → usar session_id del browser.
     if file_hashes:
         deleted["cogs"] = _delete_related_cogs(file_hashes, session_id=req.session_id)
         deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
 
-    # Limpiar carpetas vacías
-    if req.session_id:
-        _cleanup_empty_session_dirs(req.session_id)
+    # Limpiar carpetas vacías:
+    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/
+    # - COGs:    TMP_DIR/{session_id}/
+    _cleanup_empty_session_dirs(session_id=req.session_id, user_namespace=user_namespace)
+
+    # Forzar devolución de memoria al OS después de limpiar caches
+    _release_memory_to_os()
 
     return {"deleted": deleted, "removed_files": deleted_files}
 
 
 @router.post("/close")
-def cleanup_close(req: CleanupRequest):
+def cleanup_close(
+    req: CleanupRequest,
+    current_user: User = Depends(get_current_user),
+    db: DBSession = Depends(get_db),
+):
     """
     Borra archivos indicados por el front al cerrar la app.
     - Siempre intenta borrar 'uploads' (NetCDF)
@@ -159,48 +223,69 @@ def cleanup_close(req: CleanupRequest):
     """
     deleted = {"uploads": 0, "cogs": 0, "cache_entries": 0}
 
+    # Namespace de paths: UPLOAD_DIR/{user_id}/{session_id}/
+    # Usar el session_id del request para aislar el borrado a esta sesión
+    # y no afectar otras sesiones del mismo usuario abiertas en paralelo.
+    user_namespace = str(current_user.id)
+    if req.session_id:
+        user_namespace = f"{current_user.id}/{req.session_id}"
+
     # Recopilar nombres de archivos a borrar para limpieza de cache
     upload_filenames = set()
     file_hashes = set()
 
     # uploads (NetCDF subidos / temporales del usuario)
     for s in req.uploads:
-        rp = _first_safe_under(s, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=req.session_id)
+        rp = _first_safe_under(s, [UPLOAD_DIR, TMP_DIR, BASE_DIR], session_id=user_namespace)
         if rp and rp.exists():
-            # Guardar nombre del archivo para limpieza de cache
             upload_filenames.add(rp.name)
-            # Calcular hash antes de borrar
             try:
                 from ..services.radar_common import md5_file
                 file_hash = md5_file(str(rp))[:12]
                 file_hashes.add(file_hash)
             except Exception:
                 pass
-            # Borrar archivo
             if _delete_path(rp):
                 deleted["uploads"] += 1
 
     # archivos temporales explícitos enviados por el frontend (ej. GIFs exportados)
     for s in req.cogs:
-        rp = _first_safe_under(s, [TMP_DIR, BASE_DIR], session_id=req.session_id)
+        rp = _first_safe_under(s, [TMP_DIR, BASE_DIR], session_id=user_namespace)
         if rp and rp.exists():
             if _delete_path(rp):
                 deleted["cogs"] += 1
 
-    # Borrar COGs relacionados con los uploads eliminados (por file_hash matching)
+    # Borrar COGs relacionados con uploads eliminados.
+    # Los COGs viven en TMP_DIR/{session_id}/ → usar session_id del browser, no user_namespace.
     if req.delete_cache and file_hashes:
         deleted["cogs"] += _delete_related_cogs(file_hashes, session_id=req.session_id)
 
-    # Limpiar entradas de cache en memoria relacionadas con archivos borrados
+    # Limpiar entradas de GRID2D_CACHE.
+    # SESSION_CACHE_INDEX está indexado por session_id del browser (no por user_namespace).
     if file_hashes:
         deleted["cache_entries"] = _cleanup_cache_entries(file_hashes, session_id=req.session_id)
-        
-        # Limpiar W_OPERATOR_CACHE por sesión
-        deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
-    
-    # Limpiar carpetas vacías de sesión en UPLOAD y TMP
+
+    # Limpiar W_OPERATOR_CACHE por sesión.
+    deleted["w_operator_entries"] = _cleanup_w_operator_entries(session_id=req.session_id)
+
+    # Limpiar carpetas vacías:
+    # - uploads: UPLOAD_DIR/{user_id}/{session_id}/
+    # - COGs:    TMP_DIR/{session_id}/
+    _cleanup_empty_session_dirs(session_id=req.session_id, user_namespace=user_namespace)
+
+    # Marcar sesión como inactiva en DB
     if req.session_id:
-        _cleanup_empty_session_dirs(req.session_id)
+        try:
+            db.query(UserSession).filter(
+                UserSession.session_id == req.session_id,
+                UserSession.user_id == current_user.id,
+            ).update({"is_active": False})
+            db.commit()
+        except Exception as exc:
+            logger.warning("cleanup_close: no se pudo marcar sesión como inactiva: %s", exc)
+
+    # Forzar devolución de memoria al OS después de limpiar caches
+    _release_memory_to_os()
 
     return {"deleted": deleted}
 
@@ -299,10 +384,10 @@ def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None)
         
         for cache_key in keys_to_delete:
             try:
-                # Verificar que la key exista en la cache antes de eliminar
-                if cache_key in GRID2D_CACHE:
-                    del GRID2D_CACHE[cache_key]
-                    count += 1
+                with GRID2D_LOCK:
+                    if cache_key in GRID2D_CACHE:
+                        del GRID2D_CACHE[cache_key]
+                        count += 1
                 # Eliminar del índice
                 SESSION_CACHE_INDEX[session_id].discard(cache_key)
             except Exception as e:
@@ -312,23 +397,15 @@ def _cleanup_cache_entries(file_hashes: set[str], session_id: str | None = None)
         if not SESSION_CACHE_INDEX[session_id]:
             del SESSION_CACHE_INDEX[session_id]
     else:
-        # Sin session_id o sesión no encontrada: buscar por file_hash en todas las keys
-        # Esto es menos eficiente pero funciona para casos legacy
-        keys_to_delete = []
-        for cache_key in list(GRID2D_CACHE.keys()):
-            # Las cache keys contienen el file_hash hasheado en su contenido
-            # Como no podemos deshacer el hash, eliminamos todas las keys de esa sesión
-            # o si no hay sesión, no hacemos nada (para evitar borrar cache de otras sesiones)
-            if not session_id:
-                # Sin session_id: no limpiar para evitar afectar otras sesiones
-                break
-        
-        for key in keys_to_delete:
-            try:
-                del GRID2D_CACHE[key]
-                count += 1
-            except Exception:
-                pass
+        # session_id no encontrado en SESSION_CACHE_INDEX:
+        # - Si nunca se registró (bug de race condition, restart, etc.) no podemos
+        #   reconstruir qué keys le pertenecen porque la cache_key es un hash opaco.
+        # - Si no hay session_id, no limpiar para no afectar otras sesiones.
+        if session_id:
+            logger.warning(
+                f"Cleanup GRID2D_CACHE: sesión '{session_id}' no está en SESSION_CACHE_INDEX. "
+                f"Posibles entradas huérfanas en caché (se limpiarán por LRU)."
+            )
     
     if count > 0:
         print(f"Limpiadas {count} entradas de GRID2D_CACHE {'para sesión ' + session_id if session_id else 'globales'}")
@@ -396,18 +473,20 @@ def cleanup_w_operator_lock(cache_key: str) -> None:
             del _W_OPERATOR_LOCKS[cache_key]
 
 
-def _cleanup_empty_session_dirs(session_id: str) -> None:
+def _cleanup_empty_session_dirs(session_id: str, user_namespace: str | None = None) -> None:
     """
     Elimina carpetas de sesión si están vacías en UPLOAD_DIR y TMP_DIR.
-    
+
     Args:
         session_id: ID de sesión a limpiar
+        user_namespace: string formato '{user_id}/{session_id}' para UPLOAD_DIR
     """
-    dirs_to_check = [
-        UPLOAD_DIR / session_id,
-        TMP_DIR / session_id,
-    ]
-    
+    dirs_to_check = []
+    if user_namespace:
+        dirs_to_check.append(UPLOAD_DIR / user_namespace)
+    if session_id:
+        dirs_to_check.append(TMP_DIR / session_id)
+
     for session_dir in dirs_to_check:
         try:
             if not session_dir.exists():

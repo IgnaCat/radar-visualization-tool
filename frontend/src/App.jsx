@@ -10,14 +10,17 @@ import {
   generateAnimationGif,
   removeFiles,
   resolveApiUrl,
+  setAuthToken,
+  sendUserLocation,
 } from "./api/backend";
 import { registerCleanupAxios } from "./api/registerCleanupAxios";
 import stableStringify from "json-stable-stringify";
 import { useMapActions } from "./hooks/useMapActions";
 import { useDownloads } from "./hooks/useDownloads";
+import { useAuth } from "./contexts/AuthContext";
+import { useBackendHealth } from "./hooks/useBackendHealth";
+import { useSessionHeartbeat } from "./hooks/useSessionHeartbeat";
 import "./print.css";
-
-import { generateSessionId } from "./utils/session";
 import UploadButton from "./components/ui/UploadButton";
 import HeaderCard from "./components/ui/HeaderCard";
 import Alerts from "./components/ui/Alerts";
@@ -123,7 +126,9 @@ function buildComputeKey({
   });
 }
 
-export default function App() {
+export default function App({ sessionId }) {
+  const { isOnline } = useBackendHealth();
+
   const [overlayData, setOverlayData] = useState({
     outputs: [],
     animation: false,
@@ -136,6 +141,7 @@ export default function App() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0); // índice de la imagen activa
   const [loading, setLoading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [downloadLayersDialogOpen, setDownloadLayersDialogOpen] =
     useState(false);
@@ -180,8 +186,61 @@ export default function App() {
 
   const { enqueueSnackbar } = useSnackbar();
 
-  // Session ID único para esta pestaña/ventana del navegador
-  const [sessionId] = useState(() => generateSessionId());
+  // Auth
+  const { token, logout, isAdmin, user } = useAuth();
+  useSessionHeartbeat(sessionId, token);
+
+  // Sync Axios Bearer token whenever the JWT changes
+  useEffect(() => {
+    setAuthToken(token);
+  }, [token]);
+
+  // Handle token expiry (401 interceptor fires "auth:expired")
+  useEffect(() => {
+    const handleExpired = () => logout();
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
+  }, [logout]);
+
+  // Auto-request geolocation on login + watch for permission changes.
+  // If the user denies and later enables it in browser settings, onchange fires
+  // and we send the location automatically without requiring a new login.
+  useEffect(() => {
+    if (!token || !("geolocation" in navigator)) return;
+    let permStatus = null;
+    const requestLocation = () => {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          sendUserLocation(sessionId, coords.latitude, coords.longitude);
+        },
+        (err) => {
+          if (err.code === 1) {
+            // PERMISSION_DENIED — browser blocked the site, user must unblock manually
+            enqueueSnackbar(
+              "Ubicación bloqueada. Para activarla, habilitá el permiso en la configuración del navegador.",
+              { variant: "warning" },
+            );
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+      );
+    };
+    requestLocation();
+    if ("permissions" in navigator) {
+      navigator.permissions
+        .query({ name: "geolocation" })
+        .then((status) => {
+          permStatus = status;
+          status.onchange = () => {
+            if (status.state === "granted") requestLocation();
+          };
+        })
+        .catch(() => {});
+    }
+    return () => {
+      if (permStatus) permStatus.onchange = null;
+    };
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [pixelStatMode, setPixelStatMode] = useState(false);
   const [pixelStatMarker, setPixelStatMarker] = useState(null);
@@ -208,11 +267,11 @@ export default function App() {
   const [markerMode, setMarkerMode] = useState(false);
   const [markers, setMarkers] = useState([]);
   const [selectedBaseMap, setSelectedBaseMap] = useState({
-    id: "osm",
+    id: "argenmap",
     name: "Argenmap",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    url: "https://wms.ign.gob.ar/geoserver/gwc/service/tms/1.0.0/capabaseargenmap@EPSG%3A3857@png/{z}/{x}/{-y}.png",
     attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      '<a href="https://www.ign.gob.ar/AreaServicios/Argenmap/IntroduccionV2" target="_blank">Instituto Geográfico Nacional</a> + <a href="https://www.osm.org/copyright" target="_blank">OpenStreetMap</a>',
   });
   // Estado para paletas de colores personalizadas por campo
   const [selectedColormaps, setSelectedColormaps] = useState({});
@@ -226,12 +285,8 @@ export default function App() {
   const [splitScreenActive, setSplitScreenActive] = useState(false);
 
   // Hook para acciones del mapa (screenshot, print, fullscreen)
-  const {
-    isFullscreen,
-    handleScreenshot,
-    handlePrint,
-    handleFullscreen,
-  } = useMapActions();
+  const { isFullscreen, handleScreenshot, handlePrint, handleFullscreen } =
+    useMapActions();
 
   // Hook para gestión de descargas
   const { downloadFile, generateFilename } = useDownloads();
@@ -279,7 +334,8 @@ export default function App() {
           if (!Array.isArray(frame)) return null;
 
           const visibleLayers = frame.filter(
-            (layer) => !hiddenLayers.has(`${layer.field}::${layer.source_file}`),
+            (layer) =>
+              !hiddenLayers.has(`${layer.field}::${layer.source_file}`),
           );
 
           if (visibleLayers.length === 0) return null;
@@ -401,105 +457,123 @@ export default function App() {
     [currentOverlay, generateFilename, enqueueSnackbar],
   );
 
-  const handleDownloadGif = useCallback(async (options = {}) => {
-    if (visibleFramesForGif.length < 2) {
-      enqueueSnackbar("Se necesitan al menos 2 frames visibles para generar un GIF", {
-        variant: "warning",
-      });
-      return;
-    }
+  const handleDownloadGif = useCallback(
+    async (options = {}) => {
+      if (visibleFramesForGif.length < 2) {
+        enqueueSnackbar(
+          "Se necesitan al menos 2 frames visibles para generar un GIF",
+          {
+            variant: "warning",
+          },
+        );
+        return;
+      }
 
-    const {
-      includeBasemap = true,
-      showColorbar = false,
-      showMetadata = false,
-      showLogo = false,
-      fps = 1,
-    } = options;
+      const {
+        includeBasemap = true,
+        showColorbar = false,
+        showMetadata = false,
+        showLogo = false,
+        fps = 1,
+      } = options;
 
-    try {
-      enqueueSnackbar("Generando GIF animado...", { variant: "info" });
+      try {
+        enqueueSnackbar("Generando GIF animado...", { variant: "info" });
 
-      const gifFrames = visibleFramesForGif.map((frame) =>
-        frame.layers.map((layer) => layer.image_url).filter(Boolean),
-      );
+        const gifFrames = visibleFramesForGif.map((frame) =>
+          frame.layers.map((layer) => layer.image_url).filter(Boolean),
+        );
 
-      // Colorbar config: campo y colormap de la primera capa visible
-      const firstLayer = visibleFramesForGif[0]?.layers[0];
-      const colorbarConfig =
-        showColorbar && firstLayer?.field
-          ? {
-              field: firstLayer.field,
-              colormap: selectedColormaps[firstLayer.field] ?? null,
-            }
+        // Colorbar config: campo y colormap de la primera capa visible
+        const firstLayer = visibleFramesForGif[0]?.layers[0];
+        const colorbarConfig =
+          showColorbar && firstLayer?.field
+            ? {
+                field: firstLayer.field,
+                colormap: selectedColormaps[firstLayer.field] ?? null,
+              }
+            : null;
+
+        // Labels de metadata por frame
+        const frameLabels = showMetadata
+          ? visibleFramesForGif.map((frame, i) => {
+              const layers = frame.layers;
+              const timestamp = layers
+                .map((l) => l.timestamp)
+                .filter(Boolean)
+                .sort()[0];
+              const product = overlayData.product || "";
+              const radars = [
+                ...new Set(layers.map((l) => l.radar).filter(Boolean)),
+              ];
+              const strategies = new Set();
+              const volumes = new Set();
+              layers.forEach((l) => {
+                if (l.source_file) {
+                  const parts = l.source_file.split(/[\\/]/).pop().split("_");
+                  if (parts.length >= 4) {
+                    strategies.add(parts[1]);
+                    volumes.add(parts[2]);
+                  }
+                }
+              });
+              const parts = [product.toUpperCase()];
+              if (radars.length) parts.push(radars.join(", "));
+              if (strategies.size) parts.push([...strategies].join(", "));
+              if (volumes.size) parts.push(`Vol ${[...volumes].join(", ")}`);
+              if (timestamp) {
+                const d = new Date(
+                  new Date(timestamp).getTime() - 3 * 3600 * 1000,
+                );
+                const fmt = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+                parts.push(
+                  `${fmt} (Frame ${i + 1}/${visibleFramesForGif.length})`,
+                );
+              }
+              return parts.join(" | ");
+            })
           : null;
 
-      // Labels de metadata por frame
-      const frameLabels = showMetadata
-        ? visibleFramesForGif.map((frame, i) => {
-            const layers = frame.layers;
-            const timestamp = layers.map((l) => l.timestamp).filter(Boolean).sort()[0];
-            const product = overlayData.product || "";
-            const radars = [...new Set(layers.map((l) => l.radar).filter(Boolean))];
-            const strategies = new Set();
-            const volumes = new Set();
-            layers.forEach((l) => {
-              if (l.source_file) {
-                const parts = l.source_file.split(/[\\/]/).pop().split("_");
-                if (parts.length >= 4) {
-                  strategies.add(parts[1]);
-                  volumes.add(parts[2]);
-                }
-              }
-            });
-            const parts = [product.toUpperCase()];
-            if (radars.length) parts.push(radars.join(", "));
-            if (strategies.size) parts.push([...strategies].join(", "));
-            if (volumes.size) parts.push(`Vol ${[...volumes].join(", ")}`);
-            if (timestamp) {
-              const d = new Date(new Date(timestamp).getTime() - 3 * 3600 * 1000);
-              const fmt = `${String(d.getUTCDate()).padStart(2,"0")}/${String(d.getUTCMonth()+1).padStart(2,"0")}/${d.getUTCFullYear()} ${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`;
-              parts.push(`${fmt} (Frame ${i + 1}/${visibleFramesForGif.length})`);
-            }
-            return parts.join(" | ");
-          })
-        : null;
+        const response = await generateAnimationGif({
+          frames: gifFrames,
+          fps,
+          session_id: sessionId,
+          basemap_id: includeBasemap ? selectedBaseMap?.id : null,
+          show_logo: showLogo,
+          show_colorbar: showColorbar,
+          colorbar_config: colorbarConfig,
+          show_metadata: showMetadata,
+          frame_labels: frameLabels,
+        });
 
-      const response = await generateAnimationGif({
-        frames: gifFrames,
-        fps,
-        session_id: sessionId,
-        basemap_id: includeBasemap ? selectedBaseMap?.id : null,
-        show_logo: showLogo,
-        show_colorbar: showColorbar,
-        colorbar_config: colorbarConfig,
-        show_metadata: showMetadata,
-        frame_labels: frameLabels,
-      });
+        const gifPath = response.data?.gif_url;
+        if (!gifPath) throw new Error("El backend no devolvió la URL del GIF");
 
-      const gifPath = response.data?.gif_url;
-      if (!gifPath) throw new Error("El backend no devolvió la URL del GIF");
+        allCogsRef.current.add(gifPath);
+        const gifUrl = resolveApiUrl(gifPath);
+        const filename =
+          gifPath.split("/").pop() || generateFilename("animacion", ".gif");
+        await downloadFile(gifUrl, filename);
 
-      allCogsRef.current.add(gifPath);
-      const gifUrl = resolveApiUrl(gifPath);
-      const filename = gifPath.split("/").pop() || generateFilename("animacion", ".gif");
-      await downloadFile(gifUrl, filename);
-
-      enqueueSnackbar(`GIF descargado (${gifFrames.length} frames)`, { variant: "success" });
-    } catch (error) {
-      console.error("Error generando GIF:", error);
-      enqueueSnackbar("Error al generar el GIF", { variant: "error" });
-    }
-  }, [
-    downloadFile,
-    enqueueSnackbar,
-    generateFilename,
-    overlayData,
-    selectedBaseMap,
-    selectedColormaps,
-    sessionId,
-    visibleFramesForGif,
-  ]);
+        enqueueSnackbar(`GIF descargado (${gifFrames.length} frames)`, {
+          variant: "success",
+        });
+      } catch (error) {
+        console.error("Error generando GIF:", error);
+        enqueueSnackbar("Error al generar el GIF", { variant: "error" });
+      }
+    },
+    [
+      downloadFile,
+      enqueueSnackbar,
+      generateFilename,
+      overlayData,
+      selectedBaseMap,
+      selectedColormaps,
+      sessionId,
+      visibleFramesForGif,
+    ],
+  );
 
   // Configurar descargas disponibles para el toolbar
   const availableDownloads = useMemo(() => {
@@ -547,7 +621,10 @@ export default function App() {
   const handleFilesSelected = async (files) => {
     try {
       setLoading(true);
-      const uploadResp = await uploadFile(files, sessionId);
+      setUploadProgress(0);
+      const uploadResp = await uploadFile(files, sessionId, (e) => {
+        if (e.total) setUploadProgress(e.loaded / e.total);
+      });
       const warnings = uploadResp.data.warnings || [];
       const filesInfo = uploadResp.data.files || [];
       const filepaths = filesInfo.map((f) => f.filepath);
@@ -597,6 +674,7 @@ export default function App() {
       });
     } finally {
       setLoading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -1339,8 +1417,35 @@ export default function App() {
       id="app-container"
       style={{ height: "100vh", width: "100%", position: "relative" }}
     >
+      {/* Banner de backend offline */}
+      {!isOnline && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            zIndex: 9999,
+            background: "#b71c1c",
+            color: "#fff",
+            textAlign: "center",
+            padding: "10px 16px",
+            fontSize: "0.9rem",
+            fontWeight: 500,
+            letterSpacing: "0.02em",
+          }}
+        >
+          ⚠️ Backend desconectado — esperando que el servidor vuelva a estar disponible…
+        </div>
+      )}
+
       {/* Header común para ambas vistas */}
-      <HeaderCard onUploadClick={handleFileUpload} />
+      <HeaderCard
+        onUploadClick={handleFileUpload}
+        onLogout={logout}
+        isAdmin={isAdmin}
+        username={user?.username}
+      />
 
       {/* Contenedor de split screen que maneja uno o dos mapas */}
       <SplitScreenContainer
@@ -1437,7 +1542,7 @@ export default function App() {
           availableDownloads,
           drawnLayerRef,
           product,
-          loading,
+          loading: loading && uploadProgress === null,
         }}
         sharedProps={{
           uploadedFiles,
@@ -1481,8 +1586,10 @@ export default function App() {
         onConfirm={handleDownloadGif}
         frameCount={visibleFramesForGif.length}
         hasBasemap={!!selectedBaseMap}
-        hasColorbar={!!(visibleFramesForGif[0]?.layers[0]?.field)}
-        hasMetadata={visibleFramesForGif.some((f) => f.layers.some((l) => l.timestamp))}
+        hasColorbar={!!visibleFramesForGif[0]?.layers[0]?.field}
+        hasMetadata={visibleFramesForGif.some((f) =>
+          f.layers.some((l) => l.timestamp),
+        )}
       />
 
       <SettingsDialog
@@ -1506,7 +1613,7 @@ export default function App() {
         }}
       />
 
-      <Loader open={loading} />
+      <Loader open={loading} uploadProgress={uploadProgress} />
     </div>
   );
 }

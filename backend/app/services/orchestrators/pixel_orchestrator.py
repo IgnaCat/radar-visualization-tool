@@ -13,7 +13,7 @@ from rasterio.transform import array_bounds
 from rasterio.warp import reproject, Resampling
 
 from ...models import RadarPixelRequest, RadarPixelResponse
-from ...core.cache import GRID2D_CACHE
+from ...core.cache import GRID2D_CACHE, GRID2D_LOCK
 from ...core.config import settings
 from ...core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ...utils.helpers import extract_volume_from_filename
@@ -50,17 +50,19 @@ class PixelOrchestrator:
             raise ValueError("Coordenadas no WGS84 (use lat∈[-90,90], lon∈[-180,180])")
 
     @staticmethod
-    def get_filepath(payload: RadarPixelRequest) -> str:
+    def get_filepath(payload: RadarPixelRequest, user_id: str) -> str:
         """
         Construye el path completo del archivo desde el request.
+        Estructura: UPLOAD_DIR/{user_id}/{session_id}/{filepath}
+        Si no hay session_id cae en UPLOAD_DIR/{user_id}/{filepath}.
 
         Returns:
             Path absoluto al archivo de radar
         """
-        UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+        base = Path(settings.UPLOAD_DIR) / str(user_id)
         if payload.session_id:
-            UPLOAD_DIR = UPLOAD_DIR / payload.session_id
-        return str(UPLOAD_DIR / payload.filepath)
+            base = base / payload.session_id
+        return str(base / payload.filepath)
 
     @staticmethod
     def resolve_field_name(product: str, field: str) -> str:
@@ -106,13 +108,21 @@ class PixelOrchestrator:
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
 
-        # Generar signature de qc_filters para cache keys
-        qc_filters, _ = separate_filters(filters or [], field_to_use)
+        # Generar signature de filtros para cache keys
+        # Incluir QC + visuales, igual que radar_processor, porque ambos
+        # se aplican durante la interpolación y afectan la grilla cacheada.
+        qc_filters, visual_filters = separate_filters(filters or [], field_to_use)
         qc_sig = (
             tuple(sorted([(f.field, f.min, f.max) for f in qc_filters]))
             if qc_filters
             else tuple()
         )
+        visual_sig = (
+            tuple(sorted([(f.field, f.min, f.max) for f in visual_filters]))
+            if visual_filters
+            else tuple()
+        )
+        filter_sig = qc_sig + visual_sig
 
         cache_key = grid2d_cache_key(
             file_hash=file_hash,
@@ -122,7 +132,7 @@ class PixelOrchestrator:
             cappi_height=cappi_height if product_upper == "CAPPI" else None,
             volume=volume,
             interp=interp,
-            qc_sig=qc_sig,  # Incluir filtros QC en cache key
+            qc_sig=filter_sig,  # QC + visuales, misma firma que radar_processor
             max_neighbors=max_neighbors,
             session_id=session_id,
         )
@@ -369,7 +379,8 @@ class PixelOrchestrator:
             effective_zoom=zoom_key,
         )
         display_grids[zoom_key] = display_grid
-        GRID2D_CACHE[cache_key] = pkg
+        with GRID2D_LOCK:
+            GRID2D_CACHE[cache_key] = pkg
         return display_grid
 
     @staticmethod
@@ -603,12 +614,13 @@ class PixelOrchestrator:
         )
 
     @staticmethod
-    def process_pixel_request(payload: RadarPixelRequest) -> RadarPixelResponse:
+    def process_pixel_request(payload: RadarPixelRequest, user_id: str) -> RadarPixelResponse:
         """
         Método principal que orquesta la consulta de píxel.
 
         Args:
             payload: Request de consulta de píxel
+            user_id: ID del usuario autenticado (para localizar sus uploads)
 
         Returns:
             Response con valor del píxel (interpolado o nearest)
@@ -619,7 +631,7 @@ class PixelOrchestrator:
         # 1. Validar request
         PixelOrchestrator.validate_request(payload)
         # 2. Obtener filepath completo
-        filepath = PixelOrchestrator.get_filepath(payload)
+        filepath = PixelOrchestrator.get_filepath(payload, user_id)
 
         # 3. Resolver nombre del campo
         field = PixelOrchestrator.resolve_field_name(payload.product, payload.field)
@@ -642,7 +654,8 @@ class PixelOrchestrator:
         )
 
         # 5. Obtener datos del cache
-        pkg = GRID2D_CACHE.get(cache_key)
+        with GRID2D_LOCK:
+            pkg = GRID2D_CACHE.get(cache_key)
         if pkg is None:
             raise ValueError("No cacheado")
 

@@ -1,20 +1,32 @@
-import { cleanupClose } from "../api/backend";
+import { cleanupClose, getApiBaseUrl, getAuthToken } from "./backend";
 
 export function registerCleanupAxios(getPayload) {
-  const url = `http://localhost:8000/cleanup/close`;
-
   const handler = () => {
     try {
       const payload = getPayload?.();
       if (!payload) return;
 
-      // 1) Preferir sendBeacon (fiable en unload)
-      const blob = new Blob([JSON.stringify(payload)], {
-        type: "application/json",
-      });
-      if (navigator.sendBeacon && navigator.sendBeacon(url, blob)) return;
+      const baseUrl = getApiBaseUrl().replace(/\/+$/, "");
+      const url = `${baseUrl}/cleanup/close`;
+      const token = getAuthToken();
 
-      // 2) Fallback: axios (puede cortarse si el navegador cierra muy rápido)
+      // Prefer fetch con keepalive porque soporta headers (Auth)
+      if (typeof window !== "undefined" && window.fetch) {
+        const headers = { "Content-Type": "application/json" };
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+
+        fetch(url, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+          keepalive: true,
+        }).catch(() => {});
+        return;
+      }
+
+      // Fallback: axios (puede cortarse si el navegador cierra muy rápido)
       // No await: fire-and-forget
       cleanupClose(payload).catch(() => {});
     } catch {

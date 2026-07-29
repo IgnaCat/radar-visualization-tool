@@ -2,6 +2,7 @@ import numpy as np
 import pickle
 import logging
 import threading
+import time
 from pathlib import Path
 from cachetools import LRUCache
 from scipy.sparse import csr_matrix, save_npz, load_npz
@@ -37,10 +38,17 @@ def _nbytes_pkg(pkg) -> int:
     return n
 
 GRID2D_CACHE = LRUCache(maxsize=100 * 1024 * 1024, getsizeof=_nbytes_pkg)
+GRID2D_LOCK = threading.Lock()  # LRUCache no es thread-safe; proteger todo acceso
 
-# Índice secundario: session_id -> set de cache keys
-# Permite limpieza eficiente por sesión
+# Índice secundario: user_id (str) -> set de cache keys
+# Permite limpieza eficiente por usuario.
+# Nota: con autenticación activa, el key es str(user.id) en vez de session_id.
 SESSION_CACHE_INDEX: dict[str, set[str]] = {}
+
+# Último acceso por sesión (session_id -> timestamp UNIX).
+# Actualizado en cada request de procesamiento.
+# Usado por el cleanup de inactividad para liberar sesiones abandonadas.
+SESSION_LAST_ACTIVITY: dict[str, float] = {}
 
 # ---- Operador W  ----
 def _nbytes_w_operator(pkg) -> int:

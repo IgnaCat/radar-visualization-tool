@@ -22,14 +22,14 @@ import esritImg from "../../assets/esrit.webp";
 import bingImg from "../../assets/bing.webp";
 
 const baseMaps = [
-  {
-    id: "osm",
-    name: "Mapa Base",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    image: argenmapImg,
-  },
+  // {
+  //   id: "osm",
+  //   name: "Mapa Base",
+  //   url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  //   attribution:
+  //     '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+  //   image: argenmapImg,
+  // },
   {
     id: "argenmap",
     name: "Argenmap",
@@ -37,6 +37,14 @@ const baseMaps = [
     attribution:
       '<a href="https://www.ign.gob.ar/AreaServicios/Argenmap/IntroduccionV2" target="_blank">Instituto Geográfico Nacional</a> + <a href="https://www.osm.org/copyright" target="_blank">OpenStreetMap</a>',
     image: argenmapImg,
+  },
+  {
+    id: "mapbox-light-ar",
+    name: "Mapbox ARG",
+    url: `https://api.mapbox.com/styles/v1/ignacio-martinez-goloboff/cmot9wnbn000401s228lf3lmo/tiles/256/{z}/{x}/{y}?access_token=${import.meta.env.VITE_MAPBOX_TOKEN}`,
+    attribution:
+      '© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> © <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    image: argenmapImg, // o alguna imagen de mapbox
   },
   {
     id: "argenmap-gris",

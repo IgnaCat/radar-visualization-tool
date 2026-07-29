@@ -3,18 +3,23 @@ Router para generar perfiles de elevación topográficos.
 """
 
 from pathlib import Path
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.concurrency import run_in_threadpool
 
 from ..models import ElevationProfileRequest, ElevationProfileResponse
 from ..services.elevation_profile import extract_elevation_profile
 from ..core.config import settings
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
 
 @router.post("/elevation_profile", response_model=ElevationProfileResponse)
-async def get_elevation_profile(payload: ElevationProfileRequest):
+async def get_elevation_profile(
+    payload: ElevationProfileRequest,
+    _user: User = Depends(get_current_user),
+):
     """
     Genera un perfil de elevación a partir de una línea de coordenadas.
     Utiliza el DEM (Digital Elevation Model) de Argentina para extraer las elevaciones.

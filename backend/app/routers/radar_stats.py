@@ -1,14 +1,19 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from fastapi.concurrency import run_in_threadpool
 
 from ..models import RadarStatsRequest, RadarStatsResponse
 from ..services.orchestrators import StatsOrchestrator
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
 
 router = APIRouter(prefix="/stats", tags=["radar-stats"])
 
 
 @router.post("/area", response_model=RadarStatsResponse)
-async def radar_stats(payload: RadarStatsRequest):
+async def radar_stats(
+    payload: RadarStatsRequest,
+    _user: User = Depends(get_current_user),
+):
     """
     Calcula estadísticas del radar sobre un polígono (área seleccionada en el mapa),
     utilizando la grilla 2D cacheada (sin tocar disco).
@@ -17,7 +22,8 @@ async def radar_stats(payload: RadarStatsRequest):
         # Ejecutar en threadpool (bloqueante pero seguro)
         response = await run_in_threadpool(
             StatsOrchestrator.process_stats_request,
-            payload
+            payload,
+            str(_user.id),
         )
         return response
     except ValueError as e:

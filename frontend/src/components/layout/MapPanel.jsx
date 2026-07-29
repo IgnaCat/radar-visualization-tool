@@ -169,9 +169,13 @@ export default function MapPanel({
   onToggleLock,
   loading = false,
   onSettingsOpen,
+  hideFilesButton = false,
+  sessionId = null,
 }) {
   // Estado local para la instancia del mapa
   const [localMapInstance, setLocalMapInstance] = useState(null);
+  // Estado para la posición de geolocalización del usuario
+  const [userPosition, setUserPosition] = useState(null);
 
   const hasValidRhiLine =
     rhiLinePreview?.start &&
@@ -587,6 +591,8 @@ export default function MapPanel({
         onShapeUpdate={handleShapeUpdate}
         onShapeRemove={handleShapeRemove}
         onShapeModeDeactivate={handleDeactivateAnnotationMode}
+        userPosition={userPosition}
+        onDismissLocation={() => setUserPosition(null)}
       />
 
       <VerticalToolbar
@@ -605,6 +611,7 @@ export default function MapPanel({
         paletteSelectorActive={paletteSelectorOpen}
         layerManagerActive={layerManagerOpen}
         fileManagerActive={fileManagerOpen}
+        hideFilesButton={hideFilesButton}
       />
 
       <MapToolbar
@@ -676,7 +683,13 @@ export default function MapPanel({
         onRemoveFile={onRemoveFile}
       />
 
-      <ZoomControls map={localMapInstance} bottomOffset={46} />
+      <ZoomControls
+        map={localMapInstance}
+        bottomOffset={46}
+        sessionId={sessionId}
+        onLocationFound={setUserPosition}
+        locationActive={!!userPosition}
+      />
 
       <ColorLegend overlayData={overlayData} />
 

@@ -1,4 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, status, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, status, Form, Depends
+from fastapi.concurrency import run_in_threadpool
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from typing import Optional
@@ -9,6 +10,8 @@ from ..core.config import settings
 from ..utils import helpers
 from ..services.metadata import extract_radar_metadata
 from ..services.bufr_converter import convert_bufr_to_netcdf
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
 
 router = APIRouter(prefix="/upload", tags=["upload"])
 logger = logging.getLogger(__name__)
@@ -32,7 +35,11 @@ def _max_size_ok(size_bytes: int) -> bool:
 
 
 @router.post("", status_code=201)
-async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] = Form(None)):
+async def upload(
+    files: list[UploadFile] = File(...),
+    session_id: Optional[str] = Form(None),
+    current_user: User = Depends(get_current_user),
+):
     """
     Endpoint para subir múltiples archivos NetCDF o BUFR.
     Los archivos BUFR se convierten automáticamente a NetCDF antes de continuar.
@@ -43,8 +50,9 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
     if not files:
         raise HTTPException(status_code=400, detail="No se enviaron archivos.")
     
-    # Crear subdirectorio de sesión si se proporciona session_id
-    UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+    # Aislar por usuario Y por sesión: UPLOAD_DIR/{user_id}/{session_id}/
+    # Esto permite que dos sesiones del mismo usuario no interfieran entre sí.
+    UPLOAD_DIR = Path(settings.UPLOAD_DIR) / str(current_user.id)
     if session_id:
         UPLOAD_DIR = UPLOAD_DIR / session_id
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -74,7 +82,7 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
                 if _is_bufr(file.filename):
                     bufr_paths.append(target)
                 else:
-                    meta = extract_radar_metadata(str(target))
+                    meta = await run_in_threadpool(extract_radar_metadata, str(target))
                     radar, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
                     if volume is not None:
                         volumes.add(volume)
@@ -123,7 +131,7 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
                 bufr_paths.append(target)
             else:
                 # NetCDF — procesar inmediatamente
-                meta = extract_radar_metadata(str(target))
+                meta = await run_in_threadpool(extract_radar_metadata, str(target))
                 radar, _, volume, _ = helpers.extract_metadata_from_filename(str(target))
                 if volume is not None:
                     volumes.add(volume)
@@ -156,7 +164,7 @@ async def upload(files: list[UploadFile] = File(...), session_id: Optional[str] 
                 )
 
             for nc_path, vol_key in converted:
-                meta = extract_radar_metadata(str(nc_path))
+                meta = await run_in_threadpool(extract_radar_metadata, str(nc_path))
                 radar_name, _, volume, _ = helpers.extract_metadata_from_filename(str(nc_path))
                 if volume is not None:
                     volumes.add(volume)

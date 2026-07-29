@@ -18,15 +18,21 @@ from pathlib import Path
 try:
     import rasterio
     from rasterio.crs import CRS
-    # Verificar que PROJ funciona correctamente
-    _test_crs = CRS.from_epsg(3857)
+    from rasterio.warp import calculate_default_transform
+    # Verificar que rasterio + PROJ funcionan con CRS.from_dict (mismo
+    # flujo que warp_array_to_mercator tras el fix del conflicto PROJ DB)
+    _test_crs = CRS.from_dict({'proj': 'aeqd', 'lat_0': -31.0, 'lon_0': -64.0, 'datum': 'WGS84'})
+    calculate_default_transform(
+        _test_crs, 'EPSG:3857', 10, 10,
+        left=-65, bottom=-32, right=-63, top=-30
+    )
     PROJ_AVAILABLE = True
 except Exception:
     PROJ_AVAILABLE = False
 
 pytestmark = pytest.mark.skipif(
     not PROJ_AVAILABLE,
-    reason="PROJ/rasterio no configurados correctamente (conflicto de versiones PROJ DB)"
+    reason="PROJ/rasterio no configurados correctamente"
 )
 
 from app.services.radar_processing.warping import warp_array_to_mercator
@@ -127,21 +133,23 @@ class TestCOGGeneration:
                 assert src.width > 0
 
     def test_cog_alpha_channel(self, radar_vol01):
-        """Verifica que el canal alpha enmascara correctamente NaN."""
-        lat = float(radar_vol01.latitude['data'][0])
-        lon = float(radar_vol01.longitude['data'][0])
+        """Verifica que el canal alpha enmascara correctamente NaN.
 
-        # Datos con NaN (simulan zonas sin datos del radar)
-        ny, nx = 60, 60
-        data_2d = np.full((ny, nx), np.nan, dtype=np.float32)
-        # Solo un cuadrante tiene datos
-        data_2d[:30, :30] = np.random.uniform(0, 50, (30, 30))
+        Prueba directamente create_cog_from_warped_array con un array
+        que tiene NaN explícitos, sin pasar por warp (que puede rellenar
+        los NaN con nearest-neighbor).
+        """
+        from rasterio.crs import CRS
+        from affine import Affine
 
-        warped, transform, crs = warp_array_to_mercator(
-            data_2d, lat, lon,
-            x_limits=(-60000, 60000),
-            y_limits=(-60000, 60000)
-        )
+        # Array con mezcla de datos válidos y NaN
+        ny, nx = 80, 80
+        data = np.full((ny, nx), np.nan, dtype=np.float32)
+        data[:40, :] = np.random.uniform(0, 50, (40, nx))  # mitad superior con datos
+
+        # Transform y CRS arbitrarios (solo importa que el COG se escriba bien)
+        transform = Affine(100, 0, 0, 0, -100, 8000)
+        crs = CRS.from_epsg(3857)
 
         cmap, vmin, vmax, _ = colormap_for("DBZH")
 
@@ -149,7 +157,7 @@ class TestCOGGeneration:
             output_path = Path(tmpdir) / "alpha_test.tif"
 
             create_cog_from_warped_array(
-                data_warped=warped,
+                data_warped=data,
                 output_path=output_path,
                 transform=transform,
                 crs=crs,
@@ -160,7 +168,7 @@ class TestCOGGeneration:
 
             with rasterio.open(output_path) as src:
                 alpha = src.read(4)  # Banda 4 = alpha
-                # Debe haber pixels transparentes (alpha=0) y opacos (alpha=255)
+                # Debe haber pixels transparentes (NaN → alpha=0) y opacos (datos → alpha=255)
                 assert np.any(alpha == 0), "No hay pixels transparentes"
                 assert np.any(alpha == 255), "No hay pixels opacos"
 

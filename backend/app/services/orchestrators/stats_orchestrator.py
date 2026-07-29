@@ -13,7 +13,7 @@ from shapely.ops import transform as shp_transform
 from rasterio.features import geometry_mask
 
 from ...models import RadarStatsRequest, RadarStatsResponse
-from ...core.cache import GRID2D_CACHE
+from ...core.cache import GRID2D_CACHE, GRID2D_LOCK, NETCDF_READ_LOCK
 from ...core.config import settings
 from ...core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ...utils.helpers import extract_metadata_from_filename
@@ -48,17 +48,19 @@ class StatsOrchestrator:
             raise ValueError("El campo 'filepath' es obligatorio.")
 
     @staticmethod
-    def get_filepath(payload: RadarStatsRequest) -> str:
+    def get_filepath(payload: RadarStatsRequest, user_id: str) -> str:
         """
         Construye el path completo del archivo desde el request.
+        Estructura: UPLOAD_DIR/{user_id}/{session_id}/{filepath}
+        Si no hay session_id cae en UPLOAD_DIR/{user_id}/{filepath}.
 
         Returns:
             Path absoluto al archivo de radar
         """
-        UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+        base = Path(settings.UPLOAD_DIR) / str(user_id)
         if payload.session_id:
-            UPLOAD_DIR = UPLOAD_DIR / payload.session_id
-        return str(UPLOAD_DIR / payload.filepath)
+            base = base / payload.session_id
+        return str(base / payload.filepath)
 
     @staticmethod
     def resolve_field_name(product: str, field: str) -> str:
@@ -104,13 +106,21 @@ class StatsOrchestrator:
         # Hash del archivo
         file_hash = md5_file(filepath)[:12]
 
-        # Generar signature de qc_filters para cache key
-        qc_filters, _ = separate_filters(filters or [], field_to_use)
+        # Generar signature de filtros para cache keys
+        # Incluir QC + visuales, igual que radar_processor, porque ambos
+        # se aplican durante la interpolación y afectan la grilla cacheada.
+        qc_filters, visual_filters = separate_filters(filters or [], field_to_use)
         qc_sig = (
             tuple(sorted([(f.field, f.min, f.max) for f in qc_filters]))
             if qc_filters
             else tuple()
         )
+        visual_sig = (
+            tuple(sorted([(f.field, f.min, f.max) for f in visual_filters]))
+            if visual_filters
+            else tuple()
+        )
+        filter_sig = qc_sig + visual_sig
 
         cache_key = grid2d_cache_key(
             file_hash=file_hash,
@@ -120,7 +130,7 @@ class StatsOrchestrator:
             cappi_height=cappi_height if product_upper == "CAPPI" else None,
             volume=volume,
             interp=interp,
-            qc_sig=qc_sig,  # Incluir filtros QC en cache key
+            qc_sig=filter_sig,  # QC + visuales, misma firma que radar_processor
             max_neighbors=max_neighbors,
             session_id=session_id,
         )
@@ -240,7 +250,8 @@ class StatsOrchestrator:
         Returns:
             Dict con stats, noCoverage y reason
         """
-        pkg = GRID2D_CACHE.get(cache_key)
+        with GRID2D_LOCK:
+            pkg = GRID2D_CACHE.get(cache_key)
         if pkg is None:
             return {"noCoverage": True, "reason": "No cacheado"}
 
@@ -323,8 +334,9 @@ class StatsOrchestrator:
         Returns:
             Dict con stats, noCoverage y reason
         """
-        # Leer radar desde disco
-        radar = pyart.io.read(filepath)
+        # Leer radar desde disco (con lock para ser thread-safe con HDF5)
+        with NETCDF_READ_LOCK:
+            radar = pyart.io.read(filepath, delay_field_loading=False)
 
         # Generar hash del archivo
         file_hash = md5_file(filepath)[:12]
@@ -387,12 +399,13 @@ class StatsOrchestrator:
         }
 
     @staticmethod
-    def process_stats_request(payload: RadarStatsRequest) -> RadarStatsResponse:
+    def process_stats_request(payload: RadarStatsRequest, user_id: str) -> RadarStatsResponse:
         """
         Método principal que orquesta el cálculo de estadísticas.
 
         Args:
             payload: Request de estadísticas
+            user_id: ID del usuario autenticado (para localizar sus uploads)
 
         Returns:
             Response con estadísticas calculadas
@@ -404,7 +417,7 @@ class StatsOrchestrator:
         StatsOrchestrator.validate_request(payload)
 
         # 2. Obtener filepath completo
-        filepath = StatsOrchestrator.get_filepath(payload)
+        filepath = StatsOrchestrator.get_filepath(payload, user_id)
 
         # 3. Resolver nombre del campo
         field = StatsOrchestrator.resolve_field_name(payload.product, payload.field)

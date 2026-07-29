@@ -117,7 +117,8 @@ class TestValidateRequest:
 class TestFilterByVolumes:
     """
     Filtra archivos por volúmenes seleccionados.
-    Regla especial: volumen 03 + PPI es inválido.
+    Nota: volumen 03 (bird bath) ahora es válido para todos los productos
+    gracias al soporte de collapse_ppi con elevación >80°.
     """
 
     def test_filtra_por_volumen(self):
@@ -134,17 +135,16 @@ class TestFilterByVolumes:
         assert "RMA1_0315_01_20250819T001715Z.nc" in filtered
         assert "RMA1_0315_02_20250819T001715Z.nc" in filtered
 
-    def test_volumen_03_ppi_se_omite(self):
-        """Volumen 03 con producto PPI genera warning y se omite."""
+    def test_volumen_03_ppi_ahora_pasa(self):
+        """Volumen 03 con PPI ahora es válido (bird bath soportado)."""
         filepaths = ["RMA1_0315_03_20250819T001715Z.nc"]
         filtered, warnings = ProcessingOrchestrator.filter_by_volumes(
             filepaths, ["03"], "PPI"
         )
-        assert len(filtered) == 0
-        assert any("03" in w and "PPI" in w for w in warnings)
+        assert len(filtered) == 1
 
-    def test_volumen_03_cappi_si_pasa(self):
-        """Volumen 03 con CAPPI sí pasa (restricción solo para PPI)."""
+    def test_volumen_03_cappi_pasa(self):
+        """Volumen 03 con CAPPI pasa normalmente."""
         filepaths = ["RMA1_0315_03_20250819T001715Z.nc"]
         filtered, warnings = ProcessingOrchestrator.filter_by_volumes(
             filepaths, ["03"], "CAPPI"

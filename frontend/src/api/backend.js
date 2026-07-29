@@ -63,13 +63,47 @@ const api = axios.create({
   baseURL: getApiBaseUrl(),
 });
 
-export const uploadFile = async (files, session_id = null) => {
+export default api;
+
+// ── Auth token management ─────────────────────────────────────────────────────
+// Call setAuthToken(token) after login to attach Bearer header to all requests.
+let _authToken = null;
+
+export function setAuthToken(token) {
+  _authToken = token;
+}
+
+export function getAuthToken() {
+  return _authToken;
+}
+
+api.interceptors.request.use((config) => {
+  if (_authToken) {
+    config.headers.Authorization = `Bearer ${_authToken}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid — notify app to redirect to login
+      window.dispatchEvent(new CustomEvent("auth:expired"));
+    }
+    return Promise.reject(error);
+  },
+);
+
+export const uploadFile = async (files, session_id = null, onUploadProgress = null) => {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
   if (session_id) {
     formData.append("session_id", session_id);
   }
-  return api.post("/upload", formData);
+  return api.post("/upload", formData, {
+    ...(onUploadProgress && { onUploadProgress }),
+  });
 };
 
 export const processFile = async ({
@@ -314,4 +348,20 @@ export async function removeFiles(filepaths, sessionId = null) {
     filepaths,
     ...(sessionId && { session_id: sessionId }),
   });
+}
+
+/**
+ * Send browser geolocation to backend for access log enrichment.
+ * Fire-and-forget — errors are logged but don't affect UI.
+ */
+export async function sendUserLocation(sessionId, latitude, longitude) {
+  try {
+    await api.post("/location", {
+      session_id: sessionId,
+      latitude,
+      longitude,
+    });
+  } catch (err) {
+    console.warn("Failed to send user location:", err);
+  }
 }

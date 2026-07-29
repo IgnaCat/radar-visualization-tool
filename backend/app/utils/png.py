@@ -61,7 +61,7 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
     # radar.fields[field_used]['data'] = np.ma.masked_invalid(radar.fields[field_used]['data'])
     # radar.fields[field_used]['data'] = np.ma.masked_less(radar.fields[field_used]['data'], vmin)
 
-    if field_used == 'ppi':
+    if product.lower() == 'ppi':
         display.plot_ppi_map(field_used,
                         sweep=elevation,
                         vmin=vmin,
@@ -72,6 +72,9 @@ def create_png(radar, product, output_dir, field_used, filters=[], elevation=0, 
                         cmap=cmap,
                         gatefilter=gf)
     else:
+        # Nota: RadarMapDisplay.plot_ppi_map solo dibuja un sweep crudo. 
+        # Para CAPPI/COLMAX estrictamente deberías usar los datos grideados 2D
+        # Por ahora graficamos el sweep base (0) como fallback
         display.plot_ppi_map(field_used,
                         vmin=vmin,
                         vmax=vmax,

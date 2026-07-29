@@ -266,14 +266,16 @@ class TestCalculateZLimits:
         )
         assert elev == 1.5
 
-    def test_z_max_crece_con_elevacion(self):
-        """Mayor elevación → z_max más alto."""
+    def test_z_max_es_toa_constante(self):
+        """z_max siempre es TOA (25000m), independiente de la elevación."""
+        from app.core.constants import TOA
         angles = np.array([0.5, 2.0, 5.0, 10.0])
         _, z_max_low, _ = calculate_z_limits(240_000, elevation=0,
                                              radar_fixed_angles=angles)
         _, z_max_high, _ = calculate_z_limits(240_000, elevation=3,
                                               radar_fixed_angles=angles)
-        assert z_max_high > z_max_low
+        assert z_max_low == TOA
+        assert z_max_high == TOA
 
     def test_sin_fixed_angles_lanza_error(self):
         """Sin radar_fixed_angles, lanza ValueError."""

@@ -1,8 +1,16 @@
+import asyncio
+import faulthandler
 import os
 import sys
 import logging
+from logging.handlers import RotatingFileHandler
 import importlib.util
 from pathlib import Path
+
+# Dump C-level stack trace to stderr on SIGSEGV/SIGFPE/SIGABRT.
+# This survives crashes in native extensions (GDAL, HDF5, libdecbufr, etc.)
+# and prints *before* the process dies, so Docker logs capture it.
+faulthandler.enable()
 
 # Fix PROJ database version conflict: osgeo ships an older proj.db (minor=3)
 # but rasterio/pyproj expect minor>=4. Must be set before osgeo/rasterio import
@@ -16,50 +24,73 @@ for _pkg, _rel in [("pyproj", "proj_dir/share/proj"), ("rasterio", "proj_data")]
             os.environ["PROJ_LIB"] = str(_proj_data)
             break
 
-from fastapi import FastAPI
+from datetime import datetime, timezone, timedelta
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from titiler.core.factory import TilerFactory
 from fastapi.responses import HTMLResponse
 
 from .core.config import settings
-from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin
+from .core.middleware import CustomAccessLogMiddleware
+from .routers import process, upload, cleanup, pseudo_rhi, radar_stats, radar_pixel, elevation_profile, colormap, admin, auth, admin_users, location
+
+# Forzar zona horaria Argentina (UTC-3) para todos los logs
+logging.Formatter.converter = lambda *args: datetime.now(timezone(timedelta(hours=-3))).timetuple()
 
 # Logging configuration
+LOG_FORMAT = "%(asctime)s  %(levelname)-8s  [%(name)s]  %(message)s"
+LOG_DATEFMT = "%Y-%m-%d %H:%M:%S"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  [%(name)s]  %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
+    format=LOG_FORMAT,
+    datefmt=LOG_DATEFMT,
     stream=sys.stdout,       # stdout is captured by Docker logs
     force=True,              # override any prior basicConfig
 )
 
-# Filter to exclude /health endpoint from access logs
-class HealthCheckFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        return "/health" not in record.getMessage()
+# Also write logs to a rotating file for the /admin/logs endpoint
+_log_dir = Path(settings.LOG_DIR)
+_log_dir.mkdir(parents=True, exist_ok=True)
+_file_handler = RotatingFileHandler(
+    _log_dir / "backend.log",
+    maxBytes=10 * 1024 * 1024,  # 10 MB per file
+    backupCount=3,
+    encoding="utf-8",
+)
+_file_handler.setLevel(logging.INFO)
+_file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=LOG_DATEFMT))
+_file_handler.formatter.converter = lambda *args: datetime.now(timezone(timedelta(hours=-3))).timetuple()
+logging.getLogger().addHandler(_file_handler)
 
 # Reduce noise from chatty libraries
 logging.getLogger("rasterio").setLevel(logging.WARNING)
 logging.getLogger("blib2to3").setLevel(logging.WARNING)
+
+# Disable Uvicorn default access log to use our custom middleware instead
 uvicorn_logger = logging.getLogger("uvicorn.access")
-uvicorn_logger.setLevel(logging.INFO)
-uvicorn_logger.addFilter(HealthCheckFilter())
+uvicorn_logger.disabled = True
 
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title=settings.APP_NAME)
 
 # GDAL/Rasterio optimizations for COG tile serving
-os.environ.setdefault("GDAL_CACHEMAX", "512")  # 512 MB cache for better tile performance
-os.environ.setdefault("GDAL_NUM_THREADS", "ALL_CPUS")
-os.environ.setdefault("VSI_CACHE", "TRUE")
-os.environ.setdefault("VSI_CACHE_SIZE", "262144000")  # 250 MB
-os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")
-os.environ.setdefault("GDAL_MAX_DATASET_POOL_SIZE", "450")
-os.environ.setdefault("GDAL_FORCE_CACHING", "YES")
-os.environ.setdefault("PROJ_NETWORK", "OFF")
+# NOTE: these are fallback defaults for running without Docker.
+# In Docker, environment variables from docker-compose.yml take precedence
+# (setdefault won't overwrite existing env vars).
+# Keep values in sync with docker-compose.yml.
+os.environ.setdefault("GDAL_CACHEMAX", "512")           # 512 MB raster block cache
+os.environ.setdefault("GDAL_NUM_THREADS", "ALL_CPUS")   # parallel TIFF decompression
+os.environ.setdefault("VSI_CACHE", "TRUE")               # VSI file block caching
+os.environ.setdefault("VSI_CACHE_SIZE", "262144000")     # 250 MB VSI cache
+os.environ.setdefault("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR")  # skip dir listing on open
+os.environ.setdefault("GDAL_MAX_DATASET_POOL_SIZE", "450")  # max open datasets
+os.environ.setdefault("GDAL_FORCE_CACHING", "NO")       # NO for local files (YES only for S3/HTTP)
+os.environ.setdefault("PROJ_NETWORK", "OFF")             # no network CRS lookups
 
+app.add_middleware(CustomAccessLogMiddleware)
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -93,6 +124,32 @@ app.include_router(radar_pixel.router)
 app.include_router(elevation_profile.router)
 app.include_router(colormap.router)
 app.include_router(admin.router)
+app.include_router(auth.router)
+app.include_router(admin_users.router)
+app.include_router(location.router)
+
+
+@app.on_event("startup")
+async def on_startup():
+    """Initialize database, seed admin user, clean stale files, and start background tasks."""
+    from .core.database import init_db
+    from .core.migrations import run_migrations
+    from .services.seed import seed_admin
+    from .services.stale_cleanup import cleanup_stale_files
+    from .services.inactivity_cleanup import inactivity_cleanup_loop, deactivate_all_sessions
+
+    init_db()
+    run_migrations()
+    seed_admin()
+    cleanup_stale_files()
+
+    count = deactivate_all_sessions()
+    if count:
+        logger.info("startup: %d sesión(es) previa(s) marcadas inactivas", count)
+
+    # Background task: libera RAM de sesiones abandonadas (tab cerrada sin logout)
+    asyncio.create_task(inactivity_cleanup_loop())
+
 
 @app.get("/health")
 def health():

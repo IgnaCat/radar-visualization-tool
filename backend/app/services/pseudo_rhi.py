@@ -17,6 +17,7 @@ from ..core.constants import (
     DEFAULT_WEIGHT_FUNC,
     DEFAULT_MAX_NEIGHBORS,
 )
+from ..core.cache import NETCDF_READ_LOCK
 from ..core.config import settings
 
 from ..models import RangeFilter
@@ -371,7 +372,8 @@ def generate_pseudo_rhi_png(
         return {"image_url": f"{settings.BASE_URL}/{relative_url}", "metadata": None}
 
     os.makedirs(output_dir, exist_ok=True)
-    radar = pyart.io.read(filepath)
+    with NETCDF_READ_LOCK:
+        radar = pyart.io.read(filepath, delay_field_loading=False)
     # radar = radar.extract_sweeps([elevation]) if elevation < radar.nsweeps else radar.extract_sweeps([0])
 
     field_name, field_key = resolve_field(radar, field)

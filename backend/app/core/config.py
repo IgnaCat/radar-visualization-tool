@@ -18,6 +18,16 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: List[str] = [".nc", ".BUFR", ".bufr"]
     MAX_UPLOAD_MB: int = 500
 
+    # Auth & database
+    JWT_SECRET: str = "CHANGE-ME-IN-PRODUCTION"
+    JWT_ALGORITHM: str = "HS256"
+    # Token expiration time (hours)
+    JWT_EXPIRE_HOURS: int = 2
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin"
+    DB_DIR: str = os.path.join(os.getcwd(), "app/storage/db")
+    LOG_DIR: str = os.path.join(os.getcwd(), "app/storage/logs")
+
     class Config:
         env_file = ".env"
 

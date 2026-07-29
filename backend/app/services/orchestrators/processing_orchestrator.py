@@ -26,6 +26,7 @@ from ...core.constants import (
 )
 from .. import radar_processor
 from ...utils import helpers
+from ...core.cancellation import raise_if_cancelled, CancelledException
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +72,14 @@ class ProcessingOrchestrator:
         return warnings
 
     @staticmethod
-    def get_upload_directory(session_id: Optional[str] = None) -> Path:
+    def get_upload_directory(user_id: str, session_id: Optional[str] = None) -> Path:
         """
-        Determina el directorio de uploads según session_id.
+        Determina el directorio de uploads según user_id + session_id.
+        Estructura: UPLOAD_DIR/{user_id}/{session_id}/
+        Si no hay session_id, cae en UPLOAD_DIR/{user_id}/ (compatibilidad).
         Crea el directorio si no existe.
         """
-        upload_dir = Path(settings.UPLOAD_DIR)
+        upload_dir = Path(settings.UPLOAD_DIR) / str(user_id)
         if session_id:
             upload_dir = upload_dir / session_id
         os.makedirs(upload_dir, exist_ok=True)
@@ -253,6 +256,8 @@ class ProcessingOrchestrator:
             item_fields = set()
 
             for field_idx, field in enumerate(fields):
+                # Cortar entre campos si el cliente se desconectó
+                raise_if_cancelled(session_id)
                 try:
                     field_filters = (filters_per_field or {}).get(field, filters)
                     result_dict = radar_processor.process_radar_to_cog(
@@ -321,6 +326,9 @@ class ProcessingOrchestrator:
                     for w_radar, msg in item_warnings:
                         warnings_by_radar.setdefault(w_radar, []).append(msg)
 
+                except CancelledException:
+                    # No swallowear: propagar para que el router libere el semáforo
+                    raise
                 except Exception as e:
                     logger.error(f"Error procesando future: {e}", exc_info=True)
 
@@ -403,15 +411,17 @@ class ProcessingOrchestrator:
         return radar_results, all_warnings
 
     @staticmethod
-    def process_radar_files(payload: ProcessRequest) -> ProcessResponse:
+    def process_radar_files(payload: ProcessRequest, user_id: str) -> ProcessResponse:
         """
         Método principal que orquesta todo el procesamiento.
+        user_id: ID del usuario autenticado (para localizar sus archivos subidos).
+        El session_id de payload se usa para sub-aislar dentro del usuario.
         """
         # 1. Validar request
         warnings = ProcessingOrchestrator.validate_request(payload)
 
-        # 2. Obtener directorio de uploads
-        upload_dir = ProcessingOrchestrator.get_upload_directory(payload.session_id)
+        # 2. Obtener directorio de uploads: UPLOAD_DIR/{user_id}/{session_id}/
+        upload_dir = ProcessingOrchestrator.get_upload_directory(user_id, payload.session_id)
 
         # 3. Verificar que archivos existan
         ProcessingOrchestrator.verify_files_exist(payload.filepaths, upload_dir)

@@ -41,6 +41,7 @@ export default function VerticalToolbar({
   paletteSelectorActive = false,
   layerManagerActive = false,
   fileManagerActive = false,
+  hideFilesButton = false,
 }) {
   const tools = [
     {
@@ -60,6 +61,7 @@ export default function VerticalToolbar({
       tooltip: "Archivos cargados",
       action: onFileManagerToggle,
       active: fileManagerActive,
+      hidden: hideFilesButton,
     },
     {
       icon: <MapIcon />,
@@ -118,80 +120,86 @@ export default function VerticalToolbar({
         padding: "8px 0",
       }}
     >
-      {tools.map((tool, index) => (
-        <Box key={index}>
-          <Tooltip
-            title={
-              tool.mode && tool.active ? `${tool.tooltip} activo` : tool.tooltip
-            }
-            placement="right"
-          >
-            <IconButton
-              onClick={tool.action}
-              aria-pressed={tool.active}
-              sx={{
-                width: 30,
-                height: 30,
-                borderRadius: "8px",
-                margin: "2px 7px",
-                color: "#fff",
-                position: "relative",
-                overflow: "visible",
-                backgroundColor:
-                  tool.mode && tool.active
-                    ? "rgba(111, 191, 235, 1)"
-                    : tool.active
-                      ? "rgba(74, 144, 226, 1)"
-                      : "rgba(74, 144, 226, 0.85)",
-                boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
-                transition: "all 0.25s ease",
-                animation:
-                  tool.mode && tool.active
-                    ? `${activeModePulse} 2.2s ease-in-out infinite`
-                    : "none",
-                "&::after":
-                  tool.mode && tool.active
-                    ? {
-                        content: '""',
-                        position: "absolute",
-                        top: -3,
-                        right: -3,
-                        width: 8,
-                        height: 8,
-                        borderRadius: "50%",
-                        backgroundColor: "#dff7ff",
-                        boxShadow: "0 0 0 2px rgba(50, 106, 164, 0.7)",
-                      }
-                    : undefined,
-                "& .MuiSvgIcon-root": {
-                  fontSize: "1.25rem", // Mantiene el tamaño del icono
-                },
-                "&:hover": {
+      {tools.map((tool, index) => {
+        if (tool.hidden) return null;
+
+        return (
+          <Box key={index}>
+            <Tooltip
+              title={
+                tool.mode && tool.active
+                  ? `${tool.tooltip} activo`
+                  : tool.tooltip
+              }
+              placement="right"
+            >
+              <IconButton
+                onClick={tool.action}
+                aria-pressed={tool.active}
+                sx={{
+                  width: 30,
+                  height: 30,
+                  borderRadius: "8px",
+                  margin: "2px 7px",
+                  color: "#fff",
+                  position: "relative",
+                  overflow: "visible",
                   backgroundColor:
                     tool.mode && tool.active
-                      ? "rgba(126, 211, 255, 1)"
-                      : "rgba(74, 144, 226, 1)",
-                  boxShadow: "0 3px 8px rgba(0,0,0,0.3)",
-                  transform:
-                    tool.mode && tool.active ? "scale(1.05)" : "scale(1.02)",
-                },
-              }}
-            >
-              {tool.icon}
-            </IconButton>
-          </Tooltip>
-          {/* Divider opcional después del 4to elemento (después de paletas) */}
-          {index === 4 && (
-            <Box
-              sx={{
-                height: "1px",
-                backgroundColor: "rgba(255, 255, 255, 0.2)",
-                margin: "4px 12px",
-              }}
-            />
-          )}
-        </Box>
-      ))}
+                      ? "rgba(111, 191, 235, 1)"
+                      : tool.active
+                        ? "rgba(74, 144, 226, 1)"
+                        : "rgba(74, 144, 226, 0.85)",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
+                  transition: "all 0.25s ease",
+                  animation:
+                    tool.mode && tool.active
+                      ? `${activeModePulse} 2.2s ease-in-out infinite`
+                      : "none",
+                  "&::after":
+                    tool.mode && tool.active
+                      ? {
+                          content: '""',
+                          position: "absolute",
+                          top: -3,
+                          right: -3,
+                          width: 8,
+                          height: 8,
+                          borderRadius: "50%",
+                          backgroundColor: "#dff7ff",
+                          boxShadow: "0 0 0 2px rgba(50, 106, 164, 0.7)",
+                        }
+                      : undefined,
+                  "& .MuiSvgIcon-root": {
+                    fontSize: "1.25rem", // Mantiene el tamaño del icono
+                  },
+                  "&:hover": {
+                    backgroundColor:
+                      tool.mode && tool.active
+                        ? "rgba(126, 211, 255, 1)"
+                        : "rgba(74, 144, 226, 1)",
+                    boxShadow: "0 3px 8px rgba(0,0,0,0.3)",
+                    transform:
+                      tool.mode && tool.active ? "scale(1.05)" : "scale(1.02)",
+                  },
+                }}
+              >
+                {tool.icon}
+              </IconButton>
+            </Tooltip>
+            {/* Divider opcional después del 4to elemento (después de paletas) */}
+            {index === 4 && (
+              <Box
+                sx={{
+                  height: "1px",
+                  backgroundColor: "rgba(255, 255, 255, 0.2)",
+                  margin: "4px 12px",
+                }}
+              />
+            )}
+          </Box>
+        );
+      })}
     </Paper>
   );
 }

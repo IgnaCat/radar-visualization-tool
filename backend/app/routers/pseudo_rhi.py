@@ -1,19 +1,25 @@
 import os
 from pathlib import Path
 from typing import List
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from fastapi.concurrency import run_in_threadpool
 from ..models import PseudoRHIRequest, PseudoRHIResponse, RangeFilter
 from ..services.pseudo_rhi import generate_pseudo_rhi_png
 from ..core.config import settings
+from ..core.concurrency import acquire_processing_slot, release_processing_slot
 from ..core.constants import DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 from ..utils import helpers
+from ..dependencies.auth import get_current_user
+from ..models.db.user import User
 
 router = APIRouter(prefix="/process", tags=["process"])
 
 
 @router.post("/pseudo_rhi", response_model=List[PseudoRHIResponse])
-async def pseudo_rhi(payload: PseudoRHIRequest):
+async def pseudo_rhi(
+    payload: PseudoRHIRequest,
+    current_user: User = Depends(get_current_user),
+):
     """
     Generate a pseudo RHI images.
     """
@@ -81,8 +87,8 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
             detail="El ángulo de elevación debe estar entre 0 y 12.",
         )
 
-    # Determinar directorio de uploads según session_id
-    UPLOAD_DIR = Path(settings.UPLOAD_DIR)
+    # Directorio de uploads: UPLOAD_DIR/{user_id}/{session_id}/
+    UPLOAD_DIR = Path(settings.UPLOAD_DIR) / str(current_user.id)
     if payload.session_id:
         UPLOAD_DIR = UPLOAD_DIR / payload.session_id
     os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -95,7 +101,8 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
                 detail=f"Archivo no encontrado: {file}",
             )
 
-    # Procesar y generar PNG
+    # Procesar y generar PNG (con control de concurrencia)
+    await acquire_processing_slot()
     try:
         # Limpieza de temporales (en threadpool para no bloquear)
         await run_in_threadpool(helpers.cleanup_tmp)
@@ -150,3 +157,5 @@ async def pseudo_rhi(payload: PseudoRHIRequest):
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error pseudo RHI: {e}",
         )
+    finally:
+        release_processing_slot()
