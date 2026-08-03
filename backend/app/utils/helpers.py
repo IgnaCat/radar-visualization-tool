@@ -23,7 +23,7 @@ def extract_metadata_from_filename(filename):
     RMA1_0303_01_20221209T230832Z.nc
     """
     base = os.path.basename(filename)
-    match = re.match(r"(RMA\d+)_(\d+)_(\d+)_(\d{8}T\d{6})Z", base)
+    match = re.match(r"(\w+?)_(\d+)_(\d+)_(\d{8}T\d{6})Z", base)
     
     if not match:
         return None, None, None, None
