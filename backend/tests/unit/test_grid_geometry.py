@@ -26,6 +26,7 @@ Qué testea este archivo:
 import pytest
 import math
 import numpy as np
+from unittest.mock import MagicMock
 from app.services.radar_processing.grid_geometry import (
     beam_height_max_km,
     compute_beam_height,
@@ -33,6 +34,8 @@ from app.services.radar_processing.grid_geometry import (
     calculate_grid_resolution,
     calculate_grid_points,
     calculate_roi_dist_beam,
+    infer_blind_range_m,
+    infer_last_gate_range_m,
 )
 
 
@@ -349,3 +352,54 @@ class TestCalculateROIDistBeam:
         )
         
         assert roi_vol03 > roi_vol01, "Vol 03 debería tener ROI mucho mayor que vol 01"
+
+
+# ═══════════════════════════════════════════════════════════════════
+# infer_blind_range_m
+# ═══════════════════════════════════════════════════════════════════
+
+class TestInferBlindRangeM:
+    def _mock_radar(self, first_gate_m):
+        radar = MagicMock()
+        radar.range = {"data": np.array([first_gate_m, 1000, 2000])}
+        return radar
+
+    def test_from_range_data(self):
+        radar = self._mock_radar(500.0)
+        assert infer_blind_range_m(radar) == 500.0
+
+    def test_with_extra_margin(self):
+        radar = self._mock_radar(500.0)
+        assert infer_blind_range_m(radar, extra_margin_m=100.0) == 600.0
+
+    def test_fallback_to_default(self):
+        radar = MagicMock()
+        radar.range = {"data": np.array([])}
+        result = infer_blind_range_m(radar, default=250.0)
+        assert result == 250.0
+
+    def test_never_negative(self):
+        radar = self._mock_radar(0.0)
+        assert infer_blind_range_m(radar) >= 0.0
+
+
+# ═══════════════════════════════════════════════════════════════════
+# infer_last_gate_range_m
+# ═══════════════════════════════════════════════════════════════════
+
+class TestInferLastGateRangeM:
+    def test_from_range_data(self):
+        radar = MagicMock()
+        radar.range = {"data": np.array([0, 500, 116580.0])}
+        assert infer_last_gate_range_m(radar) == 116580.0
+
+    def test_with_extra_margin(self):
+        radar = MagicMock()
+        radar.range = {"data": np.array([0, 500, 100000.0])}
+        assert infer_last_gate_range_m(radar, extra_margin_m=5000.0) == 105000.0
+
+    def test_fallback_to_default(self):
+        radar = MagicMock()
+        radar.range = {"data": np.array([])}
+        result = infer_last_gate_range_m(radar, default=200000.0)
+        assert result == 200000.0
