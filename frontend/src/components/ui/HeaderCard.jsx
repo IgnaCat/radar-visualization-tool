@@ -2,6 +2,7 @@ import { Box, Button, Paper, Tooltip, Typography } from "@mui/material";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import LogoutIcon from "@mui/icons-material/Logout";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
+import ScienceIcon from "@mui/icons-material/Science";
 import { useNavigate } from "react-router-dom";
 import logoSrc from "../../assets/lrsr_logo.png";
 
@@ -22,7 +23,7 @@ const btnSx = {
   },
 };
 
-export default function HeaderCard({ onUploadClick, onLogout, isAdmin, username }) {
+export default function HeaderCard({ onUploadClick, onLoadDemoClick, onLogout, isAdmin, username }) {
   const navigate = useNavigate();
 
   return (
@@ -71,6 +72,20 @@ export default function HeaderCard({ onUploadClick, onLogout, isAdmin, username 
       >
         Subir archivos
       </Button>
+
+      {/* Cargar archivo de demo — solo admin (para demos sin depender de la subida) */}
+      {isAdmin && onLoadDemoClick && (
+        <Tooltip title="Cargar archivo de radar de demo (sin subir)">
+          <Button
+            variant="contained"
+            startIcon={<ScienceIcon />}
+            onClick={onLoadDemoClick}
+            sx={btnSx}
+          >
+            Demo
+          </Button>
+        </Tooltip>
+      )}
 
       {/* Admin dashboard button — only visible to admins */}
       {isAdmin && (

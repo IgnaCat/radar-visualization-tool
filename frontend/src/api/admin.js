@@ -49,3 +49,10 @@ export async function fetchLogs(token, { lines = 200, level, search } = {}) {
   const resp = await makeAdminApi(token).get(`/admin/logs?${params}`);
   return resp.data;
 }
+
+export async function loadDemoFile(token, sessionId) {
+  const resp = await makeAdminApi(token).post("/admin/demo/load", {
+    session_id: sessionId,
+  });
+  return resp.data;
+}

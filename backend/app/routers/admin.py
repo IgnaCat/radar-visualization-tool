@@ -3,14 +3,20 @@ Endpoints de administración para mantenimiento del sistema.
 """
 from fastapi import APIRouter, HTTPException, Depends, Query
 from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel
 from typing import Optional
 from pathlib import Path
+from werkzeug.utils import secure_filename
+import os
 import re
+import shutil
 import time
 import datetime
 from ..dependencies.auth import require_admin
 from ..models.db.user import User
 from ..core.config import settings
+from ..services.file_ingest import build_file_entry
 
 from ..core.cache import (
     GRID2D_CACHE,
@@ -308,3 +314,56 @@ def get_logs(
         "truncated": truncated,
         "file": _LOG_FILE.name,
     }
+
+
+# ── Demo file loader (para presentaciones sin depender de la subida HTTP) ──────
+
+class DemoLoadRequest(BaseModel):
+    session_id: Optional[str] = None
+
+
+@router.post("/demo/load", status_code=201)
+async def load_demo_file(
+    body: DemoLoadRequest,
+    _admin: User = Depends(require_admin),
+):
+    """
+    Copia un NetCDF de demo ya presente en el server (settings.DEMO_NC_PATH) dentro de la
+    carpeta de sesión del admin y devuelve el MISMO shape que /upload, para que el frontend
+    siga el flujo normal (selección de producto → /process) sin ramificaciones.
+
+    No llama a /upload: copia el archivo y lo describe con build_file_entry.
+    """
+    demo_path = Path(settings.DEMO_NC_PATH)
+    if not demo_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Archivo de demo no encontrado en el server: {demo_path}. "
+                "Configurar la variable de entorno DEMO_NC_PATH o copiar el archivo ahí."
+            ),
+        )
+
+    # Mismo destino que /upload: uploads/{user_id}/{session_id}/
+    dest_dir = Path(settings.UPLOAD_DIR) / str(_admin.id)
+    if body.session_id:
+        dest_dir = dest_dir / body.session_id
+    os.makedirs(dest_dir, exist_ok=True)
+
+    unique_name = secure_filename(demo_path.name)
+    target = dest_dir / unique_name
+
+    warnings: list[str] = []
+    if target.exists():
+        warnings.append(f"El archivo '{demo_path.name}' ya existe")
+    else:
+        await run_in_threadpool(shutil.copy2, str(demo_path), str(target))
+
+    entry, volume, radar = await run_in_threadpool(
+        build_file_entry, target, filepath=unique_name, filename=demo_path.name
+    )
+
+    volumes = [volume] if volume is not None else []
+    radars = [radar] if radar is not None else []
+
+    return {"files": [entry], "warnings": warnings, "volumes": volumes, "radars": radars}

@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: List[str] = [".nc", ".BUFR", ".bufr"]
     MAX_UPLOAD_MB: int = 500
 
+    # Archivo NetCDF de demo (modo admin): se copia a la sesión sin depender de una
+    # subida HTTP. Default: fixture ya horneado en la imagen. Override por env var DEMO_NC_PATH.
+    DEMO_NC_PATH: str = os.path.join(os.getcwd(), "tests/data/RMA1_0315_01_20250819T001715Z.nc")
+
     # Auth & database
     JWT_SECRET: str = "CHANGE-ME-IN-PRODUCTION"
     JWT_ALGORITHM: str = "HS256"

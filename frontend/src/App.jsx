@@ -18,6 +18,7 @@ import stableStringify from "json-stable-stringify";
 import { useMapActions } from "./hooks/useMapActions";
 import { useDownloads } from "./hooks/useDownloads";
 import { useAuth } from "./contexts/AuthContext";
+import { loadDemoFile } from "./api/admin";
 import { useBackendHealth } from "./hooks/useBackendHealth";
 import { useSessionHeartbeat } from "./hooks/useSessionHeartbeat";
 import "./print.css";
@@ -618,6 +619,34 @@ export default function App({ sessionId }) {
     document.getElementById("upload-file").click();
   };
 
+  const applyUploadResponse = (data) => {
+    const warnings = data.warnings || [];
+    const filesInfo = data.files || [];
+    const filepaths = filesInfo.map((f) => f.filepath);
+
+    if (filesInfo.length === 0) {
+      setAlert({
+        open: true,
+        message: "No se encontraron archivos válidos\n" + warnings.join("\n"),
+        severity: "warning",
+      });
+      return;
+    }
+    if (warnings.length > 0) {
+      setAlert({ open: true, message: warnings.join("\n"), severity: "warning" });
+    }
+    setFilesInfo((prev) => {
+      // Merge con archivos anteriores, evitando duplicados por filepath
+      const existingPaths = new Set(prev.map((f) => f.filepath));
+      const newFiles = filesInfo.filter((f) => !existingPaths.has(f.filepath));
+      return [...prev, ...newFiles];
+    });
+    setVolumes((prev) => Array.from(new Set([...prev, ...data.volumes])));
+    setAvailableRadars((prev) => Array.from(new Set([...prev, ...data.radars])));
+    setUploadedFiles((prev) => Array.from(new Set([...prev, ...filepaths])));
+    setSelectorOpen(true);
+  };
+
   const handleFilesSelected = async (files) => {
     try {
       setLoading(true);
@@ -625,47 +654,7 @@ export default function App({ sessionId }) {
       const uploadResp = await uploadFile(files, sessionId, (e) => {
         if (e.total) setUploadProgress(e.loaded / e.total);
       });
-      const warnings = uploadResp.data.warnings || [];
-      const filesInfo = uploadResp.data.files || [];
-      const filepaths = filesInfo.map((f) => f.filepath);
-
-      if (filesInfo.length === 0) {
-        setAlert({
-          open: true,
-          message: "No se encontraron archivos válidos\n" + warnings.join("\n"),
-          severity: "warning",
-        });
-        return;
-      }
-      if (warnings.length > 0) {
-        setAlert({
-          open: true,
-          message: warnings.join("\n"),
-          severity: "warning",
-        });
-      }
-      setFilesInfo((prev) => {
-        // Merge con archivos anteriores, evitando duplicados por filepath
-        const existingPaths = new Set(prev.map((f) => f.filepath));
-        const newFiles = filesInfo.filter(
-          (f) => !existingPaths.has(f.filepath),
-        );
-        return [...prev, ...newFiles];
-      });
-      setVolumes((prev) => {
-        const merged = [...prev, ...uploadResp.data.volumes];
-        return Array.from(new Set(merged));
-      });
-      setAvailableRadars((prev) => {
-        const merged = [...prev, ...uploadResp.data.radars];
-        return Array.from(new Set(merged));
-      });
-      setUploadedFiles((prev) => {
-        const merged = [...prev, ...filepaths];
-        // elimina duplicados preservando el orden
-        return Array.from(new Set(merged));
-      });
-      setSelectorOpen(true);
+      applyUploadResponse(uploadResp.data);
     } catch (err) {
       setAlert({
         open: true,
@@ -675,6 +664,23 @@ export default function App({ sessionId }) {
     } finally {
       setLoading(false);
       setUploadProgress(null);
+    }
+  };
+
+  const handleLoadDemo = async () => {
+    try {
+      setLoading(true);
+      const data = await loadDemoFile(token, sessionId);
+      applyUploadResponse(data);
+    } catch (err) {
+      setAlert({
+        open: true,
+        message:
+          err.response?.data?.detail || "No se pudo cargar el archivo de demo",
+        severity: "error",
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1442,6 +1448,7 @@ export default function App({ sessionId }) {
       {/* Header común para ambas vistas */}
       <HeaderCard
         onUploadClick={handleFileUpload}
+        onLoadDemoClick={handleLoadDemo}
         onLogout={logout}
         isAdmin={isAdmin}
         username={user?.username}
