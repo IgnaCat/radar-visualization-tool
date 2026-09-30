@@ -245,6 +245,36 @@ def compute_validation_metrics(grid_W, grid_pyart):
     mask_union = n_both_valid + n_only_W + n_only_py
     mask_iou   = n_both_valid / max(mask_union, 1) * 100
 
+    # ── Métricas en escala lineal (mm⁶/m³) ────────────────────────
+    # Conversión: Z = 10^(dBZ/10)
+    z_W  = np.power(10.0, v_W / 10.0)
+    z_py = np.power(10.0, v_py / 10.0)
+    diff_lin = z_W - z_py
+
+    rmse_lin     = float(np.sqrt(np.mean(diff_lin**2)))
+    mae_lin      = float(np.mean(np.abs(diff_lin)))
+    max_diff_lin = float(np.max(np.abs(diff_lin)))
+    mean_W_lin   = float(np.mean(z_W))
+    mean_py_lin  = float(np.mean(z_py))
+    rel_err_lin  = abs(mean_W_lin - mean_py_lin) / abs(mean_py_lin) * 100 if mean_py_lin != 0 else float("nan")
+
+    pct_lin = np.percentile(np.abs(diff_lin), [50, 90, 95, 99, 99.9, 100])
+
+    # ── Diff lineal reconvertida a dB: 10·log₁₀(|diff_lin|) ──────
+    abs_diff_lin = np.abs(diff_lin)
+    safe = np.where(abs_diff_lin > 0, abs_diff_lin, np.nan)
+    diff_lin_db = 10.0 * np.log10(safe)  # NaN donde diff=0
+
+    valid_lin_db = diff_lin_db[~np.isnan(diff_lin_db)]
+    if len(valid_lin_db) > 0:
+        rmse_lin_db     = float(10.0 * np.log10(rmse_lin)) if rmse_lin > 0 else float("-inf")
+        mae_lin_db      = float(10.0 * np.log10(mae_lin)) if mae_lin > 0 else float("-inf")
+        max_diff_lin_db = float(10.0 * np.log10(max_diff_lin)) if max_diff_lin > 0 else float("-inf")
+        pct_lin_db      = [float(10.0 * np.log10(v)) if v > 0 else float("-inf") for v in pct_lin]
+    else:
+        rmse_lin_db = mae_lin_db = max_diff_lin_db = float("nan")
+        pct_lin_db = [float("nan")] * 6
+
     return dict(
         rmse=rmse, mae=mae, max_diff=max_diff,
         mean_W=mean_W, mean_py=mean_py, rel_err=rel_err,
@@ -257,6 +287,13 @@ def compute_validation_metrics(grid_W, grid_pyart):
         n_only_W=n_only_W, n_only_py=n_only_py,
         n_masked_W=n_masked_W, n_masked_py=n_masked_py,
         mask_agree=mask_agree, mask_iou=mask_iou,
+        # Escala lineal
+        rmse_lin=rmse_lin, mae_lin=mae_lin, max_diff_lin=max_diff_lin,
+        mean_W_lin=mean_W_lin, mean_py_lin=mean_py_lin, rel_err_lin=rel_err_lin,
+        pct_lin_values=pct_lin.tolist(),
+        # Diff lineal → dB
+        rmse_lin_db=rmse_lin_db, mae_lin_db=mae_lin_db,
+        max_diff_lin_db=max_diff_lin_db, pct_lin_db_values=pct_lin_db,
     )
 
 
@@ -813,6 +850,48 @@ def main():
     print(f"  Concordancia     : {m['mask_agree']:.2f}%")
     print(f"  IoU (cobertura)  : {m['mask_iou']:.2f}%")
 
+    sep("Métricas en escala lineal (mm⁶/m³)")
+    print(f"  RMSE             : {m['rmse_lin']:.2f} mm⁶/m³")
+    print(f"  MAE              : {m['mae_lin']:.2f} mm⁶/m³")
+    print(f"  Diferencia máx.  : {m['max_diff_lin']:.2f} mm⁶/m³")
+    print(f"  Media W          : {m['mean_W_lin']:.2f} mm⁶/m³")
+    print(f"  Media Py-ART     : {m['mean_py_lin']:.2f} mm⁶/m³")
+    print(f"  Error relativo   : {m['rel_err_lin']:.4f} %")
+    print()
+    print(f"  ── Distribución |diff lineal| (percentiles) ──")
+    for label, val in zip(m['pct_labels'], m['pct_lin_values']):
+        print(f"  {label:>6s} : {val:.2f} mm⁶/m³")
+
+    sep("Comparación dBZ vs lineal vs diff-lineal→dB")
+    print(f"""
+┌──────────────────────┬──────────────────┬──────────────────┬──────────────────┐
+│ Métrica              │ dBZ (logarítmica)│ mm⁶/m³ (lineal)  │ diff lin → dB    │
+│                      │ diff en dBZ      │ diff en mm⁶/m³   │ 10·log₁₀(|Δlin|) dBZ│
+├──────────────────────┼──────────────────┼──────────────────┼──────────────────┤
+│ RMSE                 │ {m['rmse']:>12.4f} dBZ │ {m['rmse_lin']:>12.2f} mm⁶ │ {m['rmse_lin_db']:>12.2f} dBZ  │
+│ MAE                  │ {m['mae']:>12.4f} dBZ │ {m['mae_lin']:>12.2f} mm⁶ │ {m['mae_lin_db']:>12.2f} dBZ  │
+│ Diferencia máxima    │ {m['max_diff']:>12.4f} dBZ │ {m['max_diff_lin']:>12.2f} mm⁶ │ {m['max_diff_lin_db']:>12.2f} dBZ  │
+│ Media W              │ {m['mean_W']:>12.4f} dBZ │ {m['mean_W_lin']:>12.2f} mm⁶ │       —          │
+│ Media Py-ART         │ {m['mean_py']:>12.4f} dBZ │ {m['mean_py_lin']:>12.2f} mm⁶ │       —          │
+│ Error relativo       │ {m['rel_err']:>12.4f} %   │ {m['rel_err_lin']:>12.4f} %   │       —          │
+├──────────────────────┼──────────────────┼──────────────────┼──────────────────┤
+│ R²                   │ {m['sk_r2']:>16.6f} │  (misma grilla)  │       —          │
+├──────────────────────┼──────────────────┼──────────────────┼──────────────────┤""")
+    for label, val_dbz, val_lin, val_db in zip(
+            m['pct_labels'], m['pct_values'], m['pct_lin_values'], m['pct_lin_db_values']):
+        print(f"│ |diff| {label:>6s}         │ {val_dbz:>12.4f} dBZ │ {val_lin:>12.2f} mm⁶ │ {val_db:>12.2f} dBZ  │")
+    print(f"└──────────────────────┴──────────────────┴──────────────────┴──────────────────┘")
+    print()
+    print("  Col 1 (dBZ): diferencia directa en escala logarítmica — fidelidad numérica.")
+    print("  Col 2 (mm⁶/m³): diferencia en escala lineal — impacto físico real.")
+    print("  Col 3 (diff lin→dBZ): la diferencia lineal reconvertida a dB = 10·log₁₀(|Z_W - Z_py|).")
+    print("         Muestra en escala logarítmica cuánta reflectividad FÍSICA se pierde/gana.")
+    print()
+    print("  Col 1 ≠ Col 3 porque:")
+    print("    Col 1 = dBZ_W − dBZ_py                    (resta en log)")
+    print("    Col 3 = 10·log₁₀(|10^(dBZ_W/10) − 10^(dBZ_py/10)|)  (resta en lineal → vuelta a log)")
+    print("  Son iguales solo cuando ambos valores son idénticos o uno es 0.")
+
     sep("Diagnóstico de diferencia máxima")
     z, y, x = m['max_zyx']
     print(f"  Ubicación (z,y,x) : ({z}, {y}, {x})")
@@ -854,22 +933,22 @@ def main():
     # ── Resumen para tesis ─────────────────────────────────────────
     sep("RESUMEN — copiar en resultados.tex")
     print(f"""
-┌─ tab:validacion ({WEIGHT_FUNC}) ──────────────────────────────┐
-  RMSE                       : {m['rmse']:.3f} dBZ
-  Error absoluto medio (MAE) : {m['mae']:.3f} dBZ
-  Diferencia máxima          : {m['max_diff']:.2f} dBZ
-  Media (operador W)         : {m['mean_W']:.2f} dBZ
-  Media (Py-ART)             : {m['mean_py']:.2f} dBZ
-  Error relativo             : {m['rel_err']:.2f} %
-  R² (coef. determinación)   : {m['sk_r2']:.6f}
-  ──────────────────────────────────────────────────────────
-  Masked total W             : {m['n_masked_W']:,}
-  Masked total PyART         : {m['n_masked_py']:,}
-  Concordancia de máscara    : {m['mask_agree']:.2f} %
-  IoU de cobertura           : {m['mask_iou']:.2f} %
-  Voxels solo en W           : {m['n_only_W']:,}
-  Voxels solo en PyART       : {m['n_only_py']:,}
-└────────────────────────────────────────────────────────────────┘
+┌─ tab:validacion ({WEIGHT_FUNC}) ──────────────────────────────────────────────┐
+│                             dBZ          mm⁶/m³        diff lin→dBZ            │
+├───────────────────────────────────────────────────────────────────────────────┤
+│ RMSE                     {m['rmse']:>10.3f} dBZ  {m['rmse_lin']:>12.2f} mm⁶/m³  {m['rmse_lin_db']:>10.2f} dB     │
+│ MAE                      {m['mae']:>10.3f} dBZ  {m['mae_lin']:>12.2f} mm⁶/m³  {m['mae_lin_db']:>10.2f} dB     │
+│ Diferencia máxima        {m['max_diff']:>10.2f} dBZ  {m['max_diff_lin']:>12.2f} mm⁶/m³  {m['max_diff_lin_db']:>10.2f} dB     │
+│ Media W                  {m['mean_W']:>10.2f} dBZ  {m['mean_W_lin']:>12.2f} mm⁶/m³       —              │
+│ Media Py-ART             {m['mean_py']:>10.2f} dBZ  {m['mean_py_lin']:>12.2f} mm⁶/m³       —              │
+│ Error relativo           {m['rel_err']:>10.2f} %    {m['rel_err_lin']:>12.2f} %            —              │
+│ R²                       {m['sk_r2']:>10.6f}                                              │
+├───────────────────────────────────────────────────────────────────────────────┤
+│ Masked total W           {m['n_masked_W']:>10,}    Concordancia   {m['mask_agree']:>8.2f} %                │
+│ Masked total PyART       {m['n_masked_py']:>10,}    IoU cobertura  {m['mask_iou']:>8.2f} %                │
+│ Voxels solo en W         {m['n_only_W']:>10,}                                              │
+│ Voxels solo en PyART     {m['n_only_py']:>10,}                                              │
+└───────────────────────────────────────────────────────────────────────────────┘
 """)
 
     print("─" * 64)
@@ -884,6 +963,12 @@ def main():
     print(f"Media (Py-ART)                & {m['mean_py']:.2f}~dBZ \\\\")
     print(f"Error relativo                & {m['rel_err']:.2f}~\\% \\\\")
     print(f"$R^2$                         & {m['sk_r2']:.6f} \\\\")
+    print(f"\\midrule")
+    print(f"% ── Escala lineal (mm⁶/m³) ──")
+    print(f"RMSE (lineal)                 & {m['rmse_lin']:.2f}~mm$^{{6}}$/m$^{{3}}$ & {m['rmse_lin_db']:.2f}~dBZ \\\\")
+    print(f"MAE (lineal)                  & {m['mae_lin']:.2f}~mm$^{{6}}$/m$^{{3}}$ & {m['mae_lin_db']:.2f}~dBZ \\\\")
+    print(f"Diferencia máxima (lineal)    & {m['max_diff_lin']:.2f}~mm$^{{6}}$/m$^{{3}}$ & {m['max_diff_lin_db']:.2f}~dBZ \\\\")
+    print(f"Error relativo (lineal)       & {m['rel_err_lin']:.2f}~\\% & --- \\\\")
     print(f"\\midrule")
     print(f"Masked total $\\mathbf{{W}}$    & {m['n_masked_W']:,} \\\\")
     print(f"Masked total Py-ART           & {m['n_masked_py']:,} \\\\")

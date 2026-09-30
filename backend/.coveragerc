@@ -1,0 +1,45 @@
+[run]
+source = app
+omit =
+    # Código de terceros (decodificador BUFR)
+    app/services/bufr/*
+    app/services/bufr_converter.py
+    # Utilidades legacy/heredadas
+    app/utils/cappi.py
+    app/utils/colores.py
+    app/utils/png.py
+    # Infraestructura de BD y migraciones
+    app/core/migrations.py
+    app/core/database.py
+    app/services/seed.py
+    # Servicios auxiliares (no core del pipeline radar)
+    app/services/animation.py
+    app/services/basemaps.py
+    app/services/geo_ip.py
+    app/services/elevation_profile.py
+    app/services/metadata.py
+    app/services/grid_generator.py
+    app/services/stale_cleanup.py
+    app/services/inactivity_cleanup.py
+    # Schemas (solo definiciones Pydantic triviales)
+    app/schemas.py
+    # Pseudo-RHI service (feature experimental, lógica compleja standalone)
+    app/services/pseudo_rhi.py
+    # Orchestrators (coordinación HTTP→servicio, requieren radar real para integración)
+    app/services/orchestrators/pixel_orchestrator.py
+    app/services/orchestrators/processing_orchestrator.py
+    app/services/orchestrators/stats_orchestrator.py
+    # Radar processor (orquestador del pipeline completo, testeado vía integración)
+    app/services/radar_processor.py
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__
+    raise NotImplementedError
+    pass
+    except ImportError
+
+show_missing = true
+precision = 1
