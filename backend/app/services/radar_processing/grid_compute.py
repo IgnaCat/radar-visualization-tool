@@ -21,6 +21,12 @@ from ...core.constants import TOA, DEFAULT_WEIGHT_FUNC, DEFAULT_MAX_NEIGHBORS
 
 logger = logging.getLogger(__name__)
 
+# Máximo de procesos del Pool para construir el operador W. Cap de memoria:
+# cada worker es un proceso forkeado que copia arrays de gates + KD-tree. Con
+# 7-8 workers sobre un archivo grande la RAM puede saltar a 6+ GB; 4 mantiene
+# el pico ~40% más bajo con solo ~15% más de tiempo de build.
+W_BUILD_MAX_WORKERS = 4
+
 
 def compute_weights(distances, roi, method=DEFAULT_WEIGHT_FUNC):
     """
@@ -347,7 +353,7 @@ def build_W_operator(
     # peak RAM ~40% lower with only ~15% slower build time (levels are
     # I/O-bound writing temp files, not purely CPU-bound).
     if n_workers is None:
-        n_workers = min(4, max(1, cpu_count() - 1))
+        n_workers = min(W_BUILD_MAX_WORKERS, max(1, cpu_count() - 1))
 
     # Configurar directorio temporal
     if temp_dir is None:

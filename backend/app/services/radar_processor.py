@@ -1,16 +1,10 @@
 import logging
 import os
 import pyart
-import pyproj
 import numpy as np
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
-import rasterio
-import rasterio.transform
-from rasterio.warp import calculate_default_transform, reproject, Resampling
-from urllib.parse import quote
-from affine import Affine
 
 from ..core.config import settings
 import time
@@ -20,6 +14,7 @@ from ..core.constants import (
     FIELD_RENDER,
     DEFAULT_WEIGHT_FUNC,
     DEFAULT_MAX_NEIGHBORS,
+    GRID_RANGE_ROUND_TO_KM,
 )
 
 from .radar_common import (
@@ -29,141 +24,25 @@ from .radar_common import (
     grid2d_cache_key,
     normalize_proj_dict,
     safe_range_max_m,
+    generate_cog_filename,
+    build_output_summary,
+    build_local_affine_and_crs,
+    effective_smoothing_enabled,
 )
 from .radar_processing import (
     get_or_build_grid3d_with_operator,
     collapse_grid_to_2d,
     create_cog_from_warped_array,
     calculate_z_limits,
+    compute_grid_limits,
     calculate_grid_resolution,
     calculate_grid_points,
     fill_dbzh_if_needed,
     separate_filters,
     apply_smoothing_masked,
+    warp_local_to_mercator,
 )
 
-
-def _generate_cog_filename(
-    field_requested: str,
-    product: str,
-    elevation: int,
-    cappi_height: float,
-    filters,
-    file_hash: str,
-    colormap_overrides: dict | None,
-    weight_func: str = DEFAULT_WEIGHT_FUNC,
-    max_neighbors=DEFAULT_MAX_NEIGHBORS,
-    smoothing_enabled: bool = False,
-    smoothing_method: str = "median",
-    smoothing_sigma: float = 0.8,
-    smoothing_median_size: int = 3,
-    smoothing_only_when_nearest: bool = True,
-) -> str:
-    """
-    Genera nombre único pero estable para el archivo COG.
-
-    Args:
-        field_requested: Campo solicitado (ej: 'DBZH')
-        product: Tipo de producto ('PPI', 'CAPPI', 'COLMAX')
-        elevation: Índice de elevación (para PPI)
-        cappi_height: Altura CAPPI en metros
-        filters: Lista de filtros aplicados
-        file_hash: Hash del archivo radar
-        colormap_overrides: Dict opcional con overrides de colormap
-        weight_func: Función de ponderación usada en interpolación
-        max_neighbors: Máximo número de vecinos
-        smoothing_enabled: Si se aplica suavizado opcional
-        smoothing_method: Método de suavizado ('gaussian' o 'median')
-        smoothing_sigma: Intensidad de suavizado gaussiano
-        smoothing_median_size: Tamaño de ventana para mediana
-        smoothing_only_when_nearest: Si el suavizado aplica solo para nearest
-
-    Returns:
-        Nombre del archivo COG (sin path)
-    """
-    filters_str = (
-        "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters])
-        if filters
-        else "nofilter"
-    )
-    aux = (
-        elevation
-        if product.upper() == "PPI"
-        else (cappi_height if product.upper() == "CAPPI" else "")
-    )
-
-    # Incluir cmap en el nombre si hay override
-    cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
-    cmap_suffix = f"_{cmap_override_key}" if cmap_override_key else ""
-
-    interp_suffix = (
-        f"_{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
-    )
-
-    effective_smoothing = (
-        smoothing_enabled
-        and smoothing_sigma > 0
-        and ((weight_func == "nearest") or (not smoothing_only_when_nearest))
-    )
-    if effective_smoothing:
-        method = (smoothing_method or "median").lower()
-        mode_tag = "nearestonly" if smoothing_only_when_nearest else "allinterp"
-        if method == "median":
-            smooth_suffix = f"_smooth_m{int(smoothing_median_size)}_{mode_tag}"
-        else:
-            sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
-            sigma_tag = sigma_tag.replace(".", "p")
-            smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
-    else:
-        smooth_suffix = "_nosmooth"
-
-    return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}{interp_suffix}{smooth_suffix}.tif"
-
-
-def _build_output_summary(
-    unique_cog_name: str,
-    field_requested: str,
-    filepath: str,
-    cog_path: Path,
-    cmap_key: str,
-    metadata: dict | None = None,
-    version_tag: str | None = None,
-    session_id: str | None = None,
-) -> dict:
-    """
-    Construye el diccionario de resumen para la respuesta API.
-
-    Args:
-        unique_cog_name: Nombre del archivo COG
-        field_requested: Campo procesado
-        filepath: Path del archivo radar original
-        cog_path: Path completo al archivo COG
-        cmap_key: Colormap usado (ej: 'grc_th')
-        session_id: Identificador de sesión para aislar archivos
-
-    Returns:
-        Dict con image_url, field, source_file, tilejson_url, colormap
-    """
-    file_uri = cog_path.resolve().as_posix()
-    style = "&resampling=nearest&warp_resampling=nearest"
-    relative_url = (
-        f"static/tmp/{session_id}/{unique_cog_name}"
-        if session_id
-        else f"static/tmp/{unique_cog_name}"
-    )
-
-    tilejson_url = f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}"
-    if version_tag:
-        tilejson_url += f"&v={quote(str(version_tag), safe='')}"
-
-    return {
-        "image_url": relative_url,
-        "field": field_requested,
-        "source_file": Path(filepath).name,
-        "tilejson_url": tilejson_url,
-        "colormap": cmap_key,
-        "metadata": metadata or None,
-    }
 
 def process_radar_to_cog(
     filepath,
@@ -214,7 +93,7 @@ def process_radar_to_cog(
 
     # Crear nombre único pero estable a partir del NetCDF
     file_hash = md5_file(filepath)[:12]
-    unique_cog_name = _generate_cog_filename(
+    unique_cog_name = generate_cog_filename(
         field_requested,
         product,
         elevation,
@@ -246,7 +125,7 @@ def process_radar_to_cog(
     # Si ya existe el COG, devolvemos directo
     if cog_path.exists():
         version_tag = str(cog_path.stat().st_mtime_ns)
-        return _build_output_summary(
+        return build_output_summary(
             unique_cog_name,
             field_requested,
             filepath,
@@ -279,7 +158,7 @@ def process_radar_to_cog(
     )
 
     # Calcular límites Z según producto ANTES de prepare_radar_for_product
-    range_max_m = safe_range_max_m(radar, round_to_km=20)
+    range_max_m = safe_range_max_m(radar, round_to_km=GRID_RANGE_ROUND_TO_KM)
     z_min, z_max, elev_deg = calculate_z_limits(
         range_max_m, elevation, cappi_height, radar.fixed_angle["data"]
     )
@@ -310,22 +189,9 @@ def process_radar_to_cog(
     # Calculamos la cantidad de puntos en cada dimensión
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
     grid_resolution_xy, grid_resolution_z = calculate_grid_resolution(volume)
-    z_grid_limits = (0.0, toa)
-
-    # Volumen 03 (bird bath) necesita grid XY especial para TODOS los productos.
-    # El scan vertical (~90° elev) con 360 azimuts crea un patrón circular que
-    # se proyecta horizontalmente vía ROI grande. Sin esto, range_max_m del radar
-    # podría generar grids enormes e innecesarios (el rango radial es vertical,
-    # no horizontal). Para PPI, collapse_ppi mapea dist_horizontal → altura,
-    # produciendo anillos concéntricos que reflejan la estructura vertical.
-    if volume == "03":
-        grid_extent_m = 40000.0  # 40 km de radio
-        y_grid_limits = (-grid_extent_m, grid_extent_m)
-        x_grid_limits = (-grid_extent_m, grid_extent_m)
-    else:
-        y_grid_limits = (-range_max_m, range_max_m)
-        x_grid_limits = (-range_max_m, range_max_m)
-
+    z_grid_limits, y_grid_limits, x_grid_limits = compute_grid_limits(
+        range_max_m, toa, volume
+    )
     grid_limits = (z_grid_limits, y_grid_limits, x_grid_limits)
 
     # Calcular puntos de grilla
@@ -424,36 +290,9 @@ def process_radar_to_cog(
         # GeoTIFF north-up: fila 0 = norte.  Flip para que coincidan.
         arr2d = arr2d[::-1, :]
 
-        # Obtener grid_origin para normalize_proj_dict
-        grid_origin = (
-            float(radar.latitude["data"][0]),
-            float(radar.longitude["data"][0]),
+        transform, crs_wkt = build_local_affine_and_crs(
+            grid, radar, arr2d.shape, x_grid_limits, y_grid_limits
         )
-
-        x = grid.x["data"].astype(float)
-        y = grid.y["data"].astype(float)
-        ny, nx = arr2d.shape
-        dx = (
-            float(np.mean(np.diff(x)))
-            if x.size > 1
-            else (x_grid_limits[1] - x_grid_limits[0]) / max(nx - 1, 1)
-        )
-        dy = (
-            float(np.mean(np.diff(y)))
-            if y.size > 1
-            else (y_grid_limits[1] - y_grid_limits[0]) / max(ny - 1, 1)
-        )
-        xmin = float(x.min()) if x.size else x_grid_limits[0]
-        ymax = float(y.max()) if y.size else y_grid_limits[1]
-        # Los valores de linspace(-R, R, N) representan CENTROS de píxeles.
-        # El dominio va desde (xmin - dx/2) hasta (xmax + dx/2).
-        # Después del flip [::-1], fila 0 = pixel con centro en ymax.
-        # Transform debe mapear (col=0, row=0) a la ESQUINA superior izquierda del dominio.
-        transform = Affine.translation(xmin - dx / 2, ymax + dy / 2) * Affine.scale(
-            dx, -dy
-        )
-        proj_dict_norm = normalize_proj_dict(grid, grid_origin)
-        crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
 
         # Guardar en CRS local (se agregará versión warped después del primer warp de PyART)
         pkg_cached = {
@@ -484,49 +323,10 @@ def process_radar_to_cog(
         arr2d = pkg_cached["arr"]
         src_transform = pkg_cached["transform"]
         src_crs = pkg_cached["crs"]
-        ny, nx = arr2d.shape
 
-        # CRS destino: Web Mercator
-        dst_crs = "EPSG:3857"
-
-        # Bounds del raster fuente (edge-to-edge, calculados desde el Affine transform)
-        src_bounds = rasterio.transform.array_bounds(ny, nx, src_transform)
-
-        # Calcular transform y dimensiones en Web Mercator
-        dst_transform, dst_width, dst_height = calculate_default_transform(
-            src_crs,
-            dst_crs,
-            nx,
-            ny,
-            left=src_bounds[0],
-            bottom=src_bounds[1],
-            right=src_bounds[2],
-            top=src_bounds[3],
+        arr_warped, transform_warped, crs_warped = warp_local_to_mercator(
+            arr2d, src_transform, src_crs, vmin
         )
-
-        # Preparar arrays: NaN para datos enmascarados
-        src_data = np.ma.filled(arr2d, fill_value=np.nan).astype(np.float32)
-        dst_data = np.full((dst_height, dst_width), np.nan, dtype=np.float32)
-
-        # Reproyectar de Azimuthal Equidistant a Web Mercator
-        reproject(
-            source=src_data,
-            destination=dst_data,
-            src_transform=src_transform,
-            src_crs=src_crs,
-            dst_transform=dst_transform,
-            dst_crs=dst_crs,
-            resampling=Resampling.nearest,
-            src_nodata=np.nan,
-            dst_nodata=np.nan,
-        )
-
-        # Crear MaskedArray y enmascarar ruido de bordes
-        arr_warped = np.ma.masked_invalid(dst_data)
-        arr_warped = np.ma.masked_less(arr_warped, vmin)
-
-        transform_warped = dst_transform
-        crs_warped = dst_crs
 
         pkg_cached["arr_warped"] = arr_warped.astype(np.float32)
         pkg_cached["transform_warped"] = transform_warped
@@ -542,10 +342,8 @@ def process_radar_to_cog(
         transform_warped = pkg_cached["transform_warped"]
         crs_warped = pkg_cached["crs_warped"]
 
-    should_apply_smoothing = (
-        bool(smoothing_enabled)
-        and float(smoothing_sigma) > 0.0
-        and (weight_func == "nearest" or not smoothing_only_when_nearest)
+    should_apply_smoothing = effective_smoothing_enabled(
+        smoothing_enabled, smoothing_sigma, weight_func, smoothing_only_when_nearest
     )
 
     # Mantener cache base intacto: aplicar suavizado sobre copia para salida final.
@@ -570,7 +368,7 @@ def process_radar_to_cog(
     )
 
     version_tag = str(cog_path.stat().st_mtime_ns)
-    return _build_output_summary(
+    return build_output_summary(
         unique_cog_name,
         field_requested,
         filepath,

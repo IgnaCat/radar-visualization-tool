@@ -17,10 +17,11 @@ from .grid_builder import get_or_build_grid3d_with_operator, get_or_build_W_oper
 from .grid_compute import build_W_operator
 from .grid_interpolate import apply_operator_to_all_fields, apply_operator
 from .product_collapse import collapse_grid_to_2d
-from .warping import warp_array_to_mercator
+from .warping import warp_array_to_mercator, warp_local_to_mercator
 from .cog_generator import convert_to_cog, create_cog_from_warped_array
 from .grid_geometry import (
     calculate_z_limits,
+    compute_grid_limits,
     calculate_grid_resolution,
     calculate_grid_points,
     calculate_roi_dist_beam,
@@ -47,9 +48,11 @@ __all__ = [
     "apply_operator",
     "collapse_grid_to_2d",
     "warp_array_to_mercator",
+    "warp_local_to_mercator",
     "convert_to_cog",
     "create_cog_from_warped_array",
     "calculate_z_limits",
+    "compute_grid_limits",
     "calculate_grid_resolution",
     "calculate_grid_points",
     "calculate_roi_dist_beam",

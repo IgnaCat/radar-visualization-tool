@@ -26,6 +26,7 @@ from ...core.constants import (
     TOA,
     DEFAULT_WEIGHT_FUNC,
     DEFAULT_MAX_NEIGHBORS,
+    BIRD_BATH_ELEV_THRESHOLD_DEG,
 )
 from ..radar_common import w_operator_cache_key
 from .grid_compute import build_W_operator
@@ -273,7 +274,7 @@ def get_or_build_W_operator(
         # no tiene sentido físico: el haz apunta vertical y no hay concepto
         # de "debajo del haz" en el plano horizontal. Desactivarla.
         lowest_elev_deg = float(np.min(radar_to_use.fixed_angle["data"]))
-        if lowest_elev_deg > 80.0:
+        if lowest_elev_deg > BIRD_BATH_ELEV_THRESHOLD_DEG:
             logger.info(
                 f"  Bird bath detectado (elev_min={lowest_elev_deg:.1f}°): "
                 f"desactivando below-beam mask"

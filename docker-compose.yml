@@ -22,24 +22,25 @@ services:
       - CACHE_DIR=/app/app/storage/cache
 
       # Upload rules
-      - MAX_UPLOAD_MB=500
+      - MAX_UPLOAD_MB=100
 
       # Auth & database
       - JWT_SECRET=CHANGE-ME-IN-PRODUCTION
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin
       - DB_DIR=/app/app/storage/db
+      - LOG_DIR=/app/app/storage/logs
 
       # Python output buffering (critical for Docker logs)
       - PYTHONUNBUFFERED=1
 
-      # GDAL optimizations
-      - GDAL_CACHEMAX=256
-      - GDAL_NUM_THREADS=4
+      # GDAL optimizations (deben coincidir con los setdefault de main.py)
+      - GDAL_CACHEMAX=512
+      - GDAL_NUM_THREADS=ALL_CPUS
       - VSI_CACHE=TRUE
-      - VSI_CACHE_SIZE=50000000
+      - VSI_CACHE_SIZE=262144000
       - GDAL_DISABLE_READDIR_ON_OPEN=EMPTY_DIR
-      - GDAL_MAX_DATASET_POOL_SIZE=100
+      - GDAL_MAX_DATASET_POOL_SIZE=450
       - GDAL_FORCE_CACHING=NO
       - PROJ_NETWORK=OFF
     volumes:
@@ -49,8 +50,18 @@ services:
       - ./backend/app/storage/cache:/app/app/storage/cache
       # Base de datos SQLite (usuarios, access logs)
       - ./backend/app/storage/db:/app/app/storage/db
+      # Logs del backend (accesibles via /admin/logs)
+      - ./backend/app/storage/logs:/app/app/storage/logs
       # GeoLite2 para resolución de IP a ciudad/país (opcional)
       - ./backend/app/storage/geolite2:/app/app/storage/geolite2:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "6"
+          memory: 6G
+        reservations:
+          cpus: "2"
+          memory: 2G
     networks:
       - radar-network
     restart: unless-stopped
@@ -67,6 +78,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_URL: http://localhost:8000
+        VITE_MAPBOX_TOKEN: CHANGE-ME-IN-PRODUCTION
     container_name: radar-frontend
     ports:
       - "3000:80"

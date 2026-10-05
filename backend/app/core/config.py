@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Reglas de upload
     ALLOWED_EXTENSIONS: List[str] = [".nc", ".BUFR", ".bufr"]
-    MAX_UPLOAD_MB: int = 500
+    MAX_UPLOAD_MB: int = 100
 
     # Auth & database
     JWT_SECRET: str = "CHANGE-ME-IN-PRODUCTION"

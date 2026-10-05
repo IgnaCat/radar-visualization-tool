@@ -6,7 +6,14 @@ Incluye límites espaciales, resolución, roi y altura del haz del radar.
 import math
 import numpy as np
 import pyart
-from ...core.constants import TOA
+from ...core.constants import (
+    TOA,
+    VOL03_GRID_EXTENT_M,
+    BIRD_BATH_ELEV_THRESHOLD_DEG,
+    GRID_RESOLUTION_XY_DEFAULT_M,
+    GRID_RESOLUTION_XY_VOL03_M,
+    GRID_RESOLUTION_Z_M,
+)
 
 
 def beam_height_max_km(
@@ -172,7 +179,7 @@ def compute_beam_height(
     # es prácticamente nula y la altura ≈ slant_range ≈ distancia radial.
     # Usamos directamente h = horizontal_distance * tan(elev) que es físicamente
     # correcto: a 90° el haz sube verticalmente y h → ∞ para cualquier dist > 0.
-    if abs(elevation_deg) > 80.0:
+    if abs(elevation_deg) > BIRD_BATH_ELEV_THRESHOLD_DEG:
         height = np.abs(horizontal_distance) * np.tan(elev_rad) + radar_altitude
         return height
 
@@ -232,6 +239,42 @@ def calculate_z_limits(
     return (0.0, TOA, elev_deg)
 
 
+def compute_grid_limits(
+    range_max_m: float, toa: float, volume: str
+) -> tuple[tuple[float, float], tuple[float, float], tuple[float, float]]:
+    """
+    Calcula los límites espaciales (z, y, x) de la grilla cartesiana.
+
+    Args:
+        range_max_m: Alcance máximo del radar en metros (safe_range_max_m)
+        toa: Top of Atmosphere en metros — z_max devuelto por calculate_z_limits
+        volume: Identificador del volumen del radar ('03' = bird bath)
+
+    Returns:
+        Tupla (z_grid_limits, y_grid_limits, x_grid_limits), cada uno
+        (min, max) en metros.
+
+    Nota sobre el volumen 03 (bird bath): necesita grid XY especial para
+    TODOS los productos. El scan vertical (~90° elev) con 360 azimuts crea
+    un patrón circular que se proyecta horizontalmente vía ROI grande. Sin
+    esto, range_max_m del radar podría generar grids enormes e innecesarios
+    (el rango radial es vertical, no horizontal). Para PPI, collapse_ppi
+    mapea dist_horizontal → altura, produciendo anillos concéntricos que
+    reflejan la estructura vertical.
+    """
+    z_grid_limits = (0.0, toa)
+
+    if volume == "03":
+        grid_extent_m = VOL03_GRID_EXTENT_M  # 40 km de radio
+        y_grid_limits = (-grid_extent_m, grid_extent_m)
+        x_grid_limits = (-grid_extent_m, grid_extent_m)
+    else:
+        y_grid_limits = (-range_max_m, range_max_m)
+        x_grid_limits = (-range_max_m, range_max_m)
+
+    return z_grid_limits, y_grid_limits, x_grid_limits
+
+
 def calculate_grid_resolution(volume: str) -> tuple[float, float]:
     """
     Calcula resolución XY y Z para la grilla según el volumen del radar.
@@ -245,8 +288,10 @@ def calculate_grid_resolution(volume: str) -> tuple[float, float]:
             - grid_resolution_z: Resolución vertical (siempre 600m para cross-sections)
     """
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
-    grid_resolution_xy = 300 if volume == "03" else 1000
-    grid_resolution_z = 600
+    grid_resolution_xy = (
+        GRID_RESOLUTION_XY_VOL03_M if volume == "03" else GRID_RESOLUTION_XY_DEFAULT_M
+    )
+    grid_resolution_z = GRID_RESOLUTION_Z_M
 
     return grid_resolution_xy, grid_resolution_z
 
