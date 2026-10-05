@@ -24,6 +24,7 @@ Para más detalles sobre la arquitectura, los endpoints de la API, los component
 | [Frontend](docs/frontend.md)                      | Componentes, mapa, controles, diálogos                       |
 | [Productos y campos](docs/products-and-fields.md) | Productos radar, campos meteorológicos, filtros QC           |
 | [Guía de desarrollo](docs/development-guide.md)   | Instalación detallada, Docker, dependencias, troubleshooting |
+| [Configuración](docs/configuration.md)            | Parámetros ajustables: concurrencia, cachés, grilla/ROI, colores |
 
 ---
 
