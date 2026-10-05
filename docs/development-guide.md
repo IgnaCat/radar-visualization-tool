@@ -123,12 +123,16 @@ Las variables de entorno del backend se configuran dentro del `docker-compose.ym
 
 | Variable           | Valor | Propósito                          |
 | ------------------ | ----- | ---------------------------------- |
-| `GDAL_CACHEMAX`    | 256   | Caché de GDAL en MB                |
+| `GDAL_CACHEMAX`    | 512   | Caché de GDAL en MB                |
 | `GDAL_NUM_THREADS` | 4     | Threads para operaciones GDAL      |
 | `VSI_CACHE`        | TRUE  | Habilita caché VSI para I/O        |
 | `PROJ_NETWORK`     | OFF   | Desactiva descargas de red de PROJ |
 
 Para configuración personalizada, se puede crear un archivo `.env` en la raíz del proyecto.
+
+> Para el catálogo completo de parámetros ajustables del backend (concurrencia,
+> cachés, parámetros de grilla/ROI, rangos de color) ver
+> [configuration.md](configuration.md).
 
 ---
 
@@ -222,8 +226,3 @@ backend/app/storage/
 - Verificar que `VITE_API_URL` apunta al host/puerto correcto
 - En Docker, el frontend accede al backend desde el navegador (no desde el contenedor), por lo que la URL debe ser accesible desde la máquina del usuario
 - Revisar CORS: el backend debe incluir el origen del frontend en `FRONTEND_ORIGINS`
-
-### Volumen 03 da error en PPI
-
-- El volumen 03 no es válido para el producto PPI (genera un warning)
-- Usar CAPPI o COLMAX con volumen 03

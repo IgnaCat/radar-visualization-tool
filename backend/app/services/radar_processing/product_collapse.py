@@ -4,6 +4,7 @@ Colapso de grillas 3D a 2D según producto (PPI, CAPPI, COLMAX).
 import numpy as np
 from scipy import ndimage
 from .grid_geometry import compute_beam_height
+from ...core.constants import BIRD_BATH_ELEV_THRESHOLD_DEG
 
 
 def fill_grid3d_holes_inplace(data3d, max_distance=3):
@@ -250,7 +251,7 @@ def collapse_ppi(data3d, z_coords, x_coords, y_coords, elevation_deg):
     # proxy de la altura: cada anillo concéntrico a distancia d del centro
     # muestra el valor de DBZH a altura d. Esto replica exactamente la
     # visualización de PyART plot_ppi_map para bird bath.
-    if abs(elevation_deg) > 80.0:
+    if abs(elevation_deg) > BIRD_BATH_ELEV_THRESHOLD_DEG:
         target_z = horizontal_dist
     else:
         # Calcular altura del haz con curvatura terrestre (modelo 4/3)

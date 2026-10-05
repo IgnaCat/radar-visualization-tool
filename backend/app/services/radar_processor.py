@@ -14,6 +14,7 @@ from ..core.constants import (
     FIELD_RENDER,
     DEFAULT_WEIGHT_FUNC,
     DEFAULT_MAX_NEIGHBORS,
+    GRID_RANGE_ROUND_TO_KM,
 )
 
 from .radar_common import (
@@ -157,7 +158,7 @@ def process_radar_to_cog(
     )
 
     # Calcular límites Z según producto ANTES de prepare_radar_for_product
-    range_max_m = safe_range_max_m(radar, round_to_km=20)
+    range_max_m = safe_range_max_m(radar, round_to_km=GRID_RANGE_ROUND_TO_KM)
     z_min, z_max, elev_deg = calculate_z_limits(
         range_max_m, elevation, cappi_height, radar.fixed_angle["data"]
     )

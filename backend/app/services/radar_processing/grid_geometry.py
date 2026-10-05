@@ -6,7 +6,14 @@ Incluye límites espaciales, resolución, roi y altura del haz del radar.
 import math
 import numpy as np
 import pyart
-from ...core.constants import TOA
+from ...core.constants import (
+    TOA,
+    VOL03_GRID_EXTENT_M,
+    BIRD_BATH_ELEV_THRESHOLD_DEG,
+    GRID_RESOLUTION_XY_DEFAULT_M,
+    GRID_RESOLUTION_XY_VOL03_M,
+    GRID_RESOLUTION_Z_M,
+)
 
 
 def beam_height_max_km(
@@ -172,7 +179,7 @@ def compute_beam_height(
     # es prácticamente nula y la altura ≈ slant_range ≈ distancia radial.
     # Usamos directamente h = horizontal_distance * tan(elev) que es físicamente
     # correcto: a 90° el haz sube verticalmente y h → ∞ para cualquier dist > 0.
-    if abs(elevation_deg) > 80.0:
+    if abs(elevation_deg) > BIRD_BATH_ELEV_THRESHOLD_DEG:
         height = np.abs(horizontal_distance) * np.tan(elev_rad) + radar_altitude
         return height
 
@@ -258,7 +265,7 @@ def compute_grid_limits(
     z_grid_limits = (0.0, toa)
 
     if volume == "03":
-        grid_extent_m = 40000.0  # 40 km de radio
+        grid_extent_m = VOL03_GRID_EXTENT_M  # 40 km de radio
         y_grid_limits = (-grid_extent_m, grid_extent_m)
         x_grid_limits = (-grid_extent_m, grid_extent_m)
     else:
@@ -281,8 +288,10 @@ def calculate_grid_resolution(volume: str) -> tuple[float, float]:
             - grid_resolution_z: Resolución vertical (siempre 600m para cross-sections)
     """
     # XY depende del volumen, pero Z siempre usa resolución fina para transectos suaves
-    grid_resolution_xy = 300 if volume == "03" else 1000
-    grid_resolution_z = 600
+    grid_resolution_xy = (
+        GRID_RESOLUTION_XY_VOL03_M if volume == "03" else GRID_RESOLUTION_XY_DEFAULT_M
+    )
+    grid_resolution_z = GRID_RESOLUTION_Z_M
 
     return grid_resolution_xy, grid_resolution_z
 

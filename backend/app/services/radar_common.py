@@ -21,6 +21,7 @@ from ..core.constants import (
     ROI_PARAMS_VOL01,
     DEFAULT_WEIGHT_FUNC,
     DEFAULT_MAX_NEIGHBORS,
+    GRID_RANGE_ROUND_TO_KM,
 )
 from ..models import RangeFilter
 
@@ -136,7 +137,7 @@ def get_radar_site(radar: pyart.core.Radar) -> Tuple[float, float, float]:
         pass
     return lon, lat, alt
 
-def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3, round_to_km: int = 20) -> float:
+def safe_range_max_m(radar: pyart.core.Radar, default: float = 240e3, round_to_km: int = GRID_RANGE_ROUND_TO_KM) -> float:
     """
     Devuelve el alcance máximo (último gate) en metros, con fallback.
     Redondea hacia arriba al múltiplo de round_to_km km para alinear grids.

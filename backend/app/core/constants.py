@@ -102,3 +102,28 @@ ROI_PARAMS_BY_VOLUME = {
     "03": ROI_PARAMS_VOL03,
     "04": ROI_PARAMS_VOL04,
 }
+
+
+# ------------------------------
+# Geometría de grilla y detección de bird bath (parámetros de dominio)
+# ------------------------------
+
+# Extensión horizontal fija para el volumen 03 (bird bath), en metros.
+# El scan es vertical (~90°), así que el rango radial representa altura, no
+# distancia horizontal. Se usa un radio fijo de 40 km para todos los productos.
+VOL03_GRID_EXTENT_M = 40000.0
+
+# Resolución de la grilla cartesiana, en metros.
+GRID_RESOLUTION_XY_DEFAULT_M = 1000   # volúmenes normales
+GRID_RESOLUTION_XY_VOL03_M = 300      # vol 03: mayor detalle para la estructura vertical
+GRID_RESOLUTION_Z_M = 600             # resolución vertical (transectos suaves)
+
+# Redondeo hacia arriba del alcance máximo del radar, en km. Estabiliza el caché:
+# archivos del mismo radar con alcances ligeramente distintos convergen al mismo
+# grid y reutilizan el operador W. Poner 0 desactiva el redondeo.
+GRID_RANGE_ROUND_TO_KM = 20
+
+# Umbral de elevación (grados) para detectar scan vertical (bird bath). Por encima
+# de este valor el pipeline desactiva la below-beam mask y usa el colapso PPI
+# especial de vol 03 (anillos concéntricos = altura).
+BIRD_BATH_ELEV_THRESHOLD_DEG = 80.0

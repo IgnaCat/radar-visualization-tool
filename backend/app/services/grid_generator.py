@@ -13,6 +13,7 @@ from ..core.constants import (
     AFFECTS_INTERP_FIELDS,
     DEFAULT_WEIGHT_FUNC,
     DEFAULT_MAX_NEIGHBORS,
+    VOL03_GRID_EXTENT_M,
 )
 from .radar_common import (
     resolve_field,
@@ -104,7 +105,7 @@ def generate_grid2d_on_demand(
     # Volumen 03 (bird bath): usar grid XY fijo de 40km para consistencia
     # con radar_processor.py (el rango radial es vertical, no horizontal)
     if volume == "03":
-        grid_extent_m = 40000.0
+        grid_extent_m = VOL03_GRID_EXTENT_M
         y_grid_limits = (-grid_extent_m, grid_extent_m)
         x_grid_limits = (-grid_extent_m, grid_extent_m)
     else:
