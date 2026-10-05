@@ -3,11 +3,16 @@ from typing import Iterable, Optional, Tuple, Any
 
 import numpy as np
 import pyart
+import pyproj
 import hashlib
 import json
+from pathlib import Path
+from urllib.parse import quote
+from affine import Affine
 from pyproj import Geod
 
 from ..utils import colores
+from ..core.config import settings
 from ..core.constants import (
     FIELD_ALIASES,
     FIELD_RENDER,
@@ -340,6 +345,165 @@ def w_operator_cache_key(
     
     return f"W_{radar}_{estrategia}_{volumen}_{_hash_of(payload)}"
 
+
+# ------------------------------
+# Nombre de archivo COG / resumen de salida
+# ------------------------------
+
+def effective_smoothing_enabled(
+    smoothing_enabled: bool,
+    smoothing_sigma: float,
+    weight_func: str,
+    smoothing_only_when_nearest: bool = True,
+) -> bool:
+    """
+    Decide si el suavizado configurado realmente se va a aplicar.
+
+    Se usa en dos lugares que deben coincidir siempre: generate_cog_filename
+    (para el sufijo del nombre del COG) y process_radar_to_cog (para decidir
+    si ejecuta apply_smoothing_masked). Antes de esta extracción, la misma
+    fórmula estaba escrita por separado en los dos lugares — un riesgo real
+    de que se desincronicen si alguien cambia una y no la otra (ej: el
+    nombre del archivo diría "_nosmooth" pero el píxel vendría suavizado).
+
+    Args:
+        smoothing_enabled: Si el usuario pidió suavizado
+        smoothing_sigma: Intensidad configurada (debe ser > 0 para aplicar)
+        weight_func: Función de ponderación usada en la interpolación
+        smoothing_only_when_nearest: Si True, el suavizado solo se aplica
+            cuando weight_func es 'nearest' — ver generate_cog_filename
+
+    Returns:
+        True si el suavizado debe aplicarse de verdad.
+    """
+    return (
+        bool(smoothing_enabled)
+        and float(smoothing_sigma) > 0.0
+        and (weight_func == "nearest" or not smoothing_only_when_nearest)
+    )
+
+
+def generate_cog_filename(
+    field_requested: str,
+    product: str,
+    elevation: int,
+    cappi_height: float,
+    filters,
+    file_hash: str,
+    colormap_overrides: dict | None,
+    weight_func: str = DEFAULT_WEIGHT_FUNC,
+    max_neighbors=DEFAULT_MAX_NEIGHBORS,
+    smoothing_enabled: bool = False,
+    smoothing_method: str = "median",
+    smoothing_sigma: float = 0.8,
+    smoothing_median_size: int = 3,
+    smoothing_only_when_nearest: bool = True,
+) -> str:
+    """
+    Genera nombre único pero estable para el archivo COG.
+
+    Args:
+        field_requested: Campo solicitado (ej: 'DBZH')
+        product: Tipo de producto ('PPI', 'CAPPI', 'COLMAX')
+        elevation: Índice de elevación (para PPI)
+        cappi_height: Altura CAPPI en metros
+        filters: Lista de filtros aplicados
+        file_hash: Hash del archivo radar
+        colormap_overrides: Dict opcional con overrides de colormap
+        weight_func: Función de ponderación usada en interpolación
+        max_neighbors: Máximo número de vecinos
+        smoothing_enabled: Si se aplica suavizado opcional
+        smoothing_method: Método de suavizado ('gaussian' o 'median')
+        smoothing_sigma: Intensidad de suavizado gaussiano
+        smoothing_median_size: Tamaño de ventana para mediana
+        smoothing_only_when_nearest: Si el suavizado aplica solo para nearest
+
+    Returns:
+        Nombre del archivo COG (sin path)
+    """
+    filters_str = (
+        "_".join([f"{f.field}_{f.min}_{f.max}" for f in filters])
+        if filters
+        else "nofilter"
+    )
+    aux = (
+        elevation
+        if product.upper() == "PPI"
+        else (cappi_height if product.upper() == "CAPPI" else "")
+    )
+
+    # Incluir cmap en el nombre si hay override
+    cmap_override_key = (colormap_overrides or {}).get(field_requested, None)
+    cmap_suffix = f"_{cmap_override_key}" if cmap_override_key else ""
+
+    interp_suffix = (
+        f"_{weight_func}_n{max_neighbors if max_neighbors is not None else 'all'}"
+    )
+
+    effective_smoothing = effective_smoothing_enabled(
+        smoothing_enabled, smoothing_sigma, weight_func, smoothing_only_when_nearest
+    )
+    if effective_smoothing:
+        method = (smoothing_method or "median").lower()
+        mode_tag = "nearestonly" if smoothing_only_when_nearest else "allinterp"
+        if method == "median":
+            smooth_suffix = f"_smooth_m{int(smoothing_median_size)}_{mode_tag}"
+        else:
+            sigma_tag = f"{float(smoothing_sigma):.2f}".rstrip("0").rstrip(".")
+            sigma_tag = sigma_tag.replace(".", "p")
+            smooth_suffix = f"_smooth_g{sigma_tag}_{mode_tag}"
+    else:
+        smooth_suffix = "_nosmooth"
+
+    return f"radar_{field_requested}_{product}_{filters_str}_{aux}_{file_hash}{cmap_suffix}{interp_suffix}{smooth_suffix}.tif"
+
+
+def build_output_summary(
+    unique_cog_name: str,
+    field_requested: str,
+    filepath: str,
+    cog_path: Path,
+    cmap_key: str,
+    metadata: dict | None = None,
+    version_tag: str | None = None,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Construye el diccionario de resumen para la respuesta API.
+
+    Args:
+        unique_cog_name: Nombre del archivo COG
+        field_requested: Campo procesado
+        filepath: Path del archivo radar original
+        cog_path: Path completo al archivo COG
+        cmap_key: Colormap usado (ej: 'grc_th')
+        session_id: Identificador de sesión para aislar archivos
+
+    Returns:
+        Dict con image_url, field, source_file, tilejson_url, colormap
+    """
+    file_uri = cog_path.resolve().as_posix()
+    style = "&resampling=nearest&warp_resampling=nearest"
+    relative_url = (
+        f"static/tmp/{session_id}/{unique_cog_name}"
+        if session_id
+        else f"static/tmp/{unique_cog_name}"
+    )
+
+    tilejson_url = f"{settings.BASE_URL}/cog/WebMercatorQuad/tilejson.json?url={quote(file_uri, safe=':/')}{style}"
+    if version_tag:
+        tilejson_url += f"&v={quote(str(version_tag), safe='')}"
+
+    return {
+        "image_url": relative_url,
+        "field": field_requested,
+        "source_file": Path(filepath).name,
+        "tilejson_url": tilejson_url,
+        "colormap": cmap_key,
+        "metadata": metadata or None,
+    }
+
+
 def normalize_proj_dict(grid, grid_origin):
     """
     Convierte el dict de proyección de Py-ART a algo que pyproj entienda.
@@ -370,6 +534,57 @@ def normalize_proj_dict(grid, grid_origin):
     # A veces viene "type":"crs" que a ciertos builds les molesta
     proj.pop("type", None)
     return proj
+
+
+def build_local_affine_and_crs(grid, radar, arr2d_shape, x_grid_limits, y_grid_limits):
+    """
+    Construye el Affine transform (con offset de medio píxel) y el CRS WKT
+    en la proyección local (Azimuthal Equidistant centrada en el radar) para
+    una grilla 2D ya colapsada.
+
+    Movida desde process_radar_to_cog (radar_processor.py): compone
+    directamente con normalize_proj_dict, que vive en este mismo módulo.
+
+    Args:
+        grid: objeto Grid de PyART (usa grid.x/grid.y y su proyección)
+        radar: objeto Radar de PyART, para el origen (lat, lon) como fallback
+        arr2d_shape: (ny, nx) del array 2D colapsado — solo se usa para el
+            caso borde de una grilla con un único punto por eje
+        x_grid_limits, y_grid_limits: (min, max) en metros, usados solo
+            como fallback cuando grid.x/grid.y tienen un único punto
+
+    Returns:
+        (transform, crs_wkt)
+    """
+    grid_origin = (
+        float(radar.latitude["data"][0]),
+        float(radar.longitude["data"][0]),
+    )
+
+    x = grid.x["data"].astype(float)
+    y = grid.y["data"].astype(float)
+    ny, nx = arr2d_shape
+    dx = (
+        float(np.mean(np.diff(x)))
+        if x.size > 1
+        else (x_grid_limits[1] - x_grid_limits[0]) / max(nx - 1, 1)
+    )
+    dy = (
+        float(np.mean(np.diff(y)))
+        if y.size > 1
+        else (y_grid_limits[1] - y_grid_limits[0]) / max(ny - 1, 1)
+    )
+    xmin = float(x.min()) if x.size else x_grid_limits[0]
+    ymax = float(y.max()) if y.size else y_grid_limits[1]
+    # Los valores de linspace(-R, R, N) representan CENTROS de píxeles.
+    # El dominio va desde (xmin - dx/2) hasta (xmax + dx/2).
+    # Después del flip [::-1], fila 0 = pixel con centro en ymax.
+    # Transform debe mapear (col=0, row=0) a la ESQUINA superior izquierda del dominio.
+    transform = Affine.translation(xmin - dx / 2, ymax + dy / 2) * Affine.scale(dx, -dy)
+    proj_dict_norm = normalize_proj_dict(grid, grid_origin)
+    crs_wkt = pyproj.CRS.from_dict(proj_dict_norm).to_wkt()
+    return transform, crs_wkt
+
 
 def collapse_field_3d_to_2d(data3d, product, *,
                             x_coords=None, y_coords=None, z_levels=None,
