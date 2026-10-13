@@ -23,11 +23,14 @@ Los parámetros se dividen en **dos familias**:
 
 | Parámetro                    | Archivo                                     | Default    | Qué hace                                                                                 | Rango sugerido    |
 | ---------------------------- | ------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------- | ----------------- |
-| `MAX_CONCURRENT_HEAVY`       | `core/concurrency.py`                       | 2          | Procesamientos pesados simultáneos (resto espera en cola).                               | 2-4 según cores   |
-| `SEMAPHORE_TIMEOUT`          | `core/concurrency.py`                       | 300 s      | Espera máxima por un slot antes de responder 503.                                        | 60-600 s          |
-| GRID2D cache `maxsize`       | `core/cache.py`                             | 100 MB     | Tope del caché LRU de grillas 2D colapsadas.                                             | 50-300 MB         |
-| W cache `maxsize`            | `core/cache.py`                             | 300 MB     | Tope del caché LRU de operadores W en RAM.                                               | 100-500 MB        |
-| `W_OPERATOR_MAX_RAM_SIZE_MB` | `core/cache.py`                             | 250        | Tamaño máximo de un W individual para cachear en RAM (los más grandes solo van a disco). | < W cache maxsize |
+| `MAX_CONCURRENT_HEAVY`       | `core/concurrency.py` (env)                 | 2          | Procesamientos pesados simultáneos (resto espera en cola).                               | 2-4 según cores   |
+| `SEMAPHORE_TIMEOUT`          | `core/concurrency.py` (env)                 | 300 s      | Espera máxima por un slot antes de responder 503.                                        | 60-600 s          |
+| `GRID2D_CACHE_MB`            | `core/cache.py` (env)                       | 100 MB     | Tope del caché LRU de grillas 2D colapsadas.                                             | 50-300 MB         |
+| `W_OPERATOR_CACHE_MB`        | `core/cache.py` (env)                       | 300 MB     | Tope del caché LRU de operadores W en RAM.                                               | 100-500 MB        |
+| `W_OPERATOR_MAX_RAM_SIZE_MB` | `core/cache.py` (derivado)                  | 250 MB     | Tamaño máximo de un W individual para cachear en RAM (los más grandes solo van a disco). Se calcula como `min(250, W_OPERATOR_CACHE_MB × 250/300)`: no se configura directo, escala con `W_OPERATOR_CACHE_MB`. | derivado          |
+| `DB_POOL_SIZE`               | `core/database.py` (env)                    | 5          | Conexiones permanentes del pool de SQLAlchemy. Cada request retiene una conexión durante todo su ciclo. | 5-20              |
+| `DB_MAX_OVERFLOW`            | `core/database.py` (env)                    | 10         | Conexiones temporales extra por encima de `DB_POOL_SIZE`.                                | 10-30             |
+| `DB_POOL_TIMEOUT`            | `core/database.py` (env)                    | 30 s       | Espera máxima por una conexión libre antes de fallar.                                    | 10-60 s           |
 | `SESSION_TTL_SECONDS`        | `services/inactivity_cleanup.py`            | 7200 (2 h) | Inactividad antes de liberar la RAM de una sesión abandonada.                            | 1800-14400 s      |
 | `CHECK_INTERVAL`             | `services/inactivity_cleanup.py`            | 3600 (1 h) | Frecuencia del checker de inactividad.                                                   | 600-7200 s        |
 | `W_BUILD_MAX_WORKERS`        | `services/radar_processing/grid_compute.py` | 4          | Cap de procesos del Pool que construye W (límite de RAM pico).                           | 1-8 según RAM     |
@@ -35,6 +38,13 @@ Los parámetros se dividen en **dos familias**:
 | `JWT_EXPIRE_HOURS`           | `core/config.py`                            | 2          | Vigencia del token de sesión.                                                            | 1-24 h            |
 | Workers de uvicorn           | `Makefile` / `Dockerfile`                   | 1          | Procesos del servidor. **Ver nota multi-worker.**                                        | 1 recomendado hoy |
 | Rotación de logs             | `main.py`                                   | 10 MB      | Tamaño por archivo de log antes de rotar.                                                | 5-50 MB           |
+
+> **Parámetros marcados `(env)`:** se pueden sobrescribir con una variable de entorno
+> del mismo nombre (por ejemplo en el bloque `environment:` de `docker-compose.yml`),
+> sin tocar código. Si el valor está vacío, no es un entero o es menor que 1, se
+> ignora y se usa el default (con un warning en el log, salvo en el pool de BD, que
+> lo ignora en silencio). Los topes de caché vigentes se pueden ver en
+> `GET /admin/cache-stats`.
 
 > **Nota sobre `MAX_UPLOAD_MB`:** el límite se aplica a **cada archivo por
 > separado**, no a la suma de la request. Subir 3 archivos de 90 MB en una sola

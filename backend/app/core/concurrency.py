@@ -23,10 +23,32 @@ Nota: run_in_threadpool ya es suficiente para nuestro caso porque:
 
 import asyncio
 import logging
+import os
 from functools import wraps
 from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
+
+
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    """
+    Lee un entero positivo de una variable de entorno.
+    Vacía/ausente -> default. Valor inválido o < minimum -> default + warning
+    (un typo en el compose no debe tirar el arranque, pero tiene que quedar en el log).
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r no es un entero; se usa el default %d", name, raw, default)
+        return default
+    if value < minimum:
+        logger.warning("%s=%d es menor que %d; se usa el default %d", name, value, minimum, default)
+        return default
+    return value
+
 
 # ── Semáforo global ──────────────────────────────────────────────────
 # Límite de procesamientos pesados simultáneos.
@@ -34,7 +56,8 @@ logger = logging.getLogger(__name__)
 #   - 2 slots: conservador, garantiza que siempre hay CPU para tiles/health
 #   - 3 slots: buen balance para 4+ cores
 # Cada slot puede internamente lanzar multiprocessing.Pool con N workers.
-MAX_CONCURRENT_HEAVY = 2
+# Override: variable de entorno MAX_CONCURRENT_HEAVY (default 2).
+MAX_CONCURRENT_HEAVY = _env_int("MAX_CONCURRENT_HEAVY", 2)
 
 _semaphore: asyncio.Semaphore | None = None
 
@@ -56,7 +79,8 @@ def get_processing_semaphore() -> asyncio.Semaphore:
 
 # Timeout en segundos para esperar un slot del semáforo.
 # Si un usuario espera más de esto, recibe 503 en vez de quedar colgado.
-SEMAPHORE_TIMEOUT = 300  # 5 minutos
+# Override: variable de entorno SEMAPHORE_TIMEOUT (default 300 = 5 minutos).
+SEMAPHORE_TIMEOUT = _env_int("SEMAPHORE_TIMEOUT", 300)
 
 
 async def acquire_processing_slot():
