@@ -203,7 +203,9 @@ def extract_radar_metadata(path: str) -> Dict[str, Any]:
 
     # Intento 1: netCDF4 directo (sin PyART, sin destructores problemáticos)
     try:
-        result = _extract_via_netcdf4(path)
+        from ..core.cache import NETCDF_READ_LOCK
+        with NETCDF_READ_LOCK:
+            result = _extract_via_netcdf4(path)
         # Sanity check mínimo: si no encontramos ningún campo, el archivo
         # probablemente no es CFRadial → probamos PyART
         if result.get("fields_present") or result.get("elevations"):

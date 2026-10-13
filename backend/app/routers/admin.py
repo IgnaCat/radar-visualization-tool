@@ -16,6 +16,7 @@ from ..core.cache import (
     GRID2D_CACHE,
     GRID2D_LOCK,
     W_OPERATOR_CACHE,
+    W_OPERATOR_MAX_RAM_SIZE_MB,
     get_w_operator_cache_path,
     CACHE_DIR,
     SESSION_CACHE_INDEX,
@@ -245,12 +246,13 @@ def get_cache_stats(_admin: User = Depends(require_admin)):
         "grid2d_cache": {
             "entries": grid2d_count,
             "size_mb": round(grid2d_size_mb, 2),
-            "max_size_mb": 200
+            "max_size_mb": round(GRID2D_CACHE.maxsize / (1024 * 1024), 2)
         },
         "w_operator_cache_ram": {
             "entries": w_ram_count,
             "size_mb": round(w_ram_size_mb, 2),
-            "max_size_mb": 300
+            "max_size_mb": round(W_OPERATOR_CACHE.maxsize / (1024 * 1024), 2),
+            "max_item_size_mb": round(W_OPERATOR_MAX_RAM_SIZE_MB, 2)
         },
         "w_operator_cache_disk": {
             "files": w_disk_count,

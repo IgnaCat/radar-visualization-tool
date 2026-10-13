@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import pickle
 import logging
 import threading
@@ -9,6 +10,27 @@ from scipy.sparse import csr_matrix, save_npz, load_npz
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
+
+
+def _env_int(name: str, default: int, minimum: int = 1) -> int:
+    """
+    Lee un entero positivo de una variable de entorno.
+    Vacía/ausente -> default. Valor inválido o < minimum -> default + warning
+    (un typo en el compose no debe tirar el arranque, pero tiene que quedar en el log).
+    """
+    raw = os.getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r no es un entero; se usa el default %d", name, raw, default)
+        return default
+    if value < minimum:
+        logger.warning("%s=%d es menor que %d; se usa el default %d", name, value, minimum, default)
+        return default
+    return value
+
 
 def _nbytes_arr(a) -> int:
     """Calcula el tamaño en bytes de un array o MaskedArray."""
@@ -37,7 +59,9 @@ def _nbytes_pkg(pkg) -> int:
     # crs/transform pesan poco, los ignoramos
     return n
 
-GRID2D_CACHE = LRUCache(maxsize=100 * 1024 * 1024, getsizeof=_nbytes_pkg)
+# Tope del caché de grillas 2D en MB. Override: variable de entorno GRID2D_CACHE_MB (default 100).
+GRID2D_CACHE_MB = _env_int("GRID2D_CACHE_MB", 100)
+GRID2D_CACHE = LRUCache(maxsize=GRID2D_CACHE_MB * 1024 * 1024, getsizeof=_nbytes_pkg)
 GRID2D_LOCK = threading.Lock()  # LRUCache no es thread-safe; proteger todo acceso
 
 # Índice secundario: user_id (str) -> set de cache keys
@@ -71,11 +95,16 @@ def _nbytes_w_operator(pkg) -> int:
     
     return size
 
-# Cache RAM para operador W (300 MB)
-W_OPERATOR_CACHE = LRUCache(maxsize=300 * 1024 * 1024, getsizeof=_nbytes_w_operator)
+# Cache RAM para operador W. Override: variable de entorno W_OPERATOR_CACHE_MB (default 300).
+W_OPERATOR_CACHE_MB = _env_int("W_OPERATOR_CACHE_MB", 300)
+W_OPERATOR_CACHE = LRUCache(maxsize=W_OPERATOR_CACHE_MB * 1024 * 1024, getsizeof=_nbytes_w_operator)
 
-# Límite para intentar guardar en RAM (un poco menos que el maxsize para margen)
-W_OPERATOR_MAX_RAM_SIZE_MB = 250
+# Límite para intentar guardar un W en RAM (los más grandes solo van a disco).
+# Debe quedar por debajo del tamaño del caché: cachetools lanza
+# ValueError("value too large") si un ítem supera maxsize. Se mantiene la
+# proporción original 250/300, así que con el default (300 MB) sigue siendo 250 MB
+# y con un caché más chico baja en proporción. No crece por encima de 250 MB.
+W_OPERATOR_MAX_RAM_SIZE_MB = min(250, W_OPERATOR_CACHE_MB * 250 / 300)
 
 # Locks para evitar construcción duplicada del operador W en concurrencia
 # Si múltiples threads piden el mismo operador W, solo uno lo construye
